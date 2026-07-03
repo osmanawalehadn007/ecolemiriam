@@ -121,10 +121,20 @@ export function AnalyticsView() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/analytics")
+    const controller = new AbortController();
+
+    fetch("/api/analytics", { signal: controller.signal })
       .then((r) => r.json())
       .then((d) => setData(d))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (err.name === "AbortError") return;
+        console.error("[Analytics] Erreur fetch:", err);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
   }, []);
 
   if (loading) {
