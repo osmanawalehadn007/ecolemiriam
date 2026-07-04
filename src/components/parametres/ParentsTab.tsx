@@ -83,6 +83,10 @@ export function ParentsTab({
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    if (form.eleveIds.length === 0) {
+      toast.error("Sélectionnez au moins un élève à lier à ce parent");
+      return;
+    }
     setIsPending(true);
     try {
       await createParent(form);
@@ -238,7 +242,10 @@ export function ParentsTab({
 
               {/* Sélection des élèves à lier */}
               <div className="space-y-2">
-                <Label>Lier à des élèves (optionnel)</Label>
+                <Label>Lier à des élèves *</Label>
+                <p className="text-xs text-muted-foreground">
+                  Obligatoire : un parent ne peut voir que les données des élèves liés ici.
+                </p>
                 {eleves.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">Aucun élève actif</p>
                 ) : (
@@ -342,7 +349,7 @@ export function ParentsTab({
               </div>
 
               <div className="flex gap-2">
-                <Button type="submit" size="sm" className="gap-2" disabled={isPending}>
+                <Button type="submit" size="sm" className="gap-2" disabled={isPending || form.eleveIds.length === 0}>
                   {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   Créer le parent
                 </Button>

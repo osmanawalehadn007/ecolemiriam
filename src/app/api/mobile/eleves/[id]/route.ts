@@ -40,6 +40,21 @@ export async function GET(
     return NextResponse.json({ error: "Élève introuvable" }, { status: 404 });
   }
 
+  // Isolation stricte : un parent ne peut consulter que ses propres enfants,
+  // jamais un autre élève du même établissement.
+  if (user.role === "PARENT") {
+    const lien = await prisma.eleveParent.findFirst({
+      where: { eleveId: id, parent: { userId: user.id } },
+      select: { eleveId: true },
+    });
+    if (!lien) {
+      return NextResponse.json(
+        { error: "Accès refusé : cet élève n'est pas rattaché à votre compte" },
+        { status: 403 }
+      );
+    }
+  }
+
   const [parents, notes, absences, incidents] = await Promise.all([
     prisma.eleveParent.findMany({
       where: { eleveId: id },

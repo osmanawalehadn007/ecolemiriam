@@ -425,6 +425,20 @@ export async function createParent(data: ParentFormData & { eleveIds?: string[] 
   if (!parsed.success) {
     throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
   }
+  if (!data.eleveIds || data.eleveIds.length === 0) {
+    throw new Error(
+      "Vous devez lier au moins un élève à ce parent : l'isolation des données d'un parent repose entièrement sur ce lien"
+    );
+  }
+
+  // Les élèves à lier doivent appartenir au même établissement que le parent créé.
+  const eleves = await prisma.eleve.findMany({
+    where: { id: { in: data.eleveIds }, tenantId: session.user.tenantId },
+    select: { id: true },
+  });
+  if (eleves.length !== data.eleveIds.length) {
+    throw new Error("Un ou plusieurs élèves sélectionnés sont introuvables dans cet établissement");
+  }
 
   const v = parsed.data;
   const parent = await prisma.parent.create({
@@ -441,18 +455,10 @@ export async function createParent(data: ParentFormData & { eleveIds?: string[] 
     },
   });
 
-  // Link to students if provided
-  if (data.eleveIds && data.eleveIds.length > 0) {
-    for (const eleveId of data.eleveIds) {
-      const existing = await prisma.eleveParent.findUnique({
-        where: { eleveId_parentId: { eleveId, parentId: parent.id } },
-      });
-      if (!existing) {
-        await prisma.eleveParent.create({
-          data: { eleveId, parentId: parent.id, lien: "TUTEUR", isGardien: true },
-        });
-      }
-    }
+  for (const eleveId of data.eleveIds) {
+    await prisma.eleveParent.create({
+      data: { eleveId, parentId: parent.id, lien: "TUTEUR", isGardien: true },
+    });
   }
 
   revalidatePath("/parametres");

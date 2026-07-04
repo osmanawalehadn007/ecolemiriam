@@ -41,12 +41,39 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, Number(searchParams.get("page")) || 1);
     const pageSize = Math.min(500, Math.max(1, Number(searchParams.get("pageSize")) || 200));
 
+    // Isolation stricte : un parent ne peut consulter que les notes de ses
+    // propres enfants, jamais celles d'un autre élève du même établissement.
+    let eleveIdFilter: { equals: string } | { in: string[] } | undefined = eleveId
+      ? { equals: eleveId }
+      : undefined;
+
+    if (session.user.role === "PARENT") {
+      if (eleveId) {
+        const lien = await prisma.eleveParent.findFirst({
+          where: { eleveId, parent: { userId: session.user.id } },
+          select: { eleveId: true },
+        });
+        if (!lien) {
+          return NextResponse.json(
+            { error: "Accès refusé : cet élève n'est pas rattaché à votre compte" },
+            { status: 403 }
+          );
+        }
+      } else {
+        const liens = await prisma.eleveParent.findMany({
+          where: { parent: { userId: session.user.id } },
+          select: { eleveId: true },
+        });
+        eleveIdFilter = { in: liens.map((l) => l.eleveId) };
+      }
+    }
+
     const where = {
       tenantId: session.user.tenantId,
       ...(classeId && { classeId }),
       ...(matiereId && { matiereId }),
       ...(periodeId && { periodeId }),
-      ...(eleveId && { eleveId }),
+      ...(eleveIdFilter && { eleveId: eleveIdFilter }),
     };
 
     const [notes, total] = await Promise.all([
