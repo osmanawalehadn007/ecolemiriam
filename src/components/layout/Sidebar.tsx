@@ -31,6 +31,7 @@ import {
   Package,
   Crown,
   PlayCircle,
+  Banknote,
   type LucideIcon,
 } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
@@ -81,6 +82,7 @@ const navGroups: NavGroup[] = [
     items: [
       { labelKey: "admissions", icon: UserPlus, href: "/admissions", color: "text-teal-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY"] },
       { labelKey: "facturation", icon: Receipt, href: "/facturation", color: "text-emerald-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT"] },
+      { labelKey: "finances", icon: Banknote, href: "/finances", color: "text-emerald-600", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT", "DIRECTOR"] },
       { labelKey: "rh", icon: Briefcase, href: "/rh", color: "text-amber-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT"] },
       { labelKey: "inventaire", icon: Package, href: "/inventaire", color: "text-stone-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT"] },
     ],
@@ -172,7 +174,7 @@ export function Sidebar({ userName = "Admin", userRole = "Directeur", userAvatar
   return (
     <aside
       className={cn(
-        "relative flex flex-col h-screen bg-slate-950 text-slate-100 transition-all duration-300 ease-in-out border-r border-slate-800/60 shadow-xl shadow-indigo-950/10",
+        "relative flex flex-col h-screen bg-slate-950 text-slate-100 transition-all duration-300 ease-in-out border-r border-slate-800/60 shadow-xl shadow-indigo-950/10 print:hidden",
         collapsed ? "w-20" : "w-72"
       )}
     >

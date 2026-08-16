@@ -13,6 +13,7 @@ import {
   getReglesAppreciation,
   getPeriodesForCloture,
   getSitesForSettings,
+  getAnneesScolaires,
 } from "@/lib/actions/parametres";
 
 export default async function ParametresPage() {
@@ -27,7 +28,7 @@ export default async function ParametresPage() {
 
   const canManage = session.user.role === "TENANT_ADMIN" || session.user.role === "SUPER_ADMIN" || session.user.role === "PRINCIPAL";
 
-  const [etablissement, users, parents, eleves, classes, matieres, regles, periodes, sites] = await Promise.all([
+  const [etablissement, users, parents, eleves, classes, matieres, regles, periodes, sites, annees] = await Promise.all([
     getEtablissementData(),
     getUsersForTenant(),
     getParentsForSettings(),
@@ -37,6 +38,7 @@ export default async function ParametresPage() {
     getReglesAppreciation(),
     getPeriodesForCloture(),
     getSitesForSettings(),
+    getAnneesScolaires(),
   ]);
   if (!etablissement) return redirect("/login");
 
@@ -59,6 +61,7 @@ export default async function ParametresPage() {
           regles={regles}
           periodes={periodes}
           sites={sites}
+          annees={annees}
           canManage={canManage}
           availableTenants={session.user.availableTenants}
         />

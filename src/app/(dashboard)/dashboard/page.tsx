@@ -9,6 +9,7 @@ import { AbsenceChart } from "@/components/dashboard/AbsenceChart";
 import { getTranslations, getLocale } from "next-intl/server";
 import { unstable_cache } from "next/cache";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import type { Prisma } from "@prisma/client";
 
 const getDashboardData = unstable_cache(
@@ -103,7 +104,22 @@ export default async function DashboardPage() {
   const noteFilter = siteFilterForModel("note", session.user);
   const examenFilter = siteFilterForModel("examen", session.user);
 
-  const data = await getDashboardData(session.user.tenantId, eleveFilter, classeFilter, absenceFilter, noteFilter, examenFilter);
+  const tenantId = session.user.tenantId;
+  const [data, sites, anneeCourante] = await Promise.all([
+    getDashboardData(tenantId, eleveFilter, classeFilter, absenceFilter, noteFilter, examenFilter),
+    prisma.site.findMany({
+      where: { tenantId, actif: true, deletedAt: null },
+      select: { id: true, nom: true },
+    }),
+    getAnneeCouranteLibelle(tenantId),
+  ]);
+
+  const currentSiteId = (session.user as { siteId?: string | null }).siteId ?? null;
+  const currentSiteName = currentSiteId
+    ? (sites.find((s) => s.id === currentSiteId)?.nom ?? "Site inconnu")
+    : session.user.role === "TENANT_ADMIN" || (session.user.role as string) === "SUPER_ADMIN"
+      ? "Tous les sites"
+      : "Aucun site";
 
   const stats = [
     {
@@ -120,7 +136,7 @@ export default async function DashboardPage() {
       value: data.totalClasses.toString(),
       icon: "school" as const,
       color: "blue" as const,
-      change: "2025-2026",
+      change: anneeCourante ?? "—",
     },
     {
       label: t("title") === "Dashboard" ? "Absences today" : "Absences aujourd'hui",
@@ -146,6 +162,7 @@ export default async function DashboardPage() {
       <Header
         title={t("title")}
         subtitle={`${t("welcome")} ${session.user.name?.split(" ")[0]} 👋 — ${new Intl.DateTimeFormat(locale === "en" ? "en-US" : "fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date())}`}
+        site={currentSiteName}
         userName={session.user.name}
         userAvatar={session.user.image ?? undefined}
       />

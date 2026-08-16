@@ -18,11 +18,13 @@ import { SignatureCachetManager } from "./SignatureCachetManager";
 import { SitesTab } from "./SitesTab";
 import { TarifsTab } from "./TarifsTab";
 import { DoublonsTab } from "./DoublonsTab";
+import { AnneesScolairesTab } from "./AnneesScolairesTab";
 
 import type { AvailableTenant } from "@/auth.config";
 
 type Tab =
   | "etablissement"
+  | "annees"
   | "utilisateurs"
   | "parents"
   | "classes"
@@ -48,6 +50,7 @@ const tabGroups: TabGroup[] = [
     icon: School,
     tabs: [
       { id: "etablissement", labelKey: "etablissement", icon: Settings },
+      { id: "annees", labelKey: "anneesScolaires", icon: Calendar },
       { id: "sites", labelKey: "sites", icon: Building2 },
       { id: "signature", labelKey: "signature", icon: Stamp },
     ],
@@ -90,6 +93,7 @@ interface ParametresTabsProps {
   regles: Awaited<ReturnType<typeof import("@/lib/actions/parametres").getReglesAppreciation>>;
   periodes: Awaited<ReturnType<typeof import("@/lib/actions/parametres").getPeriodesForCloture>>;
   sites: Awaited<ReturnType<typeof import("@/lib/actions/parametres").getSitesForSettings>>;
+  annees: Awaited<ReturnType<typeof import("@/lib/actions/parametres").getAnneesScolaires>>;
   canManage: boolean;
   availableTenants?: AvailableTenant[];
 }
@@ -104,6 +108,7 @@ export function ParametresTabs({
   regles,
   periodes,
   sites,
+  annees,
   canManage,
   availableTenants,
 }: ParametresTabsProps) {
@@ -177,6 +182,7 @@ export function ParametresTabs({
       {/* Contenu de l'onglet actif */}
       <div>
         {activeTab === "etablissement" && <EtablissementTab etablissement={etablissement} canManage={canManage} />}
+        {activeTab === "annees" && <AnneesScolairesTab annees={annees} canManage={canManage} />}
         {activeTab === "utilisateurs" && <UsersTab users={users} canManage={canManage} availableTenants={availableTenants} sites={sites} />}
         {activeTab === "parents" && <ParentsTab parents={parents} eleves={eleves} canManage={canManage} />}
         {activeTab === "classes" && <ClassesTab classes={classes} canManage={canManage} sites={sites} />}

@@ -121,7 +121,7 @@ export async function PUT(
       }));
 
     await prisma.$transaction([
-      prisma.note.deleteMany({ where: { evaluationId } }),
+      prisma.note.deleteMany({ where: { evaluationId, tenantId: tenantIdStr } }),
       prisma.note.createMany({ data: notesToCreate })
     ]);
 

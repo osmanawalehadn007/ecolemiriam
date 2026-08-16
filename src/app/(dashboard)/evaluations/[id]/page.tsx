@@ -58,7 +58,7 @@ export default async function SaisieNotesPage({
           <Link href="/evaluations">
             <Button className="bg-orange-500 hover:bg-orange-600 text-white gap-2 shadow-sm border-none">
               <ArrowLeft className="h-4 w-4" />
-              Retour à l'examen
+              Retour à l&apos;examen
             </Button>
           </Link>
           <Button className="bg-green-600 hover:bg-green-700 text-white gap-2 shadow-sm border-none">
@@ -68,7 +68,7 @@ export default async function SaisieNotesPage({
         </div>
       </div>
       <p className="text-sm text-gray-500 mt-2 ml-1">
-        Saisie et consultation des notes pour l'examen "{evaluation.titre}" de la classe {evaluation.classe.nom} en {evaluation.matiere.nom.toUpperCase()}.
+        Saisie et consultation des notes pour l&apos;examen &quot;{evaluation.titre}&quot; de la classe {evaluation.classe.nom} en {evaluation.matiere.nom.toUpperCase()}.
       </p>
 
       {/* Grid */}

@@ -37,11 +37,21 @@ export interface ContextePlan {
  */
 export async function preparerPlan(
   acteur: Acteur,
-  buffer: ArrayBuffer
+  buffer: ArrayBuffer,
+  targetSiteId?: string | null
 ): Promise<ContextePlan> {
   const { rows, erreurs, hash } = await parseElevesWorkbook(buffer);
 
-  const siteFilter = siteFilterForModel("eleve", acteur);
+  // Lorsqu'un site cible est explicitement fourni pour l'import, on restreint
+  // la recherche des élèves et classes existantes à ce site uniquement — sans
+  // cela, un TENANT_ADMIN sans site sélectionné chargerait tous les élèves du
+  // tenant et l'import « écraserait » les fiches des autres sites.
+  const siteFilter = targetSiteId
+    ? { AND: [{ siteId: targetSiteId }] }
+    : siteFilterForModel("eleve", acteur);
+  const classeSiteFilter = targetSiteId
+    ? { AND: [{ siteId: targetSiteId }] }
+    : siteFilterForModel("classe", acteur);
 
   const [existantsBruts, classes, importPrecedent] = await Promise.all([
     prisma.eleve.findMany({
@@ -57,7 +67,7 @@ export async function preparerPlan(
       },
     }),
     prisma.classe.findMany({
-      where: mergeFilters({ tenantId: acteur.tenantId }, siteFilterForModel("classe", acteur)),
+      where: mergeFilters({ tenantId: acteur.tenantId }, classeSiteFilter),
       select: { nom: true },
     }),
     // Empreinte du fichier : a-t-il déjà été importé dans cet établissement ?

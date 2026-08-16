@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
     const matiereIds = [...new Set(notes.map((n) => n.matiereId).filter(Boolean))];
     if (matiereIds.length > 0) {
       const matieres = await prisma.matiere.count({
-        where: { id: { in: matiereIds as string[] }, tenantId },
+        where: { id: { in: matiereIds as string[] }, tenantId, ...siteFilterForModel("matiere", session.user) },
       });
       if (matieres !== matiereIds.length) {
         return NextResponse.json(

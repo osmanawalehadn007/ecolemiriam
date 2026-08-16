@@ -322,6 +322,9 @@ export const SITE_PATHS: Record<string, SitePath> = {
   // Une conversation porte `siteId` (`null` = conversation hors site, par
   // exemple un échange direct entre deux personnes).
   conversation: "column",
+  depense: "column",
+  budget: "column",
+  remiseCaisse: "column",
 
   // --- rattachement via l'élève ---
   absence: { one: "eleve" },

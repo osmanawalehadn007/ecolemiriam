@@ -3,6 +3,7 @@
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
+import { sendPaymentWhatsApp } from "@/lib/notifications/whatsapp";
 import { z } from "zod";
 
 // ============================================================
@@ -268,7 +269,18 @@ export async function envoyerRelance(factureId: string, canal: string) {
   const facture = await prisma.facture.findFirst({
     where: { id: factureId, tenantId: session.user.tenantId },
     include: {
-      eleve: { select: { nom: true, prenom: true, matricule: true } },
+      eleve: {
+        select: {
+          nom: true,
+          prenom: true,
+          matricule: true,
+          parents: {
+            where: { isGardien: true },
+            take: 1,
+            include: { parent: { select: { phone: true, prenom: true, nom: true } } },
+          },
+        },
+      },
       paiements: true,
       relances: { orderBy: { niveau: "desc" }, take: 1 },
     },
@@ -300,6 +312,25 @@ export async function envoyerRelance(factureId: string, canal: string) {
       envoyeeParId: session.user.id,
     },
   });
+
+  // Envoi réel pour les canaux supportés
+  if (canal === "whatsapp") {
+    const tuteur = facture.eleve.parents[0]?.parent;
+    if (tuteur?.phone) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: session.user.tenantId },
+        select: { name: true },
+      });
+      await sendPaymentWhatsApp(
+        tuteur.phone,
+        `${facture.eleve.prenom} ${facture.eleve.nom}`,
+        restant,
+        facture.devise,
+        facture.numero,
+        tenant?.name ?? "EcolPro"
+      );
+    }
+  }
 
   revalidatePath("/facturation");
   revalidatePath(`/facturation/${factureId}`);
