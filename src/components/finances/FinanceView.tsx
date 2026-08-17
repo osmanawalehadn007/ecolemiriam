@@ -104,6 +104,7 @@ export function FinanceView({
   activePeriode,
   siteColors,
   currentSiteName,
+  currentUser,
   sites,
 }: {
   totalEncaisse: number;
@@ -120,6 +121,7 @@ export function FinanceView({
   activePeriode: Periode;
   siteColors: Record<string, SiteColor>;
   currentSiteName: string;
+  currentUser: { id: string; name?: string | null; role: string };
   sites: { id: string; nom: string }[];
 }) {
   const t = useTranslations("finances");
@@ -331,7 +333,7 @@ export function FinanceView({
         </CardContent>
       </Card>
 
-      <RemiseCaisseSection remises={remisesCaisse} activeSite={activeSite} sites={sites} currency={currency} cashPendingTotal={cashPendingTotal} />
+      <RemiseCaisseSection remises={remisesCaisse} activeSite={activeSite} sites={sites} currency={currency} cashPendingTotal={cashPendingTotal} currentUser={currentUser} />
 
       <DepensesSection depenses={depenses} activeSite={activeSite} sites={sites} currency={currency} />
 

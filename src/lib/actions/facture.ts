@@ -5,13 +5,13 @@ import prisma from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { PAYMENT_METHOD_IDS } from "@/lib/payment-methods";
 import { z } from "zod";
+import { endOfDay } from "date-fns";
 
 const FactureSchema = z.object({
   eleveId: z.string().min(1, "L'élève est requis"),
   libelle: z.string().min(1, "Le libellé est requis"),
   montant: z.number().min(0.01, "Le montant doit être positif"),
   devise: z.string().default("DJF"),
-  echeance: z.string().optional(),
 });
 
 export type FactureFormData = z.infer<typeof FactureSchema>;
@@ -102,7 +102,7 @@ export async function createFacture(data: FactureFormData) {
       montant: values.montant,
       devise: values.devise || "DJF",
       statut: "EN_ATTENTE",
-      echeance: values.echeance ? new Date(values.echeance) : null,
+      echeance: endOfDay(new Date()),
       createdById: session.user.id,
     },
   });

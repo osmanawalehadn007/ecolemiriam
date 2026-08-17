@@ -12,7 +12,6 @@ const DepenseSchema = z.object({
   fournisseur: z.string().optional(),
   montant: z.number().min(0.01, "Le montant doit être positif"),
   devise: z.string().default("DJF"),
-  date: z.string().min(1, "La date est requise"),
   siteId: z.string().optional().nullable(),
   typeEngagement: z.string().optional(),
   autoriseParId: z.string().optional().nullable(),
@@ -73,7 +72,7 @@ export async function createDepense(data: z.infer<typeof DepenseSchema>) {
       fournisseur: parsed.data.fournisseur,
       montant: parsed.data.montant,
       devise: parsed.data.devise || "DJF",
-      date: new Date(parsed.data.date),
+      date: new Date(),
       siteId: parsed.data.siteId ?? null,
       typeEngagement: parsed.data.typeEngagement ?? null,
       autoriseParId: parsed.data.autoriseParId ?? null,
@@ -232,8 +231,14 @@ export async function getRemisesCaisse(siteId: string | null) {
     ? { siteId }
     : siteFilterForModel("remiseCaisse", session.user);
 
+  const isAdmin = ["SUPER_ADMIN", "TENANT_ADMIN"].includes(session.user.role);
+  const where: Record<string, unknown> = { tenantId: session.user.tenantId, ...siteFilter };
+  if (!isAdmin) {
+    where.OR = [{ caissierId: session.user.id }, { destinataireId: session.user.id }];
+  }
+
   return prisma.remiseCaisse.findMany({
-    where: { tenantId: session.user.tenantId, ...siteFilter },
+    where,
     include: {
       caissier: { select: { id: true, name: true } },
       destinataire: { select: { id: true, name: true } },

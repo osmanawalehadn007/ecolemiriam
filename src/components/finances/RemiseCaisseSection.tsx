@@ -63,12 +63,14 @@ export function RemiseCaisseSection({
   sites,
   currency,
   cashPendingTotal,
+  currentUser,
 }: {
   remises: RemiseCaisse[];
   activeSite: string;
   sites: { id: string; nom: string }[];
   currency: string;
   cashPendingTotal: number;
+  currentUser: { id: string; name?: string | null; role: string };
 }) {
   const t = useTranslations("finances");
   const tCommon = useTranslations("common");
@@ -154,6 +156,13 @@ export function RemiseCaisseSection({
     });
   }
 
+  const isAdmin = ["SUPER_ADMIN", "TENANT_ADMIN"].includes(currentUser.role);
+  const canView = (r: RemiseCaisse) =>
+    isAdmin || currentUser.id === r.caissier.id || currentUser.id === r.destinataire?.id;
+  const canConfirm = (r: RemiseCaisse) => currentUser.id === r.destinataire?.id;
+
+  const visibleRemises = remises.filter(canView);
+
   const statutBadge = (statut: string) => {
     if (statut === "CONFIRME") return <Badge variant="success">{t("remiseConfirmedBadge")}</Badge>;
     if (statut === "REJETE") return <Badge variant="destructive">{t("remiseRejectedBadge")}</Badge>;
@@ -172,7 +181,7 @@ export function RemiseCaisseSection({
         </Button>
       </CardHeader>
       <CardContent>
-        {remises.length === 0 ? (
+        {visibleRemises.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4 text-center">{t("noRemises")}</p>
         ) : (
           <div className="overflow-x-auto">
@@ -190,7 +199,7 @@ export function RemiseCaisseSection({
                 </tr>
               </thead>
               <tbody>
-                {remises.map((r) => (
+                {visibleRemises.map((r) => (
                   <tr key={r.id} className="border-b last:border-0">
                     <td className="py-2 pr-2 whitespace-nowrap">{formatDate(r.dateDeclaration)}</td>
                     <td className="py-2 pr-2">{r.caissier.name ?? "—"}</td>
@@ -204,7 +213,7 @@ export function RemiseCaisseSection({
                     </td>
                     <td className="py-2 pr-2">{statutBadge(r.statut)}</td>
                     <td className="py-2 text-right">
-                      {r.statut === "EN_ATTENTE" && (
+                      {r.statut === "EN_ATTENTE" && canConfirm(r) && (
                         <div className="flex justify-end gap-1">
                           <Button
                             size="sm"

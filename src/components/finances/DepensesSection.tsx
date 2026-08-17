@@ -45,10 +45,6 @@ function formatCurrency(value: number, devise: string) {
   }
 }
 
-function todayInputValue() {
-  return new Date().toISOString().split("T")[0];
-}
-
 export function DepensesSection({
   depenses,
   activeSite,
@@ -70,7 +66,6 @@ export function DepensesSection({
     description: "",
     fournisseur: "",
     montant: "",
-    date: todayInputValue(),
     siteId: activeSite === "all" ? "" : activeSite,
     typeEngagement: "",
     autoriseParId: "",
@@ -106,7 +101,6 @@ export function DepensesSection({
           description: form.description || undefined,
           fournisseur: form.fournisseur || undefined,
           montant,
-          date: form.date,
           devise: currency,
           siteId: form.siteId || null,
           typeEngagement: form.typeEngagement || undefined,
@@ -119,7 +113,6 @@ export function DepensesSection({
           description: "",
           fournisseur: "",
           montant: "",
-          date: todayInputValue(),
           siteId: activeSite === "all" ? "" : activeSite,
           typeEngagement: "",
           autoriseParId: "",
@@ -155,7 +148,6 @@ export function DepensesSection({
           <Input placeholder={t("category")} value={form.categorie} onChange={(e) => setForm({ ...form, categorie: e.target.value })} />
           <Input placeholder={t("supplier")} value={form.fournisseur} onChange={(e) => setForm({ ...form, fournisseur: e.target.value })} />
           <Input type="number" step="0.01" placeholder={t("amount")} value={form.montant} onChange={(e) => setForm({ ...form, montant: e.target.value })} />
-          <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
           {activeSite === "all" && (
             <select
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"

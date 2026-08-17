@@ -234,6 +234,7 @@ export default async function FinancesPage({
           activeSite={activeSite}
           activePeriode={activePeriode}
           siteColors={siteColors}
+          currentUser={session.user}
           currentSiteName={currentSiteName}
           sites={sites.map((s) => ({ id: s.id, nom: s.nom }))}
         />

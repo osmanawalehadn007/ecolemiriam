@@ -32,7 +32,6 @@ const FormSchema = z.object({
   eleveId: z.string().min(1, "formErrStudent"),
   libelle: z.string().min(1, "formErrLabel"),
   montant: z.number().min(0.01, "formErrAmount"),
-  echeance: z.string().optional(),
 });
 
 export function FactureForm({
@@ -52,7 +51,6 @@ export function FactureForm({
     libelle: "",
     montant: 0,
     devise: "DJF",
-    echeance: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedClasseId, setSelectedClasseId] = useState("");
@@ -185,15 +183,6 @@ export function FactureForm({
             {errors.montant && <p className="text-xs text-destructive">{errors.montant}</p>}
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="echeance">{t("formDueDate")}</Label>
-            <Input
-              id="echeance"
-              type="date"
-              value={form.echeance ?? ""}
-              onChange={(e) => updateField("echeance", e.target.value)}
-            />
-          </div>
         </CardContent>
       </Card>
     </form>

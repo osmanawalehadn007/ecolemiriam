@@ -174,7 +174,6 @@ describe("facture actions", () => {
         libelle: "Scolarité 2025",
         montant: 50000,
         devise: "DJF",
-        echeance: "2025-12-31",
       });
       expect(result).toEqual({ success: true, id: "new-facture-id" });
       expect(mockPrisma.facture.create).toHaveBeenCalledWith(
