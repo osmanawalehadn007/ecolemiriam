@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const classeId = searchParams.get("classeId");
+    const enseignantId = searchParams.get("enseignantId");
     const tenantId = session.user.tenantId;
   const siteId = (session.user as { siteId?: string | null }).siteId ?? null;
   const siteIds = (session.user as { siteIds?: string[] }).siteIds;
@@ -38,6 +39,7 @@ export async function GET(req: NextRequest) {
     const emplois = await prisma.emploiTemps.findMany({
       where: { tenantId, ...emploiFilter,
         ...(classeId ? { classeId } : {}),
+        ...(enseignantId ? { enseignantId } : {}),
         ...(annee ? { annee } : {}),
       },
       include: {

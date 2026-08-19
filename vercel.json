@@ -11,6 +11,10 @@
       "schedule": "0 0 * * *"
     },
     {
+      "path": "/api/cron/relances-auto",
+      "schedule": "0 8 * * *"
+    },
+    {
       "path": "/api/cron/purge-sites",
       "schedule": "0 3 * * *"
     }
