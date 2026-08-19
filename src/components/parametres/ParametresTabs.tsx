@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Settings, Users, GraduationCap, BookOpen, UserCog, Settings2, Calendar, Stamp, Building2,
-  School, UsersRound, BookOpenCheck, ChevronDown, DollarSign, CopyCheck, ClipboardList,
+  School, UsersRound, BookOpenCheck, ChevronDown, DollarSign, CopyCheck, ClipboardList, DoorOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EtablissementTab } from "./EtablissementTab";
@@ -20,6 +20,7 @@ import { TarifsTab } from "./TarifsTab";
 import { DoublonsTab } from "./DoublonsTab";
 import { AnneesScolairesTab } from "./AnneesScolairesTab";
 import { EnseignantsAffectationTab } from "./EnseignantsAffectationTab";
+import { SallesTab } from "./SallesTab";
 
 import type { AvailableTenant } from "@/auth.config";
 
@@ -31,6 +32,7 @@ type Tab =
   | "classes"
   | "matieres"
   | "enseignants"
+  | "salles"
   | "appreciations"
   | "periodes"
   | "signature"
@@ -73,6 +75,7 @@ const tabGroups: TabGroup[] = [
       { id: "classes", labelKey: "classes", icon: GraduationCap },
       { id: "matieres", labelKey: "matieres", icon: BookOpen },
       { id: "enseignants", labelKey: "enseignantsAffectation", icon: ClipboardList },
+      { id: "salles", labelKey: "salles", icon: DoorOpen },
       { id: "appreciations", labelKey: "appreciations", icon: Settings2 },
       { id: "periodes", labelKey: "periodes", icon: Calendar },
     ],
@@ -191,6 +194,7 @@ export function ParametresTabs({
         {activeTab === "classes" && <ClassesTab classes={classes} canManage={canManage} sites={sites} />}
         {activeTab === "matieres" && <MatieresTab matieres={matieres} canManage={canManage} />}
         {activeTab === "enseignants" && <EnseignantsAffectationTab canManage={canManage} />}
+        {activeTab === "salles" && <SallesTab canManage={canManage} sites={sites} />}
         {activeTab === "appreciations" && <ReglesAppreciationManager regles={regles} />}
         {activeTab === "periodes" && (
           <PeriodesClotureManager
