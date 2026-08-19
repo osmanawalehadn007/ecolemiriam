@@ -4,9 +4,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({
   default: {
-    facture: { findMany: vi.fn() },
-    relance: { create: vi.fn() },
     facture: { findMany: vi.fn(), update: vi.fn() },
+    relance: { create: vi.fn() },
   },
 }));
 vi.mock("@/lib/sms/africasTalking", () => ({

@@ -1,0 +1,48 @@
+# ============================================================
+# EcolPro — .dockerignore (contexte Docker minimal)
+# ============================================================
+# Réduit le contexte de build à l'essentiel pour :
+# - Accélérer le build (moins de fichiers à envoyer)
+# - Éviter de baker des secrets dans l'image
+# ============================================================
+
+# Tout ignorer par défaut, puis whitelist ce qui est nécessaire
+*
+
+# --- Whitelist : code source ---
+!src/
+!prisma/
+!public/
+!package.json
+!package-lock.json
+!next.config.ts
+!tsconfig.json
+!next-intl.config.ts
+!postcss.config.mjs
+!tailwind.config.ts
+!.env.example
+
+# --- Explicitement exclus (sécurité) ---
+# Pas de .env (secrets)
+.env
+.env.*
+# Pas de .git
+.git
+.gitignore
+# Pas de node_modules (recréé par npm ci)
+node_modules
+# Pas de .next (recréé par build)
+.next
+# Pas de tests
+*.test.ts
+*.test.tsx
+__tests__
+# Pas de docker/ (récursivité)
+docker
+# Pas de Vercel
+.vercel
+# Pas de scripts locaux
+scripts
+# Pas de docs
+*.md
+docs

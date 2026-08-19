@@ -1,0 +1,44 @@
+name: Backup — pg_dump chiffré + upload off-site
+
+on:
+  schedule:
+    # Quotidien à 02h00 UTC
+    - cron: "0 2 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install age + rclone
+        run: |
+          wget -qO- https://github.com/FiloSottile/age/releases/download/v1.2.1/age-v1.2.1-linux-amd64.tar.gz | tar xzf - -C /tmp
+          sudo mv /tmp/age/age /tmp/age/age-keygen /usr/local/bin/
+          curl https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone
+        env:
+          RCLONE_CONFIG: ${{ secrets.BACKUP_RCLONE_CONFIG }}
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "$RCLONE_CONFIG" > ~/.config/rclone/rclone.conf
+          rclone listremotes
+
+      - name: Run encrypted backup
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          BACKUP_AGE_KEY: ${{ secrets.BACKUP_AGE_KEY }}
+          BACKUP_RCLONE_REMOTE: ecolpro-backup
+          BACKUP_RETENTION_DAYS: "30"
+        run: |
+          chmod +x scripts/backups/backup.sh
+          ./scripts/backups/backup.sh
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::La sauvegarde a échoué. Vérifiez les logs et les secrets."
+          exit 1

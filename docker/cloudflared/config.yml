@@ -1,0 +1,41 @@
+# ============================================================
+# EcolPro — Cloudflare Tunnel (zero-trust, token-based)
+# ============================================================
+#
+# cloudflared utilise le mode token-based (recommandé par Cloudflare).
+# Le token est stocké dans secrets/cloudflare_tunnel_token.txt.
+# Les ingress rules sont configurées dans le dashboard Cloudflare.
+#
+# Ingress rules (à configurer dans le dashboard Cloudflare Zero Trust) :
+#   - app.ecloemiriam.com    → http://caddy:8080
+#   - status.ecloemiriam.com → http://caddy:8081  (access policy requise)
+#
+# Sécurité Cloudflare (à activer dans le dashboard) :
+#   - WAF : règles OWASP + custom rules
+#   - Bot Fight Mode : activé
+#   - Rate Limiting : 100 req/min par IP
+#   - SSL/TLS : Full (strict) — TLS bout en bout
+#   - Always Use HTTPS : activé
+#   - HSTS : activé
+#   - Minimum TLS Version : 1.2
+#
+# Pour le mode fichier (alternative au dashboard) :
+# tunnel: ecolpro
+# credentials-file: /etc/cloudflared/credentials.json
+#
+# ingress:
+#   - hostname: app.ecloemiriam.com
+#     service: http://caddy:8080
+#     originRequest:
+#       noTLSVerify: false
+#       connectTimeout: 10s
+#       keepAliveTimeout: 30s
+#       http2Origin: true
+#
+#   - hostname: status.ecloemiriam.com
+#     service: http://caddy:8081
+#     originRequest:
+#       noTLSVerify: false
+#
+#   - service: http_status:404
+# ============================================================

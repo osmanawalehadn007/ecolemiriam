@@ -1,0 +1,128 @@
+# ============================================================
+# EcolPro — Caddyfile (reverse proxy + TLS interne + sécurité)
+# ============================================================
+# Caddy reçoit le trafic depuis cloudflared (port 8080 interne).
+# TLS interne (self-signed), Cloudflare termine le TLS externe.
+# Headers de sécurité, rate limiting, proxy vers l'app.
+# ============================================================
+
+{
+	# Désactiver le HTTPS public (Cloudflare gère le TLS externe)
+	auto_https off
+	email admin@ecloemiriam.com
+}
+
+# ============================================================
+# Proxy principal : app.ecloemiriam.com
+# ============================================================
+:8080 {
+	# TLS interne (certificat self-signed, Cloudflare termine le TLS externe)
+	tls internal {
+		protocols tls1.3
+	}
+
+	# --- Headers de sécurité ---
+	header {
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-DNS-Prefetch-Control "on"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https://api.africastalking.com https://api.resend.com https://graph.facebook.com https://api.telegram.org https://api.stripe.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# Cache des assets statiques Next.js
+		/.next/static/* {
+			Cache-Control "public, max-age=31536000, immutable"
+		}
+	}
+
+	# --- Rate limiting ---
+	# Login : 5 tentatives / minute / IP
+	@api_auth {
+		path /api/auth/*
+	}
+	handle @api_auth {
+		rate_limit {
+			zone auth {
+				key {remote_host}
+				events 5
+				window 1m
+			}
+		}
+		reverse_proxy app:3000
+	}
+
+	# Cron : 10 appels / minute (Ofelia appelle en interne)
+	@api_cron {
+		path /api/cron/*
+	}
+	handle @api_cron {
+		rate_limit {
+			zone cron {
+				key {remote_host}
+				events 10
+				window 1m
+			}
+		}
+		reverse_proxy app:3000
+	}
+
+	# Uploads : 10 / minute / IP
+	@api_upload {
+		path /api/eleves/upload-photo /api/parametres/upload-signature
+	}
+	handle @api_upload {
+		rate_limit {
+			zone upload {
+				key {remote_host}
+				events 10
+				window 1m
+			}
+		}
+		reverse_proxy app:3000
+	}
+
+	# --- Route par défaut ---
+	handle {
+		reverse_proxy app:3000 {
+			health_uri /api/health
+			health_interval 30s
+			health_timeout 5s
+			health_status 2xx
+			transport http {
+				read_timeout 60s
+				write_timeout 60s
+				dial_timeout 5s
+			}
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# --- Health endpoint pour Caddy lui-même ---
+	handle /health {
+		respond "OK" 200
+	}
+
+	# --- Logging ---
+	log {
+		output stdout
+		format json
+		level info
+	}
+
+	# --- Compression ---
+	encode gzip zstd
+}
+
+# ============================================================
+# Monitoring : status.ecloemiriam.com (Uptime Kuma)
+# ============================================================
+:8081 {
+	tls internal {
+		protocols tls1.3
+	}
+	reverse_proxy monitoring:3001
+}
