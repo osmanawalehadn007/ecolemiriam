@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Settings, Users, GraduationCap, BookOpen, UserCog, Settings2, Calendar, Stamp, Building2,
-  School, UsersRound, BookOpenCheck, ChevronDown, DollarSign, CopyCheck,
+  School, UsersRound, BookOpenCheck, ChevronDown, DollarSign, CopyCheck, ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EtablissementTab } from "./EtablissementTab";
@@ -19,6 +19,7 @@ import { SitesTab } from "./SitesTab";
 import { TarifsTab } from "./TarifsTab";
 import { DoublonsTab } from "./DoublonsTab";
 import { AnneesScolairesTab } from "./AnneesScolairesTab";
+import { EnseignantsAffectationTab } from "./EnseignantsAffectationTab";
 
 import type { AvailableTenant } from "@/auth.config";
 
@@ -29,6 +30,7 @@ type Tab =
   | "parents"
   | "classes"
   | "matieres"
+  | "enseignants"
   | "appreciations"
   | "periodes"
   | "signature"
@@ -70,6 +72,7 @@ const tabGroups: TabGroup[] = [
     tabs: [
       { id: "classes", labelKey: "classes", icon: GraduationCap },
       { id: "matieres", labelKey: "matieres", icon: BookOpen },
+      { id: "enseignants", labelKey: "enseignantsAffectation", icon: ClipboardList },
       { id: "appreciations", labelKey: "appreciations", icon: Settings2 },
       { id: "periodes", labelKey: "periodes", icon: Calendar },
     ],
@@ -187,6 +190,7 @@ export function ParametresTabs({
         {activeTab === "parents" && <ParentsTab parents={parents} eleves={eleves} canManage={canManage} />}
         {activeTab === "classes" && <ClassesTab classes={classes} canManage={canManage} sites={sites} />}
         {activeTab === "matieres" && <MatieresTab matieres={matieres} canManage={canManage} />}
+        {activeTab === "enseignants" && <EnseignantsAffectationTab canManage={canManage} />}
         {activeTab === "appreciations" && <ReglesAppreciationManager regles={regles} />}
         {activeTab === "periodes" && (
           <PeriodesClotureManager

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import Stripe from "stripe";
 import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
@@ -11,6 +12,8 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.tenantId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
+    const denied = checkPermission(session.user.role, "finance:write");
+    if (denied) return denied;
 
     // Rate limit: 5 checkout attempts per minute
     const ip = getClientIP(req);

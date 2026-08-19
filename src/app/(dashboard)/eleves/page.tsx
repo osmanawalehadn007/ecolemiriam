@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
@@ -189,6 +190,7 @@ export default async function ElevesPage({
     searchParams,
   ]);
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "eleves:read");
 
   const { q, classeId, statut } = sp;
 

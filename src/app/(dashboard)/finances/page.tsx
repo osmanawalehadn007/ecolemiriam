@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
@@ -160,6 +161,7 @@ export default async function FinancesPage({
 }) {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "finance:read");
 
   const [t, tCommon, sites, siteColors, sp] = await Promise.all([
     getTranslations("finances"),

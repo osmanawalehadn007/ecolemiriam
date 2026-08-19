@@ -2,12 +2,15 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { guardPage } from "@/lib/guard-page";
 import { Header } from "@/components/layout/Header";
 import { ConvocationForm } from "@/components/vie-scolaire/ConvocationForm";
 
 export default async function ConvocationsPage() {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+
+  guardPage(session, "vie-scolaire:read");
 
 
   const siteFilter = siteFilterForModel("classe", session.user);

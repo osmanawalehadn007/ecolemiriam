@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { Header } from "@/components/layout/Header";
@@ -25,6 +26,7 @@ export default async function ParametresPage() {
   if (!session.user.tenantId) {
     redirect(session.user.role === "SUPER_ADMIN" ? "/super-admin" : "/select-tenant");
   }
+  guardPage(session, "parametres:read");
 
   const canManage = session.user.role === "TENANT_ADMIN" || session.user.role === "SUPER_ADMIN" || session.user.role === "PRINCIPAL";
 

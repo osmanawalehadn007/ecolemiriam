@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { CoursView } from "@/components/cours/CoursView";
@@ -16,6 +17,7 @@ export default async function CoursPage({
 }) {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "cours:read");
 
   const [t, tCommon, sites, siteColors, sp] = await Promise.all([
     getTranslations("cours"),

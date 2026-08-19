@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { sendPaymentWhatsApp } from "@/lib/notifications/whatsapp";
+import { checkPermission } from "@/lib/rbac";
 import { z } from "zod";
 
 // ============================================================
@@ -28,6 +29,8 @@ export type TarifFormData = z.infer<typeof TarifSchema>;
 export async function getTarifsForTenant() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
+  const denied = checkPermission(session.user.role, "finance:read");
+  if (denied) return [];
   return prisma.tarifNiveau.findMany({
     where: { tenantId: session.user.tenantId },
     orderBy: [{ annee: "desc" }, { niveau: "asc" }],
@@ -37,9 +40,8 @@ export async function getTarifsForTenant() {
 export async function createTarif(data: TarifFormData) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
 
   const parsed = TarifSchema.safeParse(data);
   if (!parsed.success) {
@@ -70,9 +72,8 @@ export async function createTarif(data: TarifFormData) {
 export async function deleteTarif(tarifId: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
 
   await prisma.tarifNiveau.delete({
     where: { id: tarifId },
@@ -94,9 +95,8 @@ export async function genererMensualites(params: {
 }) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
 
   const tenantId = session.user.tenantId;
   const { mois, annee, inclureCantine = false, inclureTransport = false } = params;
@@ -190,9 +190,8 @@ export async function genererFraisInscription(params: {
 }) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
 
   const tenantId = session.user.tenantId;
   const { eleveIds, type, annee } = params;
@@ -262,9 +261,8 @@ export async function genererFraisInscription(params: {
 export async function envoyerRelance(factureId: string, canal: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL" && session.user.role !== "ACCOUNTANT") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
 
   const facture = await prisma.facture.findFirst({
     where: { id: factureId, tenantId: session.user.tenantId },
@@ -341,6 +339,8 @@ export async function envoyerRelance(factureId: string, canal: string) {
 export async function getRelancesForFacture(factureId: string) {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
+  const denied = checkPermission(session.user.role, "finance:read");
+  if (denied) return [];
   return prisma.relance.findMany({
     where: { factureId, tenantId: session.user.tenantId },
     include: { envoyeePar: { select: { name: true } } },
@@ -359,9 +359,8 @@ export async function exclureEleve(params: {
 }) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
 
   const { eleveId, motif, details } = params;
 
@@ -398,9 +397,8 @@ export async function exclureEleve(params: {
 export async function leverExclusion(exclusionId: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
 
   const exclusion = await prisma.exclusionEleve.findFirst({
     where: { id: exclusionId, tenantId: session.user.tenantId, dateFin: null },
@@ -432,6 +430,8 @@ export async function leverExclusion(exclusionId: string) {
 export async function getExclusionsForTenant() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
+  const denied = checkPermission(session.user.role, "finance:read");
+  if (denied) return [];
   return prisma.exclusionEleve.findMany({
     where: { tenantId: session.user.tenantId, dateFin: null },
     include: {
@@ -449,6 +449,8 @@ export async function getExclusionsForTenant() {
 export async function detecterFacturesEnRetard() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
+  const denied = checkPermission(session.user.role, "finance:read");
+  if (denied) return [];
   const now = new Date();
 
   const factures = await prisma.facture.findMany({

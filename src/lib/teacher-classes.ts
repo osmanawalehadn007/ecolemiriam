@@ -40,7 +40,7 @@ export async function getTeacherScope(
   }
 
   /* eslint-disable ecolpro/require-site-filter -- teacher scope resolution, site scoping is caller's responsibility */
-  const [emploiEntries, principalClasses] = await Promise.all([
+  const [emploiEntries, principalClasses, affectations, matieres] = await Promise.all([
     prisma.emploiTemps.findMany({
       where: { enseignantId: enseignant.id, tenantId },
       select: { classeId: true, matiereId: true },
@@ -50,6 +50,16 @@ export async function getTeacherScope(
       where: { profPrincipalId: enseignant.id, tenantId },
       select: { id: true },
     }),
+    // Nouveau : affectations explicites via EnseignantAffectation
+    prisma.enseignantAffectation.findMany({
+      where: { enseignantId: enseignant.id, tenantId },
+      select: { classeId: true, matiereId: true },
+    }),
+    // Nouveau : matières liées via EnseignantMatiere
+    prisma.enseignantMatiere.findMany({
+      where: { enseignantId: enseignant.id, tenantId },
+      select: { matiereId: true },
+    }),
   ]);
   /* eslint-enable ecolpro/require-site-filter */
 
@@ -57,11 +67,16 @@ export async function getTeacherScope(
     new Set([
       ...emploiEntries.map((e) => e.classeId),
       ...principalClasses.map((c) => c.id),
+      ...affectations.map((a) => a.classeId),
     ])
   );
 
   const matiereIds = Array.from(
-    new Set(emploiEntries.map((e) => e.matiereId).filter(Boolean) as string[])
+    new Set([
+      ...emploiEntries.map((e) => e.matiereId).filter(Boolean) as string[],
+      ...affectations.map((a) => a.matiereId).filter(Boolean) as string[],
+      ...matieres.map((m) => m.matiereId),
+    ])
   );
 
   return { classeIds, matiereIds, isRestricted: true };

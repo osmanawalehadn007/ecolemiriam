@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
+import { checkPermission } from "@/lib/rbac";
 import type { Role } from "@prisma/client";
 
 /**
@@ -29,9 +30,8 @@ export async function addUserToTenant(params: {
   }
 
   // Seuls TENANT_ADMIN et SUPER_ADMIN peuvent ajouter des utilisateurs
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Accès refusé");
 
   // Un TENANT_ADMIN ne peut agir que sur un établissement dont il est
   // effectivement administrateur : sans ce contrôle, l'admin de l'école A
@@ -146,9 +146,8 @@ export async function removeUserFromTenant(userId: string, tenantId: string) {
     throw new Error("Non autorisé");
   }
 
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Accès refusé");
 
   // Ne pas se retirer soi-même
   if (userId === session.user.id) {

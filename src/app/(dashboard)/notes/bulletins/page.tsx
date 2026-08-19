@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
@@ -49,6 +50,7 @@ export default async function BulletinsPage() {
     getTranslations("bulletins"),
   ]);
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "bulletins:read");
 
   // Filtrer par classes de l'enseignant si applicable
   const scope = isTeacherRole(session.user.role as Role)

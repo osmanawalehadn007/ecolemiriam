@@ -1,5 +1,6 @@
 import React from "react";
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
@@ -84,6 +85,7 @@ async function getEmploiData(tenantId: string, claims: SessionSiteClaims) {
 export default async function EmploiDuTempsPage() {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "emploi-du-temps:read");
 
   const [t, tCommon, sites, siteColors] = await Promise.all([
     getTranslations("emploi"),

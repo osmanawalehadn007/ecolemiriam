@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel } from "@/lib/site-scope";
@@ -8,6 +9,7 @@ import { AttestationForm } from "@/components/eleves/AttestationForm";
 export default async function AttestationsPage() {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "eleves:read");
 
 
   const siteFilter = siteFilterForModel("classe", session.user);

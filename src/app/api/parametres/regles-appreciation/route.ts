@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 
 export async function GET() {
@@ -7,6 +8,8 @@ export async function GET() {
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
+  const denied = checkPermission(session.user.role, "parametres:read");
+  if (denied) return denied;
 
   const regles = await prisma.reglesAppreciation.findMany({
     where: { tenantId: session.user.tenantId },
@@ -21,6 +24,8 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) return denied;
 
   const body = await req.json();
   const { contexte, seuilMin, seuilMax, libelle, ordre } = body;
@@ -48,6 +53,8 @@ export async function PUT(req: NextRequest) {
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) return denied;
 
   const body = await req.json();
   const { id, contexte, seuilMin, seuilMax, libelle, ordre } = body;
@@ -75,6 +82,8 @@ export async function DELETE(req: NextRequest) {
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) return denied;
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");

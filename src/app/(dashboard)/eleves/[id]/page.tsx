@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect, notFound } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel } from "@/lib/site-scope";
@@ -85,6 +86,7 @@ export default async function EleveDetailPage({
 }) {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "eleves:read");
 
   const eleveFilter = siteFilterForModel("eleve", session.user);
   const matiereFilter = siteFilterForModel("matiere", session.user);

@@ -11,8 +11,9 @@ import {
   requireSiteIdForCreate,
   type SessionSiteClaims,
 } from "@/lib/site-scope";
-import { niveauRequiresProfPrincipal } from "@/lib/utils-classe";
+import { niveauRequiresProfPrincipal, isNiveauPrimaire } from "@/lib/utils-classe";
 import { ELEVE_NON_ARCHIVE } from "@/lib/eleve-filters";
+import { checkPermission } from "@/lib/rbac";
 import type { Role } from "@prisma/client";
 
 // ============================================================
@@ -42,9 +43,8 @@ export type EtablissementFormData = z.infer<typeof EtablissementSchema>;
 export async function updateEtablissement(data: EtablissementFormData) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Accès refusé");
 
   const parsed = EtablissementSchema.safeParse(data);
   if (!parsed.success) {
@@ -81,6 +81,9 @@ export async function getEtablissementData() {
   const session = await auth();
   if (!session?.user?.tenantId) return null;
 
+  const denied = checkPermission(session.user.role, "parametres:read");
+  if (denied) return null;
+
   return prisma.tenant.findUnique({
     where: { id: session.user.tenantId },
   });
@@ -115,6 +118,9 @@ export async function getUsersForTenant() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
 
+  const denied = checkPermission(session.user.role, "parametres:read");
+  if (denied) return [];
+
   // Le périmètre était reconstruit à la main ici, et il était fail-open :
   // sans site sélectionné, `{ siteId: siteId ?? undefined }` devenait une
   // clause vide, l'`OR` était donc satisfait par tout le monde et l'annuaire
@@ -142,9 +148,8 @@ export async function getUsersForTenant() {
 export async function createUser(data: UserFormData) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Accès refusé");
 
   const parsed = UserSchema.safeParse(data);
   if (!parsed.success) {
@@ -220,9 +225,8 @@ export async function createUser(data: UserFormData) {
 export async function toggleUserActive(userId: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Accès refusé");
 
   const user = await prisma.user.findFirst({
     where: {
@@ -245,9 +249,8 @@ export async function toggleUserActive(userId: string) {
 export async function deleteUser(userId: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Accès refusé");
 
   if (userId === session.user.id) throw new Error("Vous ne pouvez pas supprimer votre propre compte");
 
@@ -300,6 +303,9 @@ export async function getClassesForSettings() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
 
+  const denied = checkPermission(session.user.role, "classes:read");
+  if (denied) return [];
+
   const siteId = (session.user as { siteId?: string | null }).siteId ?? null;
   const siteIds = (session.user as { siteIds?: string[] }).siteIds;
 
@@ -320,6 +326,8 @@ export async function getClassesForSettings() {
 export async function getEnseignantsForClasse() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
+  const denied = checkPermission(session.user.role, "enseignants:read");
+  if (denied) return [];
   const siteFilter = siteFilterForModel("enseignant", session.user);
   return prisma.enseignant.findMany({
     where: { tenantId: session.user.tenantId, ...siteFilter },
@@ -331,6 +339,9 @@ export async function getEnseignantsForClasse() {
 export async function createClasse(data: ClasseFormData) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "classes:write");
+  if (denied) throw new Error("Accès refusé");
 
   const siteError = requireSiteIdForCreate(session.user);
   if (siteError) throw new Error(siteError);
@@ -389,6 +400,9 @@ export async function deleteClasse(
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
 
+  const denied = checkPermission(session.user.role, "classes:delete");
+  if (denied) throw new Error("Accès refusé");
+
   const classe = await prisma.classe.findFirst({
     where: {
       id: classeId,
@@ -445,9 +459,8 @@ export async function deleteClasse(
 export async function transferClasse(classeId: string, targetSiteId: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "classes:write");
+  if (denied) throw new Error("Accès refusé");
 
   const classe = await prisma.classe.findFirst({
     where: {
@@ -502,6 +515,9 @@ export async function getMatieresForSettings() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
 
+  const denied = checkPermission(session.user.role, "matieres:read");
+  if (denied) return [];
+
   return prisma.matiere.findMany({
     where: {
       tenantId: session.user.tenantId,
@@ -514,6 +530,9 @@ export async function getMatieresForSettings() {
 export async function createMatiere(data: MatiereFormData) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "matieres:write");
+  if (denied) throw new Error("Accès refusé");
 
   const parsed = MatiereSchema.safeParse(data);
   if (!parsed.success) {
@@ -539,6 +558,9 @@ export async function createMatiere(data: MatiereFormData) {
 export async function deleteMatiere(matiereId: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "matieres:delete");
+  if (denied) throw new Error("Accès refusé");
 
   const matiere = await prisma.matiere.findFirst({
     where: {
@@ -604,6 +626,9 @@ export async function getParentsForSettings() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
 
+  const denied = checkPermission(session.user.role, "parents:read");
+  if (denied) return [];
+
   // Isolation portée par la relation : le filtre de site est appliqué aux
   // enfants (voir `parentSiteScope`), donc imbriqué et invisible pour la règle.
   // Le modèle nommé était d'ailleurs faux ici — « parent » au lieu de
@@ -632,6 +657,9 @@ export async function getElevesForLinking() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
 
+  const denied = checkPermission(session.user.role, "eleves:read");
+  if (denied) return [];
+
   const siteFilter = siteFilterForModel("eleve", session.user);
 
   return prisma.eleve.findMany({
@@ -650,9 +678,8 @@ export async function getElevesForLinking() {
 export async function createParent(data: ParentFormData & { eleveIds?: string[] }) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parents:write");
+  if (denied) throw new Error("Accès refusé");
 
   const parsed = ParentSchema.safeParse(data);
   if (!parsed.success) {
@@ -710,9 +737,8 @@ export async function createParent(data: ParentFormData & { eleveIds?: string[] 
 export async function linkParentToEleves(parentId: string, eleveIds: string[], lien: string = "TUTEUR") {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parents:write");
+  if (denied) throw new Error("Accès refusé");
 
   // Isolation portée par la relation enfants → élève (voir `parentSiteScope`).
   // eslint-disable-next-line ecolpro/require-site-filter
@@ -757,9 +783,8 @@ export async function linkParentToEleves(parentId: string, eleveIds: string[], l
 export async function unlinkParentFromEleve(parentId: string, eleveId: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parents:write");
+  if (denied) throw new Error("Accès refusé");
 
   await prisma.eleveParent.delete({
     where: { eleveId_parentId: { eleveId, parentId } },
@@ -772,9 +797,8 @@ export async function unlinkParentFromEleve(parentId: string, eleveId: string) {
 export async function updateParentPhone(parentId: string, phone: string, telegramChatId?: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parents:write");
+  if (denied) throw new Error("Accès refusé");
 
   const parent = await prisma.parent.findFirst({
     where: { id: parentId, tenantId: session.user.tenantId },
@@ -796,9 +820,8 @@ export async function updateParentPhone(parentId: string, phone: string, telegra
 export async function deleteParent(parentId: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parents:delete");
+  if (denied) throw new Error("Accès refusé");
 
   const parent = await prisma.parent.findFirst({
     where: { id: parentId, tenantId: session.user.tenantId },
@@ -814,9 +837,8 @@ export async function deleteParent(parentId: string) {
 export async function updateUserPhone(userId: string, phone: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Accès refusé");
 
   const user = await prisma.user.findFirst({
     where: { id: userId, tenantId: session.user.tenantId },
@@ -848,6 +870,9 @@ export async function getReglesAppreciation() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
 
+  const denied = checkPermission(session.user.role, "parametres:read");
+  if (denied) return [];
+
   return prisma.reglesAppreciation.findMany({
     where: { tenantId: session.user.tenantId },
     orderBy: [{ contexte: "asc" }, { seuilMin: "asc" }],
@@ -857,6 +882,9 @@ export async function getReglesAppreciation() {
 export async function getPeriodesForCloture() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
+
+  const denied = checkPermission(session.user.role, "parametres:read");
+  if (denied) return [];
 
   const annee = await prisma.anneesScolaires.findFirst({
     where: { tenantId: session.user.tenantId, isCurrent: true },
@@ -889,6 +917,9 @@ export async function getSitesForSettings() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
 
+  const denied = checkPermission(session.user.role, "structures:read");
+  if (denied) return [];
+
   const isAdmin = session.user.role === "TENANT_ADMIN" || session.user.role === "SUPER_ADMIN";
 
   return prisma.site.findMany({
@@ -917,9 +948,8 @@ export async function getSitesForSettings() {
 export async function createSite(data: SiteFormData) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "structures:write");
+  if (denied) throw new Error("Accès refusé");
 
   const parsed = SiteSchema.safeParse(data);
   if (!parsed.success) {
@@ -947,9 +977,8 @@ export async function createSite(data: SiteFormData) {
 export async function updateSite(siteId: string, data: Partial<SiteFormData>) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "structures:write");
+  if (denied) throw new Error("Accès refusé");
 
   const site = await prisma.site.findFirst({
     where: { id: siteId, tenantId: session.user.tenantId },
@@ -998,9 +1027,8 @@ export type DeleteSiteFormData = z.infer<typeof DeleteSiteSchema>;
 export async function deleteSite(siteId: string, data: DeleteSiteFormData) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "structures:delete");
+  if (denied) throw new Error("Accès refusé");
 
   const parsed = DeleteSiteSchema.safeParse(data);
   if (!parsed.success) {
@@ -1055,9 +1083,8 @@ export async function deleteSite(siteId: string, data: DeleteSiteFormData) {
 export async function restoreSite(siteId: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "structures:write");
+  if (denied) throw new Error("Accès refusé");
 
   const site = await prisma.site.findFirst({
     where: { id: siteId, tenantId: session.user.tenantId, deletedAt: { not: null } },
@@ -1093,7 +1120,9 @@ export async function restoreSite(siteId: string) {
 export async function getDeletedSites() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") return [];
+
+  const denied = checkPermission(session.user.role, "structures:read");
+  if (denied) return [];
 
   return prisma.site.findMany({
     where: {
@@ -1122,9 +1151,8 @@ export async function getDeletedSites() {
 export async function assignUserSites(userId: string, sites: { siteId: string; role?: string | null }[]) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Accès refusé");
 
   const user = await prisma.user.findFirst({
     where: { id: userId, tenantId: session.user.tenantId },
@@ -1190,6 +1218,9 @@ export async function getUserSites(userId: string): Promise<{ siteId: string; ro
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
 
+  const denied = checkPermission(session.user.role, "parametres:read");
+  if (denied) throw new Error("Accès refusé");
+
   const userSites = await prisma.userSite.findMany({
     where: { userId },
     select: { siteId: true, role: true },
@@ -1212,6 +1243,9 @@ export async function getAnneesScolaires() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
 
+  const denied = checkPermission(session.user.role, "parametres:read");
+  if (denied) return [];
+
   return prisma.anneesScolaires.findMany({
     where: { tenantId: session.user.tenantId },
     orderBy: { dateDebut: "desc" },
@@ -1221,9 +1255,8 @@ export async function getAnneesScolaires() {
 export async function createAnneeScolaire(data: z.infer<typeof AnneeScolaireSchema>) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Accès refusé");
 
   const parsed = AnneeScolaireSchema.safeParse(data);
   if (!parsed.success) {
@@ -1262,9 +1295,8 @@ export async function createAnneeScolaire(data: z.infer<typeof AnneeScolaireSche
 export async function activateAnneeScolaire(anneeId: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Accès refusé");
 
   const annee = await prisma.anneesScolaires.findFirst({
     where: { id: anneeId, tenantId: session.user.tenantId },
@@ -1293,9 +1325,8 @@ export async function activateAnneeScolaire(anneeId: string) {
 export async function deleteAnneeScolaire(anneeId: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Accès refusé");
 
   const annee = await prisma.anneesScolaires.findFirst({
     where: { id: anneeId, tenantId: session.user.tenantId },
@@ -1312,6 +1343,252 @@ export async function deleteAnneeScolaire(anneeId: string) {
 
   await prisma.anneesScolaires.delete({
     where: { id: anneeId },
+  });
+
+  revalidatePath("/parametres");
+  return { success: true };
+}
+
+// ============================================================
+// AFFECTATION DES ENSEIGNANTS — matières & classes
+// ============================================================
+
+/**
+ * Récupère tous les enseignants du tenant avec leurs matières et affectations.
+ * Utilisé par l'onglet d'affectation dans les paramètres.
+ */
+export async function getEnseignantsWithAffectations() {
+  const session = await auth();
+  if (!session?.user?.tenantId) return [];
+  const denied = checkPermission(session.user.role, "enseignants:read");
+  if (denied) return [];
+  const siteFilter = siteFilterForModel("enseignant", session.user);
+  return prisma.enseignant.findMany({
+    where: { tenantId: session.user.tenantId, ...siteFilter },
+    include: {
+      user: { select: { id: true, name: true, email: true } },
+      matieres: { include: { matiere: { select: { id: true, nom: true, code: true } } } },
+      affectations: {
+        include: {
+          classe: { select: { id: true, nom: true, niveau: true, structureId: true, structure: { select: { type: true } } } },
+          matiere: { select: { id: true, nom: true, code: true } },
+        },
+      },
+    },
+    orderBy: { user: { name: "asc" } },
+  });
+}
+
+/**
+ * Récupère les matières disponibles pour affectation.
+ */
+export async function getMatieresForAffectation() {
+  const session = await auth();
+  if (!session?.user?.tenantId) return [];
+  const denied = checkPermission(session.user.role, "matieres:read");
+  if (denied) return [];
+  const siteFilter = siteFilterForModel("matiere", session.user);
+  return prisma.matiere.findMany({
+    where: { tenantId: session.user.tenantId, ...siteFilter },
+    select: { id: true, nom: true, code: true, couleur: true },
+    orderBy: { nom: "asc" },
+  });
+}
+
+/**
+ * Récupère les classes disponibles pour affectation.
+ */
+export async function getClassesForAffectation() {
+  const session = await auth();
+  if (!session?.user?.tenantId) return [];
+  const denied = checkPermission(session.user.role, "classes:read");
+  if (denied) return [];
+  const siteFilter = siteFilterForModel("classe", session.user);
+  return prisma.classe.findMany({
+    where: { tenantId: session.user.tenantId, ...siteFilter },
+    select: {
+      id: true, nom: true, niveau: true,
+      structure: { select: { id: true, type: true, nom: true } },
+      site: { select: { id: true, nom: true } },
+    },
+    orderBy: { nom: "asc" },
+  });
+}
+
+/**
+ * Affecte les matières à un enseignant (remplace la liste existante).
+ * Oblligatoire pour les enseignants du collège/lycée.
+ */
+export async function assignEnseignantMatieres(enseignantId: string, matiereIds: string[]) {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+  const denied = checkPermission(session.user.role, "enseignants:write");
+  if (denied) throw new Error("Accès refusé");
+
+  // Vérifier que l'enseignant appartient au tenant
+  const ens = await prisma.enseignant.findFirst({
+    where: {
+      id: enseignantId,
+      tenantId: session.user.tenantId,
+      ...siteFilterForModel("enseignant", session.user),
+    },
+    select: { id: true },
+  });
+  if (!ens) throw new Error("Enseignant introuvable");
+
+  // Valider que toutes les matières appartiennent au tenant
+  if (matiereIds.length > 0) {
+    const validMatieres = await prisma.matiere.findMany({
+      where: {
+        id: { in: matiereIds },
+        tenantId: session.user.tenantId,
+        ...siteFilterForModel("matiere", session.user),
+      },
+      select: { id: true },
+    });
+    if (validMatieres.length !== matiereIds.length) {
+      throw new Error("Une ou plusieurs matières sont invalides");
+    }
+  }
+
+  // Supprimer les anciennes associations
+  await prisma.enseignantMatiere.deleteMany({
+    where: { enseignantId, tenantId: session.user.tenantId },
+  });
+
+  // Créer les nouvelles
+  if (matiereIds.length > 0) {
+    await prisma.enseignantMatiere.createMany({
+      data: matiereIds.map((matiereId) => ({
+        tenantId: session.user.tenantId!,
+        enseignantId,
+        matiereId,
+      })),
+    });
+  }
+
+  revalidatePath("/parametres");
+  return { success: true };
+}
+
+/**
+ * Affecte un enseignant à une classe (+ matière optionnelle).
+ * - Primaire : matiereId = null, 1 classe max
+ * - Collège/Lycée : matiereId requis, multiples classes
+ */
+export async function assignEnseignantClasse(
+  enseignantId: string,
+  classeId: string,
+  matiereId?: string
+) {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+  const denied = checkPermission(session.user.role, "enseignants:write");
+  if (denied) throw new Error("Accès refusé");
+
+  // Vérifier que l'enseignant appartient au tenant
+  const ens = await prisma.enseignant.findFirst({
+    where: {
+      id: enseignantId,
+      tenantId: session.user.tenantId,
+      ...siteFilterForModel("enseignant", session.user),
+    },
+    select: { id: true },
+  });
+  if (!ens) throw new Error("Enseignant introuvable");
+
+  // Vérifier que la classe appartient au tenant
+  const classe = await prisma.classe.findFirst({
+    where: {
+      id: classeId,
+      tenantId: session.user.tenantId,
+      ...siteFilterForModel("classe", session.user),
+    },
+    select: { id: true, niveau: true },
+  });
+  if (!classe) throw new Error("Classe introuvable");
+
+  const isPrimaire = isNiveauPrimaire(classe.niveau);
+
+  // Valider la matière si fournie
+  if (matiereId) {
+    const matiere = await prisma.matiere.findFirst({
+      where: {
+        id: matiereId,
+        tenantId: session.user.tenantId,
+        ...siteFilterForModel("matiere", session.user),
+      },
+      select: { id: true },
+    });
+    if (!matiere) throw new Error("Matière introuvable");
+  }
+
+  // Validation : primaire = 1 classe max, pas de matière
+  if (isPrimaire) {
+    const existing = await prisma.enseignantAffectation.count({
+      where: { enseignantId, tenantId: session.user.tenantId },
+    });
+    if (existing > 0) {
+      throw new Error("Un enseignant du primaire ne peut être affecté qu'à une seule classe");
+    }
+    if (matiereId) {
+      throw new Error("Au primaire, l'enseignant enseigne toutes les matières (pas de matière spécifique)");
+    }
+  } else {
+    // Collège/Lycée : matière obligatoire
+    if (!matiereId) {
+      throw new Error("La matière est obligatoire pour les classes de collège et lycée");
+    }
+    // Vérifier que l'enseignant a bien cette matière dans sa liste
+    const hasMatiere = await prisma.enseignantMatiere.findFirst({
+      where: { enseignantId, matiereId },
+    });
+    if (!hasMatiere) {
+      throw new Error("L'enseignant doit d'abord être lié à cette matière avant d'être affecté");
+    }
+  }
+
+  // Éviter les doublons (unique sur [enseignantId, classeId, matiereId])
+  const existing = await prisma.enseignantAffectation.findFirst({
+    where: { enseignantId, classeId, matiereId: matiereId ?? null },
+  });
+  if (existing) {
+    throw new Error("Cette affectation existe déjà");
+  }
+
+  await prisma.enseignantAffectation.create({
+    data: {
+      tenantId: session.user.tenantId!,
+      enseignantId,
+      classeId,
+      matiereId: matiereId || null,
+    },
+  });
+
+  revalidatePath("/parametres");
+  return { success: true };
+}
+
+/**
+ * Supprime une affectation enseignant ↔ classe.
+ */
+export async function unassignEnseignantClasse(affectationId: string) {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+  const denied = checkPermission(session.user.role, "enseignants:write");
+  if (denied) throw new Error("Accès refusé");
+
+  const affectation = await prisma.enseignantAffectation.findFirst({
+    where: {
+      id: affectationId,
+      tenantId: session.user.tenantId,
+      ...siteFilterForModel("enseignant", session.user),
+    },
+  });
+  if (!affectation) throw new Error("Affectation introuvable");
+
+  await prisma.enseignantAffectation.delete({
+    where: { id: affectationId },
   });
 
   revalidatePath("/parametres");

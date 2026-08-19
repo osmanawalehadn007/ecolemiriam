@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { checkPermission } from "@/lib/rbac";
 
 const DepenseSchema = z.object({
   categorie: z.string().min(1, "La catégorie est requise"),
@@ -29,6 +30,9 @@ export async function getDepensesForPeriod(siteId: string | null, start: Date, e
   const session = await auth();
   if (!session?.user?.tenantId) return [];
 
+  const denied = checkPermission(session.user.role, "finance:read");
+  if (denied) return [];
+
   const siteFilter = siteFilterForModel("depense", { ...session.user, siteId });
   return prisma.depense.findMany({
     where: {
@@ -46,6 +50,9 @@ export async function getBudgets(siteId: string | null) {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
 
+  const denied = checkPermission(session.user.role, "finance:read");
+  if (denied) return [];
+
   const siteFilter = siteFilterForModel("budget", { ...session.user, siteId });
   return prisma.budget.findMany({
     where: { tenantId: session.user.tenantId, ...siteFilter },
@@ -57,6 +64,9 @@ export async function getBudgets(siteId: string | null) {
 export async function createDepense(data: z.infer<typeof DepenseSchema>) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
 
   const parsed = DepenseSchema.safeParse(data);
   if (!parsed.success) {
@@ -88,6 +98,9 @@ export async function deleteDepense(id: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
 
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
+
   const siteFilter = siteFilterForModel("depense", session.user);
   const depense = await prisma.depense.findFirst({
     where: { id, tenantId: session.user.tenantId, ...siteFilter },
@@ -102,6 +115,9 @@ export async function deleteDepense(id: string) {
 export async function createBudget(data: z.infer<typeof BudgetSchema>) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
 
   const parsed = BudgetSchema.safeParse(data);
   if (!parsed.success) {
@@ -124,6 +140,9 @@ export async function createBudget(data: z.infer<typeof BudgetSchema>) {
 export async function deleteBudget(id: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
 
   const siteFilter = siteFilterForModel("budget", session.user);
   const budget = await prisma.budget.findFirst({
@@ -150,6 +169,9 @@ const RemiseCaisseSchema = z.object({
 export async function createRemiseCaisse(data: z.infer<typeof RemiseCaisseSchema>) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
 
   const parsed = RemiseCaisseSchema.safeParse(data);
   if (!parsed.success) {
@@ -178,6 +200,9 @@ export async function confirmerRemiseCaisse(
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
 
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
+
   const remise = await prisma.remiseCaisse.findFirst({
     where: { id, tenantId: session.user.tenantId },
   });
@@ -205,6 +230,9 @@ export async function rejeterRemiseCaisse(id: string, raison?: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
 
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
+
   const remise = await prisma.remiseCaisse.findFirst({
     where: { id, tenantId: session.user.tenantId },
   });
@@ -226,6 +254,9 @@ export async function rejeterRemiseCaisse(id: string, raison?: string) {
 export async function getRemisesCaisse(siteId: string | null) {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
+
+  const denied = checkPermission(session.user.role, "finance:read");
+  if (denied) return [];
 
   const siteFilter = siteId
     ? { siteId }

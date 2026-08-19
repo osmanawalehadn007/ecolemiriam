@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { siteFilterForRelation } from "@/lib/site-filter";
@@ -14,6 +15,7 @@ export default async function SaisieNotesPage({
 }) {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "evaluations:read");
 
   const { id: evaluationId } = await params;
   const siteFilter = siteFilterForRelation(session.user, "classe");

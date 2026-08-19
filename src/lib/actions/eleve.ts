@@ -72,6 +72,9 @@ export async function getClassesForTenant() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
 
+  const denied = checkPermission(session.user.role, "classes:read");
+  if (denied) return [];
+
   return prisma.classe.findMany({
     where: { tenantId: session.user.tenantId, ...siteFilterForModel("classe", session.user) },
     orderBy: { nom: "asc" },
@@ -81,6 +84,9 @@ export async function getClassesForTenant() {
 export async function getSitesForUser() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
+
+  const denied = checkPermission(session.user.role, "eleves:read");
+  if (denied) return [];
 
   const isSiteAdmin = session.user.role === "TENANT_ADMIN" || session.user.role === "SUPER_ADMIN";
   return prisma.site.findMany({
@@ -103,6 +109,9 @@ export async function getSitesForUser() {
 export async function getEleveForEdit(id: string) {
   const session = await auth();
   if (!session?.user?.tenantId) return null;
+
+  const denied = checkPermission(session.user.role, "eleves:read");
+  if (denied) return null;
 
   const eleve = await prisma.eleve.findFirst({
     where: { id, tenantId: session.user.tenantId, ...siteFilterForModel("eleve", session.user) },
@@ -154,6 +163,9 @@ export async function createEleve(
 ): Promise<ResultatEleve> {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "eleves:write");
+  if (denied) throw new Error("Accès refusé");
 
   const tenantId = session.user.tenantId;
   const siteError = requireSiteIdForCreate(session.user);
@@ -298,6 +310,9 @@ export async function updateEleve(
 ): Promise<ResultatEleve> {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "eleves:write");
+  if (denied) throw new Error("Accès refusé");
 
   const tenantId = session.user.tenantId;
   const parsed = EleveFormSchema.safeParse(data);

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { PAYMENT_METHOD_IDS } from "@/lib/payment-methods";
+import { checkPermission } from "@/lib/rbac";
 import { z } from "zod";
 import { endOfDay } from "date-fns";
 
@@ -30,6 +31,9 @@ export async function getFacturesForTenant(filters?: { statut?: string; eleveId?
   const session = await auth();
   if (!session?.user?.tenantId) return [];
 
+  const denied = checkPermission(session.user.role, "finance:read");
+  if (denied) return [];
+
   return prisma.facture.findMany({
     where: {
       tenantId: session.user.tenantId,
@@ -48,6 +52,9 @@ export async function getFacturesForTenant(filters?: { statut?: string; eleveId?
 export async function getFactureForDetail(id: string) {
   const session = await auth();
   if (!session?.user?.tenantId) return null;
+
+  const denied = checkPermission(session.user.role, "finance:read");
+  if (denied) return null;
 
   const facture = await prisma.facture.findFirst({
     where: { id, tenantId: session.user.tenantId },
@@ -73,6 +80,9 @@ export async function getFactureForDetail(id: string) {
 export async function createFacture(data: FactureFormData) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
 
   const tenantId = session.user.tenantId;
   const parsed = FactureSchema.safeParse(data);
@@ -116,6 +126,9 @@ export async function getFactureByNumero(numero: string) {
   const session = await auth();
   if (!session?.user?.tenantId) return null;
 
+  const denied = checkPermission(session.user.role, "finance:read");
+  if (denied) return null;
+
   if (!numero || numero.trim().length === 0) return null;
 
   return prisma.facture.findFirst({
@@ -147,6 +160,9 @@ export async function getFactureByNumero(numero: string) {
 export async function enregistrerPaiement(factureId: string, data: PaiementFormData) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
 
   if (!factureId || factureId.trim().length === 0) {
     throw new Error("Numéro de facture requis : aucun paiement ne peut être enregistré sans facture");
@@ -213,6 +229,9 @@ export async function enregistrerPaiement(factureId: string, data: PaiementFormD
 export async function annulerFacture(factureId: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
 
   const facture = await prisma.facture.findFirst({
     where: { id: factureId, tenantId: session.user.tenantId },

@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
@@ -41,6 +42,7 @@ export default async function ParentsPage() {
     getTranslations("parents"),
   ]);
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "parents:read");
 
   // `Parent` n'a pas de colonne `siteId` : le rattachement passe par l'utilisateur.
   const siteFilter = siteFilterForModel("parent", session.user);

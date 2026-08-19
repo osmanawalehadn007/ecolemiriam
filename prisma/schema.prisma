@@ -116,6 +116,8 @@ model Tenant {
   tarifsNiveau       TarifNiveau[]
   relances           Relance[]
   exclusionsEleve    ExclusionEleve[]
+  enseignantMatieres    EnseignantMatiere[]
+  enseignantAffectations EnseignantAffectation[]
 
   @@map("tenants")
 }
@@ -509,6 +511,7 @@ model Classe {
   notes       Note[]
   evaluations Evaluation[]
   conversations Conversation[] @relation("ConversationClasse")
+  enseignantAffectations EnseignantAffectation[]
 
   @@index([tenantId])
   @@index([siteId])
@@ -535,6 +538,8 @@ model Matiere {
   bulletinMatieres BulletinMatiere[]
   evaluations      Evaluation[]
   dispenses        DispenseMatiere[]
+  enseignantMatieres    EnseignantMatiere[]
+  enseignantAffectations EnseignantAffectation[]
 
   @@index([tenantId])
   @@index([siteId])
@@ -713,10 +718,65 @@ model Enseignant {
   sites              EnseignantSite[]
   absencesPersonnel  AbsencePersonnel[]
   conges             CongePersonnel[]
+  matieres           EnseignantMatiere[]
+  affectations       EnseignantAffectation[]
 
   @@index([tenantId])
   @@index([userId])
   @@map("enseignants")
+}
+
+// ============================================================
+// AFFECTATION DES ENSEIGNANTS — matières & classes
+// ============================================================
+
+// Lien enseignant ↔ matière (obligatoire pour collège/lycée).
+// Au primaire, l'enseignant enseigne toutes les matières : pas de ligne ici.
+model EnseignantMatiere {
+  id           String @id @default(cuid())
+  tenantId     String
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  enseignantId String
+  enseignant   Enseignant @relation(fields: [enseignantId], references: [id], onDelete: Cascade)
+
+  matiereId String
+  matiere   Matiere  @relation(fields: [matiereId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([enseignantId, matiereId])
+  @@index([tenantId])
+  @@index([enseignantId])
+  @@index([matiereId])
+  @@map("enseignant_matieres")
+}
+
+// Affectation enseignant ↔ classe (+ matière optionnelle).
+// Primaire : 1 ligne par enseignant, matiereId null (enseigne tout).
+// Collège/Lycée : N lignes, matiereId obligatoire (une matière par classe).
+model EnseignantAffectation {
+  id           String @id @default(cuid())
+  tenantId     String
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  enseignantId String
+  enseignant   Enseignant @relation(fields: [enseignantId], references: [id], onDelete: Cascade)
+
+  classeId String
+  classe   Classe   @relation(fields: [classeId], references: [id], onDelete: Cascade)
+
+  matiereId String? // null = primaire (toutes matières) ; requis pour collège/lycée
+  matiere   Matiere? @relation(fields: [matiereId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([enseignantId, classeId, matiereId])
+  @@index([tenantId])
+  @@index([enseignantId])
+  @@index([classeId])
+  @@index([matiereId])
+  @@map("enseignant_affectations")
 }
 
 // ============================================================

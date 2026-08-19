@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { format } from "date-fns";
@@ -26,6 +27,7 @@ export default async function EvaluationsPage({
     searchParams,
   ]);
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "evaluations:read");
 
   const tenantId = session.user.tenantId;
   const { matiereId } = sp;

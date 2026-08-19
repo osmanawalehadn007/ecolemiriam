@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { OrientationView } from "@/components/orientation/OrientationView";
@@ -10,6 +11,7 @@ export default async function OrientationPage() {
     getTranslations("orientation"),
   ]);
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "orientation:read");
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <Header

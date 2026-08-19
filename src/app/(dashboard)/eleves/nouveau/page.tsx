@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { EleveForm } from "@/components/eleves/EleveForm";
@@ -7,6 +8,7 @@ import { getClassesForTenant, getSitesForUser, createEleve } from "@/lib/actions
 export default async function NouveauElevePage() {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "eleves:write");
 
   const classes = await getClassesForTenant();
   const sites = await getSitesForUser();

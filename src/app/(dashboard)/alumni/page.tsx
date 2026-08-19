@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { AlumniView } from "@/components/alumni/AlumniView";
@@ -12,6 +13,7 @@ export default async function AlumniPage() {
     getTranslations("alumni"),
   ]);
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "alumni:read");
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <Header

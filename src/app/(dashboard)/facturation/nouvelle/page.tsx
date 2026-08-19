@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { FactureForm } from "@/components/facturation/FactureForm";
@@ -12,6 +13,7 @@ export default async function NouvelleFacturePage({
 }) {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "finance:write");
 
   const siteFilter = siteFilterForModel("eleve", session.user);
   const [eleves, classes] = await Promise.all([

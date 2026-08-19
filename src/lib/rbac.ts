@@ -37,7 +37,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "emploi-du-temps:*", "communication:*", "messages:*", "vie-scolaire:*",
     "admissions:*", "rh:*", "finance:*", "inventaire:*", "alumni:*",
     "orientation:*", "cours:*", "analytics:*", "rapports:*", "documents:*",
-    "ai:*", "audit:read",
+    "ai:*", "audit:read", "parametres:*", "structures:*",
   ],
 
   // Chef d'établissement — pédagogie & vie scolaire complètes, pas la finance/RH en écriture
@@ -47,7 +47,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "emploi-du-temps:*", "communication:*", "messages:*", "vie-scolaire:*",
     "admissions:*", "rh:read", "finance:read", "inventaire:*", "alumni:*",
     "orientation:*", "cours:*", "analytics:*", "rapports:*", "documents:*",
-    "ai:*",
+    "ai:*", "parametres:read", "structures:read",
   ],
 
   // Secrétariat — gestion administrative
@@ -56,6 +56,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "absences:*", "emploi-du-temps:*", "communication:read", "communication:send",
     "messages:*", "admissions:*", "examens:read", "inventaire:read",
     "documents:*", "alumni:read", "bulletins:read", "rapports:read",
+    "parametres:read", "structures:read",
   ],
 
   // Enseignant — sa pédagogie

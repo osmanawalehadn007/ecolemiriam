@@ -11,6 +11,7 @@ import { matriculeGenerator, parseDate, type Action, type LignePlan } from "@/li
 import { identityKey } from "@/lib/eleve-identity";
 import { resoudreIdentiteKey } from "@/lib/eleve-identity-server";
 import { randomUUID } from "crypto";
+import { checkPermission } from "@/lib/rbac";
 
 // Mapping: nom du groupe scolaire → StructureType
 const GROUP_TO_STRUCTURE: Record<string, StructureType> = {
@@ -40,9 +41,8 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.tenantId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
-    if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Permissions insuffisantes" }, { status: 403 });
-    }
+    const denied = checkPermission(session.user.role, "eleves:write");
+    if (denied) return denied;
     const siteError = requireSiteIdForCreate(session.user);
     if (siteError) return NextResponse.json({ error: siteError }, { status: 400 });
 

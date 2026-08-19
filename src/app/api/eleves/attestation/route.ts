@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/rbac";
 import { getAttestationData } from "@/lib/attestation-generator";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -9,6 +10,8 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
+  const denied = checkPermission(session.user.role, "eleves:read");
+  if (denied) return denied;
 
   const body = await req.json();
   const { eleveId, honorifique, titre } = body as {

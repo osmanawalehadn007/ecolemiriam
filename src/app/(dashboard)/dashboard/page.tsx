@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
@@ -97,6 +98,7 @@ export default async function DashboardPage() {
   }
 
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session);
 
   const eleveFilter = siteFilterForModel("eleve", session.user);
   const classeFilter = siteFilterForModel("classe", session.user);

@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-scope";
@@ -25,6 +26,7 @@ async function getClasses(tenantId: string, claims: SessionSiteClaims) {
 export default async function AppelPage() {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "absences:write");
 
   const classes = await getClasses(session.user.tenantId, session.user);
 
