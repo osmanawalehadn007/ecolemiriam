@@ -64,7 +64,7 @@ describe("facture actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAuth.mockResolvedValue({
-      user: { id: "user1", tenantId: "tenant1", name: "Admin" },
+      user: { id: "user1", tenantId: "tenant1", name: "Admin", role: "TENANT_ADMIN" },
     });
     // Élève rattaché à un site par défaut : les tests qui vérifient le
     // rattachement le redéfinissent explicitement.

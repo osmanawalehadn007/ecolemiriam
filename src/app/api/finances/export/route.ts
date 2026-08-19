@@ -4,6 +4,7 @@ import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { getSitesForUser } from "@/lib/actions/eleve";
+import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
 import ExcelJS from "exceljs";
 import {
   startOfDay,
@@ -54,6 +55,14 @@ export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+  }
+  const ip = getClientIP(req);
+  const rl = rateLimit({ max: 10, windowSec: 60, key: `export-fin:${session.user.id}:${ip}` });
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Trop d'exports. Réessayez dans un instant." },
+      { status: 429, headers: { "Retry-After": "60" } }
+    );
   }
   const denied = checkPermission(session.user.role, "finance:read");
   if (denied) return denied;

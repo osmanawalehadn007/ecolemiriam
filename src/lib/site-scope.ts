@@ -367,6 +367,8 @@ export const SITE_PATHS: Record<string, SitePath> = {
   absencePersonnel: { one: "enseignant" },
   congePersonnel: { one: "enseignant" },
   bulletinPaie: { one: "ficheRH" },
+  enseignantMatiere: { one: "enseignant" },
+  enseignantAffectation: { one: "enseignant" },
 
   // --- données de référence, partagées par tous les sites du tenant ---
   periode: "tenant",

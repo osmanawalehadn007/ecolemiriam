@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { SignJWT } from "jose";
 import { z } from "zod";
+import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
 
 const MobileLoginSchema = z.object({
   email: z.string().email(),
@@ -23,6 +24,15 @@ async function signToken(payload: Record<string, unknown>): Promise<string> {
 
 export async function POST(req: Request) {
   try {
+    const ip = getClientIP(req as unknown as import("next/server").NextRequest);
+    const rl = rateLimit({ max: 5, windowSec: 60, key: `mobile-auth:${ip}` });
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Trop de tentatives. Réessayez dans un instant." },
+        { status: 429, headers: { "Retry-After": "60" } }
+      );
+    }
+
     const body = await req.json();
     const parsed = MobileLoginSchema.safeParse(body);
     if (!parsed.success) {

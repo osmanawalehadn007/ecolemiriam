@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
 
 const CandidatureSchema = z.object({
   nom: z.string().min(1),
@@ -54,6 +55,15 @@ export async function GET(req: NextRequest) {
 // POST — soumettre une candidature (public, pas d'auth requise)
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIP(req);
+    const rl = rateLimit({ max: 5, windowSec: 300, key: `admission:${ip}` });
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Trop de candidatures soumises. Réessayez plus tard." },
+        { status: 429, headers: { "Retry-After": "300" } }
+      );
+    }
+
     // Identifier le tenant via le subdomain ou header
     const host = req.headers.get("host") ?? "";
     const slug = host.split(".")[0];
