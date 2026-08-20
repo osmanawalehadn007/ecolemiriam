@@ -43,6 +43,9 @@ COPY . .
 # Variables d'environnement de build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+# URL factice pour permettre à PrismaClient de se construire pendant next build
+# (Prisma ne se connecte pas au build — l'URL réelle est injectée au runtime via env_file)
+ENV DATABASE_URL="postgresql://build:build@localhost:5432/build?schema=public"
 
 # Générer le client Prisma + build Next.js standalone
 RUN npx prisma generate && npm run build
