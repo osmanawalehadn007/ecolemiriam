@@ -1,5 +1,5 @@
 -- ============================================================
--- EcolPro — Durcissement RLS (Row Level Security)
+-- École Miriam — Durcissement RLS (Row Level Security)
 -- ============================================================
 -- Objectif : rendre l'isolation multi-tenant et multi-site
 -- effective au niveau base de données, en complément du filtrage
@@ -11,7 +11,7 @@
 -- PRÉREQUIS : l'app utilise actuellement le rôle `postgres`
 -- (propriétaire + BYPASSRLS). Cette migration prépare le terrain
 -- pour un rôle applicatif restreint. Le basculement se fait en
--- changeant DATABASE_URL → rôle `ecolpro_app`.
+-- changeant DATABASE_URL → rôle `ecolemiriam_app`.
 -- ============================================================
 
 -- ============================================================
@@ -22,7 +22,7 @@
 -- des tables → les policies s'appliquent obligatoirement.
 
 DO $$ BEGIN
-  CREATE ROLE ecolpro_app
+  CREATE ROLE ecolemiriam_app
     WITH LOGIN
     NOBYASSRLS
     NOSUPERUSER
@@ -985,8 +985,8 @@ ALTER TABLE public.verification_tokens DISABLE ROW LEVEL SECURITY;
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
 
 -- Accorder les privilèges au rôle applicatif
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ecolpro_app;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ecolpro_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ecolemiriam_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ecolemiriam_app;
 
 -- Permettre l'exécution des fonctions de contexte
 GRANT EXECUTE ON FUNCTIONS public.current_tenant_id(),
@@ -995,13 +995,13 @@ GRANT EXECUTE ON FUNCTIONS public.current_tenant_id(),
                               public.set_tenant_context(text),
                               public.set_site_context(text),
                               public.site_matches(text)
-TO ecolpro_app;
+TO ecolemiriam_app;
 
 -- Privilèges par défaut pour les futures tables créées par Prisma
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ecolpro_app;
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ecolemiriam_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT USAGE, SELECT ON SEQUENCES TO ecolpro_app;
+  GRANT USAGE, SELECT ON SEQUENCES TO ecolemiriam_app;
 
 -- ============================================================
 -- 5. VÉRIFICATION
@@ -1022,7 +1022,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 -- Doit retourner : accounts, sessions, verification_tokens
 -- (tables d'auth sans RLS — normal)
 --
--- Vérifier que le rôle ecolpro_app ne peut PAS contourner la RLS :
--- SELECT rolname, rolbypassrls FROM pg_roles WHERE rolname = 'ecolpro_app';
--- Doit retourner : ecolpro_app | false
+-- Vérifier que le rôle ecolemiriam_app ne peut PAS contourner la RLS :
+-- SELECT rolname, rolbypassrls FROM pg_roles WHERE rolname = 'ecolemiriam_app';
+-- Doit retourner : ecolemiriam_app | false
 -- ============================================================

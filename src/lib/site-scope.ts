@@ -1,6 +1,6 @@
 
 /**
- * EcolPro — Isolation par site (multi-sites au sein d'un tenant)
+ * École Miriam — Isolation par site (multi-sites au sein d'un tenant)
  * ==============================================================
  * Source unique de vérité pour le filtrage par site.
  *
@@ -48,7 +48,7 @@ const RELATION_SCOPED_ROLES = new Set(["PARENT", "STUDENT"]);
 /**
  * Valeur impossible utilisée pour construire un prédicat toujours faux.
  */
-const IMPOSSIBLE_ID = "__ecolpro_no_site_access__";
+const IMPOSSIBLE_ID = "__ecolemiriam_no_site_access__";
 
 /**
  * Fragment `where` qui ne correspond à aucune ligne, quel que soit le modèle.

@@ -1,5 +1,5 @@
 /**
- * EcolPro — Analyse d'un import d'élèves
+ * École Miriam — Analyse d'un import d'élèves
  * ======================================
  *
  * Lecture du fichier et construction d'un **plan d'import** : pour chaque

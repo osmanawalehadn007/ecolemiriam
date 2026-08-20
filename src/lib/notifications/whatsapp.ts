@@ -1,5 +1,5 @@
 /**
- * EcolPro — Intégration WhatsApp Business Cloud API
+ * École Miriam — Intégration WhatsApp Business Cloud API
  * Docs: https://developers.facebook.com/docs/whatsapp/cloud-api
  *
  * Variables d'environnement :
@@ -98,7 +98,7 @@ export async function sendAbsenceWhatsApp(
   date: string,
   ecoleNom: string
 ): Promise<WhatsAppResult> {
-  const message = `🎓 *${ecoleNom}*\n\nBonjour,\n\nNous vous informons que *${eleveNom}* a été signalé(e) absent(e) le ${date}.\n\nVeuillez contacter l'établissement pour régulariser cette absence.\n\n— EcolPro`;
+  const message = `🎓 *${ecoleNom}*\n\nBonjour,\n\nNous vous informons que *${eleveNom}* a été signalé(e) absent(e) le ${date}.\n\nVeuillez contacter l'établissement pour régulariser cette absence.\n\n— École Miriam`;
   return sendWhatsAppMessage(parentPhone, message);
 }
 
@@ -111,7 +111,7 @@ export async function sendRetardWhatsApp(
   date: string,
   ecoleNom: string
 ): Promise<WhatsAppResult> {
-  const message = `🎓 *${ecoleNom}*\n\nBonjour,\n\nNous vous informons que *${eleveNom}* a été signalé(e) en retard le ${date}.\n\nVeuillez contacter l'établissement pour plus d'informations.\n\n— EcolPro`;
+  const message = `🎓 *${ecoleNom}*\n\nBonjour,\n\nNous vous informons que *${eleveNom}* a été signalé(e) en retard le ${date}.\n\nVeuillez contacter l'établissement pour plus d'informations.\n\n— École Miriam`;
   return sendWhatsAppMessage(parentPhone, message);
 }
 
@@ -125,7 +125,7 @@ export async function sendBulletinWhatsApp(
   periode: string,
   ecoleNom: string
 ): Promise<WhatsAppResult> {
-  const message = `🎓 *${ecoleNom}*\n\nLes résultats de *${eleveNom}* pour le ${periode} sont disponibles.\n\n📊 Moyenne : ${moyenne.toFixed(2)}/20\n\nConnectez-vous sur EcolPro pour consulter le bulletin complet.\n\n— EcolPro`;
+  const message = `🎓 *${ecoleNom}*\n\nLes résultats de *${eleveNom}* pour le ${periode} sont disponibles.\n\n📊 Moyenne : ${moyenne.toFixed(2)}/20\n\nConnectez-vous sur École Miriam pour consulter le bulletin complet.\n\n— École Miriam`;
   return sendWhatsAppMessage(parentPhone, message);
 }
 
@@ -140,6 +140,6 @@ export async function sendPaymentWhatsApp(
   factureNumero: string,
   ecoleNom: string
 ): Promise<WhatsAppResult> {
-  const message = `🎓 *${ecoleNom}*\n\nPaiement reçu pour *${eleveNom}*.\n\n💰 Montant : ${montant.toLocaleString()} ${devise}\n📄 Facture : ${factureNumero}\n\nMerci pour votre règlement.\n\n— EcolPro`;
+  const message = `🎓 *${ecoleNom}*\n\nPaiement reçu pour *${eleveNom}*.\n\n💰 Montant : ${montant.toLocaleString()} ${devise}\n📄 Facture : ${factureNumero}\n\nMerci pour votre règlement.\n\n— École Miriam`;
   return sendWhatsAppMessage(parentPhone, message);
 }

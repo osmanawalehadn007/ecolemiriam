@@ -5,7 +5,7 @@ description: Scénarios de tests E2E et d'intégration spécifiques pour valider
 
 # Directives WebApp Testing
 
-Ce skill décrit l'approche de tests sur l'application Web EcolPro.
+Ce skill décrit l'approche de tests sur l'application Web École Miriam.
 
 ## 1. Méthodes de test E2E
 * Valider les scénarios d'interaction réels (clics de boutons, saisie de formulaires, soumission).

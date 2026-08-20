@@ -1,5 +1,5 @@
 /**
- * EcolPro — Source unique de vérité pour l'année scolaire courante.
+ * École Miriam — Source unique de vérité pour l'année scolaire courante.
  * ============================================================
  * Remplace les lectures directes de `Tenant.currentYear` qui
  * peuvent être désynchronisées de la table `annees_scolaires`.

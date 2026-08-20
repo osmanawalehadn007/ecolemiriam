@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============================================================
-# EcolPro — Test de restauration d'une sauvegarde
+# École Miriam — Test de restauration d'une sauvegarde
 # ============================================================
 #
 # Ce script prouve qu'une sauvegarde est restaurable. Il :
@@ -23,14 +23,14 @@ set -euo pipefail
 #   - BACKUP_AGE_KEY_PRIVATE — clé privée age pour le déchiffrement
 #
 # Cron recommandé (hebdomadaire, dimanche à 04h) :
-#   0 4 * * 0 /path/to/ecolpro/scripts/backups/test-restore.sh >> /var/log/ecolpro-restore-test.log 2>&1
+#   0 4 * * 0 /path/to/ecolemiriam/scripts/backups/test-restore.sh >> /var/log/ecolemiriam-restore-test.log 2>&1
 # ============================================================
 
 AGE_KEY_PRIVATE="${BACKUP_AGE_KEY_PRIVATE:?BACKUP_AGE_KEY_PRIVATE est requis (clé privée age)}"
-REMOTE="${BACKUP_RCLONE_REMOTE:-ecolpro-backup}"
+REMOTE="${BACKUP_RCLONE_REMOTE:-ecolemiriam-backup}"
 HOSTNAME=$(hostname -s)
 TMPDIR=$(mktemp -d)
-CONTAINER="ecolpro-restore-test-$$"
+CONTAINER="ecolemiriam-restore-test-$$"
 
 trap 'rm -rf "$TMPDIR"; docker rm -f "$CONTAINER" 2>/dev/null || true' EXIT
 
@@ -39,7 +39,7 @@ echo "[$(date -u +%FT%TZ)] Début du test de restauration"
 # 1. Trouver et télécharger le backup le plus récent
 echo "  → recherche du backup le plus récent..."
 LATEST=$(rclone lsf "${REMOTE}:/" \
-  --include "ecolpro-${HOSTNAME}-*.sql.gz.age" \
+  --include "ecolemiriam-${HOSTNAME}-*.sql.gz.age" \
   --sort-by modtime \
   --max-depth 1 \
   | head -1)
@@ -61,7 +61,7 @@ age --decrypt --identity <(echo "$AGE_KEY_PRIVATE") "$BACKUP_FILE" > "${TMPDIR}/
 echo "  → démarrage base de test Docker..."
 docker run -d --name "$CONTAINER" \
   -e POSTGRES_PASSWORD=test \
-  -e POSTGRES_DB=ecolpro_restore_test \
+  -e POSTGRES_DB=ecolemiriam_restore_test \
   -p 0:5432 \
   postgres:17-alpine
 
@@ -79,25 +79,25 @@ done
 echo "  → restauration..."
 docker cp "${TMPDIR}/dump.sql.gz" "${CONTAINER}:/tmp/dump.sql.gz"
 docker exec "$CONTAINER" bash -c \
-  "gunzip -c /tmp/dump.sql.gz | psql -U postgres -d ecolpro_restore_test 2>&1" \
+  "gunzip -c /tmp/dump.sql.gz | psql -U postgres -d ecolemiriam_restore_test 2>&1" \
   | grep -v "^SET$" || true
 
 # 5. Vérifications d'intégrité
 echo "  → vérifications d'intégrité..."
 
-TABLES=$(docker exec "$CONTAINER" psql -U postgres -d ecolpro_restore_test -t \
+TABLES=$(docker exec "$CONTAINER" psql -U postgres -d ecolemiriam_restore_test -t \
   -c "SELECT count(*) FROM pg_tables WHERE schemaname='public'")
 echo "  → tables: ${TABLES}"
 
-ELEVES=$(docker exec "$CONTAINER" psql -U postgres -d ecolpro_restore_test -t \
+ELEVES=$(docker exec "$CONTAINER" psql -U postgres -d ecolemiriam_restore_test -t \
   -c "SELECT count(*) FROM eleves" 2>/dev/null || echo "N/A")
 echo "  → élèves: ${ELEVES}"
 
-TENANTS=$(docker exec "$CONTAINER" psql -U postgres -d ecolpro_restore_test -t \
+TENANTS=$(docker exec "$CONTAINER" psql -U postgres -d ecolemiriam_restore_test -t \
   -c "SELECT count(*) FROM tenants" 2>/dev/null || echo "N/A")
 echo "  → tenants: ${TENANTS}"
 
-USERS=$(docker exec "$CONTAINER" psql -U postgres -d ecolpro_restore_test -t \
+USERS=$(docker exec "$CONTAINER" psql -U postgres -d ecolemiriam_restore_test -t \
   -c "SELECT count(*) FROM users" 2>/dev/null || echo "N/A")
 echo "  → utilisateurs: ${USERS}"
 

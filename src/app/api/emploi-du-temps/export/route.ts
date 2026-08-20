@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
     where: { id: tenantId },
     select: { name: true },
   });
-  const ecoleNom = tenant?.name ?? "EcolPro";
+  const ecoleNom = tenant?.name ?? "École Miriam";
 
   // Organiser par jour
   const jours = ["DIMANCHE", "LUNDI", "MARDI", "MERCREDI", "JEUDI", "VENDREDI", "SAMEDI"];

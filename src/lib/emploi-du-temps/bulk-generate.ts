@@ -1,5 +1,5 @@
 /**
- * EcolPro — Génération d'un emploi du temps complet pour une classe
+ * École Miriam — Génération d'un emploi du temps complet pour une classe
  * ============================================================
  * Contrairement à suggestSlots (une classe+matière → meilleurs créneaux
  * ponctuels), ce module reconstruit TOUTE la grille hebdomadaire d'une classe
@@ -115,7 +115,7 @@ export async function generateBulkPlan(opts: BulkGenerateOptions): Promise<BulkG
   const annee = await getAnneeCouranteLibelle(tenantId);
   if (!annee) throw new Error("Aucune année scolaire active pour ce tenant");
 
-  /* eslint-disable ecolpro/require-site-filter -- library function, caller passes tenantId and is responsible for site scoping */
+  /* eslint-disable ecolemiriam/require-site-filter -- library function, caller passes tenantId and is responsible for site scoping */
   const [classeExistants, autresCreneaux, allEnseignants, salles, disponibilites] = await Promise.all([
     prisma.emploiTemps.findMany({
       where: { tenantId, classeId, annee },
@@ -126,7 +126,7 @@ export async function generateBulkPlan(opts: BulkGenerateOptions): Promise<BulkG
     prisma.salle.findMany({ where: { tenantId } }),
     prisma.disponibiliteEnseignant.findMany({ where: { tenantId } }),
   ]);
-  /* eslint-enable ecolpro/require-site-filter */
+  /* eslint-enable ecolemiriam/require-site-filter */
 
   // Matières et volume horaire cibles : fournis explicitement, sinon déduits
   // de l'emploi du temps actuel de la classe (on préserve le volume horaire

@@ -1,5 +1,5 @@
 /**
- * EcolPro — Recherche floue partagée (assistant IA + moteur de suggestion)
+ * École Miriam — Recherche floue partagée (assistant IA + moteur de suggestion)
  * ============================================================
  * Tolère accents et abréviations : le modèle ou l'utilisateur écrivent
  * "maths" pour "Mathématiques", "1ere L" pour "1ère L", etc.

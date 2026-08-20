@@ -13,7 +13,7 @@ import { getTranslations } from "next-intl/server";
 import { siteFilterForModel } from "@/lib/site-scope";
 
 export const metadata = {
-  title: "Liste des examens | EcolPro",
+  title: "Liste des examens | École Miriam",
 };
 
 export default async function EvaluationsPage({

@@ -3,7 +3,7 @@ import { test, expect } from "./fixtures";
 test.describe("Authentification", () => {
   test("login avec identifiants valides", async ({ page }) => {
     await page.goto("/login");
-    await page.fill('input[type="email"]', "admin@lycee-djibouti.ecolpro.app");
+    await page.fill('input[type="email"]', "admin@lycee-djibouti.ecolemiriam.app");
     await page.fill('input[type="password"]', "Demo@2026!");
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/);

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============================================================
-# EcolPro — Initialisation SOPS + age (gestion chiffrée des secrets)
+# École Miriam — Initialisation SOPS + age (gestion chiffrée des secrets)
 # ============================================================
 #
 # Étapes :
@@ -88,6 +88,11 @@ if [ ! -f "$SECRETS_DIR/cloudflare_tunnel_token.txt" ]; then
   echo "REMPLACER_PAR_TOKEN_CLOUDFLARE" > "$SECRETS_DIR/cloudflare_tunnel_token.txt"
 fi
 
+# Cloudflare API token (placeholder — pour cloudflare-setup.sh)
+if [ ! -f "$SECRETS_DIR/cloudflare_api_token.txt" ]; then
+  echo "REMPLACER_PAR_API_TOKEN_CLOUDFLARE" > "$SECRETS_DIR/cloudflare_api_token.txt"
+fi
+
 # pgBackRest cipher pass
 PGBACKREST_KEY=$(openssl rand -hex 32)
 echo -n "$PGBACKREST_KEY" > "$SECRETS_DIR/pgbackrest_cipher_pass.txt"
@@ -95,7 +100,7 @@ echo -n "$PGBACKREST_KEY" > "$SECRETS_DIR/pgbackrest_cipher_pass.txt"
 # Permissions restrictives
 chmod 600 "$SECRETS_DIR"/*.txt
 
-log "  → 6 secrets générés dans $SECRETS_DIR"
+log "  → 7 secrets générés dans $SECRETS_DIR"
 
 # 4. Créer le fichier secrets.yaml pour SOPS
 SECRETS_YAML="${SECRETS_DIR}/secrets.yaml"
@@ -105,6 +110,7 @@ postgres_app_password: $(cat "$SECRETS_DIR/postgres_app_password.txt")
 auth_secret: $(cat "$SECRETS_DIR/auth_secret.txt")
 cron_secret: $(cat "$SECRETS_DIR/cron_secret.txt")
 cloudflare_tunnel_token: $(cat "$SECRETS_DIR/cloudflare_tunnel_token.txt")
+cloudflare_api_token: $(cat "$SECRETS_DIR/cloudflare_api_token.txt")
 pgbackrest_cipher_pass: $(cat "$SECRETS_DIR/pgbackrest_cipher_pass.txt")
 EOF
 
@@ -123,6 +129,11 @@ log "PROCHAINES ÉTAPES :"
 log "  1. Récupérer le token Cloudflare Tunnel :"
 log "     https://one.dash.cloudflare.com → Networks → Tunnels → Create tunnel"
 log "     Remplacer le contenu de secrets/cloudflare_tunnel_token.txt"
+log ""
+log "  1b. Récupérer le token API Cloudflare :"
+log "     https://dash.cloudflare.com/profile/api-tokens → Create Token"
+log "     Remplacer le contenu de secrets/cloudflare_api_token.txt"
+log "     OU placer dans .cf-token.env (CF_API_TOKEN=...)"
 log ""
 log "  2. Recrypter après modification :"
 log "     ./docker/scripts/secrets-rotate.sh"

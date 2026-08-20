@@ -25,7 +25,7 @@ function mobileSecret(): Uint8Array {
     if (process.env.NODE_ENV === "production") {
       throw new Error("AUTH_SECRET est requis pour vérifier les jetons mobiles");
     }
-    return new TextEncoder().encode("ecolpro-dev-secret");
+    return new TextEncoder().encode("ecolemiriam-dev-secret");
   }
   return new TextEncoder().encode(secret);
 }

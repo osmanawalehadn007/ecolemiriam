@@ -263,7 +263,7 @@ export function SuperAdminView() {
                         <p className="font-medium text-gray-900 dark:text-gray-100">{tenant.name}</p>
                         <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
                           <Globe className="w-3 h-3" />
-                          {tenant.slug}.ecolpro.app
+                          {tenant.slug}.ecolemiriam.app
                         </p>
                       </div>
                     </td>
@@ -338,7 +338,7 @@ export function SuperAdminView() {
               <div>
                 <label className="text-xs font-medium text-gray-600 mb-1 block">{t("slug")}</label>
                 <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500/30">
-                  <span className="px-3 py-2 text-sm text-gray-400 bg-gray-50 border-r border-gray-200">ecolpro.app/</span>
+                  <span className="px-3 py-2 text-sm text-gray-400 bg-gray-50 border-r border-gray-200">ecolemiriam.app/</span>
                   <input value={form.slug} onChange={(e) => f("slug", e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
                     placeholder="lycee-victor-hugo"
                     className="flex-1 px-3 py-2 text-sm focus:outline-none" />

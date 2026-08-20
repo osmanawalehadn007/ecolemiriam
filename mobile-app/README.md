@@ -1,6 +1,6 @@
-# EcolPro Mobile — React Native / Expo
+# École Miriam Mobile — React Native / Expo
 
-Application native iOS + Android pour EcolPro, construite avec Expo Router, NativeWind (Tailwind CSS), TanStack Query et Zustand.
+Application native iOS + Android pour École Miriam, construite avec Expo Router, NativeWind (Tailwind CSS), TanStack Query et Zustand.
 
 ## Architecture
 

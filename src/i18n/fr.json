@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "EcolPro",
+    "appName": "École Miriam",
     "back": "Retour",
     "search": "Rechercher",
     "searchPlaceholder": "Rechercher élève, classe...",
@@ -1431,7 +1431,7 @@
   },
   "superAdmin": {
     "title": "Super Admin",
-    "subtitle": "Gestion des établissements EcolPro",
+    "subtitle": "Gestion des établissements École Miriam",
     "createSchool": "Créer une école",
     "totalSchools": "Total écoles",
     "active": "Actives",
@@ -2058,14 +2058,14 @@
     "planBusinessDesc": "1000-5000 élèves",
     "planEnterpriseDesc": "> 5000 élèves",
     "trialInfo": "Vous bénéficiez d'un essai gratuit de 30 jours. Aucune carte bancaire requise.",
-    "submit": "Créer mon espace EcolPro",
+    "submit": "Créer mon espace École Miriam",
     "backHome": "Retour à l'accueil",
     "successTitle": "Espace créé avec succès !",
     "successMsg": "Votre établissement {name} a été enregistré. Vous bénéficiez d'un essai gratuit de 30 jours.",
     "successLoginMsg": "Connectez-vous avec votre email administrateur pour commencer.",
     "login": "Se connecter",
     "formErrors": "Veuillez corriger les erreurs du formulaire",
-    "createdSuccess": "Votre espace EcolPro a été créé ! Essai gratuit de 30 jours.",
+    "createdSuccess": "Votre espace École Miriam a été créé ! Essai gratuit de 30 jours.",
     "genericError": "Une erreur est survenue",
     "errSchoolName": "Le nom de l'établissement est requis",
     "errCity": "La ville est requise",
@@ -2204,7 +2204,7 @@
     "viewAllExams": "Voir tous les examens"
   },
   "ai": {
-    "assistantTitle": "Assistant IA EcolPro",
+    "assistantTitle": "Assistant IA École Miriam",
     "newConversation": "Nouvelle conversation",
     "close": "Fermer",
     "confirm": "Confirmer",

@@ -39,7 +39,7 @@ export async function trouverDoublon(
   const cle = identityKey(identite);
   if (cle.endsWith("|")) return null; // pas de date : aucune clé fiable
 
-  // eslint-disable-next-line ecolpro/require-site-filter -- unicité d'identité au niveau tenant, par construction
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- unicité d'identité au niveau tenant, par construction
   const existant = await prisma.eleve.findFirst({
     where: {
       tenantId,
@@ -89,7 +89,7 @@ export async function resoudreIdentiteKey(
   if (!doublon) return base;
   if (!options.forcer) return base; // laissera la contrainte refuser l'écriture
 
-  // eslint-disable-next-line ecolpro/require-site-filter -- unicité d'identité au niveau tenant, par construction
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- unicité d'identité au niveau tenant, par construction
   const voisins = await prisma.eleve.findMany({
     where: { tenantId, identiteKey: { startsWith: base } },
     select: { identiteKey: true },

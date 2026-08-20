@@ -17,21 +17,21 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    template: "%s | EcolPro",
-    default: "EcolPro — Gestion scolaire moderne",
+    template: "%s | École Miriam",
+    default: "École Miriam — Gestion scolaire moderne",
   },
   description:
     "Plateforme SaaS multi-tenant pour la gestion d'établissements scolaires. Élèves, absences, notes, examens, parents — tout en un.",
   keywords: ["école", "gestion scolaire", "SaaS", "Afrique", "notes", "absences"],
-  authors: [{ name: "EcolPro" }],
-  creator: "EcolPro",
+  authors: [{ name: "École Miriam" }],
+  creator: "École Miriam",
   manifest: "/manifest.json",
   openGraph: {
     type: "website",
     locale: "fr_FR",
-    title: "EcolPro — Gestion scolaire moderne",
+    title: "École Miriam — Gestion scolaire moderne",
     description: "La plateforme scolaire de nouvelle génération pour l'Afrique",
-    siteName: "EcolPro",
+    siteName: "École Miriam",
   },
 };
 
@@ -48,7 +48,7 @@ export default async function RootLayout({
         <meta name="theme-color" content="#6366f1" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="EcolPro" />
+        <meta name="apple-mobile-web-app-title" content="École Miriam" />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <NextIntlClientProvider locale={locale} messages={messages}>

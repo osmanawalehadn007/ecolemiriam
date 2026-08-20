@@ -5,7 +5,7 @@ description: Normes de sécurité strictes pour prévenir les fuites de données
 
 # Directives Security Guardian
 
-Ce skill définit la barrière de protection de la confidentialité et de la sécurité des utilisateurs d'EcolPro.
+Ce skill définit la barrière de protection de la confidentialité et de la sécurité des utilisateurs d'École Miriam.
 
 ## 1. Isolation Hermétique des Tenants
 * **Loi cardinale :** Deux établissements scolaires différents ne doivent jamais pouvoir s'échanger ou visualiser des données mutuelles.

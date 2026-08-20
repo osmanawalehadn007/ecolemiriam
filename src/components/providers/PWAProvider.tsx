@@ -17,10 +17,10 @@ export function PWAProvider() {
       navigator.serviceWorker
         .register("/sw.js", { scope: "/" })
         .then((reg) => {
-          console.log("[EcolPro PWA] Service Worker enregistré", reg.scope);
+          console.log("[École Miriam PWA] Service Worker enregistré", reg.scope);
         })
         .catch((err) => {
-          console.warn("[EcolPro PWA] Échec enregistrement SW:", err);
+          console.warn("[École Miriam PWA] Échec enregistrement SW:", err);
         });
     }
   }, []);

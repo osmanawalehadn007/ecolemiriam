@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
         where: { id: tenantId },
         select: { name: true },
       });
-      const ecoleNom = tenant?.name ?? "EcolPro";
+      const ecoleNom = tenant?.name ?? "École Miriam";
       const dateStr = appelDate.toLocaleDateString("fr-FR");
 
       // Récupérer les élèves signalés avec leurs parents (tous les parents liés, pas seulement le gardien)

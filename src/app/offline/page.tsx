@@ -12,7 +12,7 @@ export default function OfflinePage() {
         </div>
         <h1 className="text-2xl font-bold text-gray-900 mb-3">Vous êtes hors ligne</h1>
         <p className="text-gray-500 mb-6">
-          EcolPro nécessite une connexion internet pour fonctionner pleinement.
+          École Miriam nécessite une connexion internet pour fonctionner pleinement.
           Certaines données récentes pourraient ne pas être disponibles.
         </p>
         <button
@@ -22,7 +22,7 @@ export default function OfflinePage() {
           Réessayer
         </button>
         <p className="text-xs text-gray-400 mt-6">
-          EcolPro · Gestion scolaire pour l&apos;Afrique
+          École Miriam · Gestion scolaire pour l&apos;Afrique
         </p>
       </div>
     </div>

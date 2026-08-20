@@ -161,11 +161,11 @@ export async function createUser(data: UserFormData) {
   // le contrôle d'unicité doit donc être inter-tenants et inter-sites, sinon on
   // laisserait créer un doublon qui échouerait ensuite en base. Seule
   // l'existence est utilisée, aucune donnée de l'autre tenant n'est exposée.
-  // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter
+  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter
   const existing = await prisma.user.findUnique({ where: { email: v.email } });
   if (existing) throw new Error("Un utilisateur avec cet email existe déjà");
 
-  const password = v.password || "EcolPro2026!";
+  const password = v.password || "École Miriam2026!";
   const hashed = await bcrypt.hash(password, 10);
 
   const [firstName, ...restName] = v.name.split(" ");
@@ -273,7 +273,7 @@ export async function deleteUser(userId: string) {
   // vérifiée ci-dessus.
   // LIMITE ASSUMÉE : un compte partagé entre plusieurs établissements perd
   // aussi ses accès aux autres, puisque la ligne User disparaît.
-  // eslint-disable-next-line ecolpro/require-tenant-id
+  // eslint-disable-next-line ecolemiriam/require-tenant-id
   await prisma.userTenant.deleteMany({ where: { userId } }).catch(() => {});
 
   await prisma.user.delete({ where: { id: userId } });
@@ -633,7 +633,7 @@ export async function getParentsForSettings() {
   // enfants (voir `parentSiteScope`), donc imbriqué et invisible pour la règle.
   // Le modèle nommé était d'ailleurs faux ici — « parent » au lieu de
   // « eleve » — ce qui greffait un prédicat `user.siteId` sur un `Eleve`.
-  // eslint-disable-next-line ecolpro/require-site-filter
+  // eslint-disable-next-line ecolemiriam/require-site-filter
   return prisma.parent.findMany({
     where: { tenantId: session.user.tenantId, ...parentSiteScope(session.user) },
     include: {
@@ -718,7 +718,7 @@ export async function createParent(data: ParentFormData & { eleveIds?: string[] 
     for (const { id: eleveId } of elevesAutorises) {
       // Identifiant déjà autorisé par la requête site-filtrée ci-dessus, et la
       // clé composite ne peut de toute façon désigner que ce parent-ci.
-      // eslint-disable-next-line ecolpro/require-site-filter
+      // eslint-disable-next-line ecolemiriam/require-site-filter
       const existing = await prisma.eleveParent.findUnique({
         where: { eleveId_parentId: { eleveId, parentId: parent.id } },
       });
@@ -741,7 +741,7 @@ export async function linkParentToEleves(parentId: string, eleveIds: string[], l
   if (denied) throw new Error("Accès refusé");
 
   // Isolation portée par la relation enfants → élève (voir `parentSiteScope`).
-  // eslint-disable-next-line ecolpro/require-site-filter
+  // eslint-disable-next-line ecolemiriam/require-site-filter
   const parent = await prisma.parent.findFirst({
     where: {
       id: parentId,
@@ -765,7 +765,7 @@ export async function linkParentToEleves(parentId: string, eleveIds: string[], l
   for (const { id: eleveId } of elevesAutorises) {
     // Élève et parent tous deux validés ci-dessus ; la clé composite ne peut
     // désigner qu'un couple déjà autorisé.
-    // eslint-disable-next-line ecolpro/require-site-filter
+    // eslint-disable-next-line ecolemiriam/require-site-filter
     const existing = await prisma.eleveParent.findUnique({
       where: { eleveId_parentId: { eleveId, parentId } },
     });

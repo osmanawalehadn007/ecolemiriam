@@ -17,7 +17,7 @@ export async function GET(
     if (denied) return denied;
 
     const { id } = await params;
-    // eslint-disable-next-line ecolpro/require-site-filter -- paiement n'a pas de siteId, contrôle de site via canAccessSite(facture.siteId) ligne 55
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- paiement n'a pas de siteId, contrôle de site via canAccessSite(facture.siteId) ligne 55
     const paiement = await prisma.paiement.findUnique({
       where: { id },
       include: {
@@ -156,7 +156,7 @@ export async function GET(
         <div class="signature-line">Cachet & Signature</div>
       </div>
       <div class="stamp">
-        EcolPro — Reçu généré le ${new Date().toLocaleDateString("fr-FR")}
+        École Miriam — Reçu généré le ${new Date().toLocaleDateString("fr-FR")}
       </div>
     </div>
   </div>

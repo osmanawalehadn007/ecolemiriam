@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "EcolPro",
+    "appName": "École Miriam",
     "back": "Back",
     "search": "Search",
     "searchPlaceholder": "Search student, class...",
@@ -1423,7 +1423,7 @@
   },
   "superAdmin": {
     "title": "Super Admin",
-    "subtitle": "EcolPro institution management",
+    "subtitle": "École Miriam institution management",
     "createSchool": "Create school",
     "totalSchools": "Total schools",
     "active": "Active",
@@ -2050,14 +2050,14 @@
     "planBusinessDesc": "1000-5000 students",
     "planEnterpriseDesc": "> 5000 students",
     "trialInfo": "You get a 30-day free trial. No credit card required.",
-    "submit": "Create my EcolPro workspace",
+    "submit": "Create my École Miriam workspace",
     "backHome": "Back to home",
     "successTitle": "Workspace created successfully!",
     "successMsg": "Your institution {name} has been registered. You get a 30-day free trial.",
     "successLoginMsg": "Sign in with your administrator email to get started.",
     "login": "Sign in",
     "formErrors": "Please fix the form errors",
-    "createdSuccess": "Your EcolPro workspace has been created! 30-day free trial.",
+    "createdSuccess": "Your École Miriam workspace has been created! 30-day free trial.",
     "genericError": "An error occurred",
     "errSchoolName": "Institution name is required",
     "errCity": "City is required",
@@ -2196,7 +2196,7 @@
     "viewAllExams": "View all exams"
   },
   "ai": {
-    "assistantTitle": "EcolPro AI Assistant",
+    "assistantTitle": "École Miriam AI Assistant",
     "newConversation": "New conversation",
     "close": "Close",
     "confirm": "Confirm",

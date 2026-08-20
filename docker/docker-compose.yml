@@ -1,5 +1,5 @@
 # ============================================================
-# EcolPro — docker-compose.yml (stack VPS complète, durcie)
+# École Miriam — docker-compose.yml (stack VPS complète, durcie)
 # ============================================================
 #
 # Architecture réseau :
@@ -31,8 +31,8 @@ services:
     build:
       context: ./postgres
       dockerfile: Dockerfile
-    image: ecolpro-postgres:latest
-    container_name: ecolpro-postgres
+    image: ecolemiriam-postgres:latest
+    container_name: ecolemiriam-postgres
     restart: unless-stopped
 
     # Sécurité conteneur
@@ -67,8 +67,8 @@ services:
       -c hba_file=/etc/postgresql/pg_hba.conf
 
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-ecolpro}
-      POSTGRES_USER: ${POSTGRES_OWNER_USER:-ecolpro_owner}
+      POSTGRES_DB: ${POSTGRES_DB:-ecolemiriam}
+      POSTGRES_USER: ${POSTGRES_OWNER_USER:-ecolemiriam_owner}
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_owner_password
       PGDATA: /var/lib/postgresql/data
 
@@ -94,7 +94,7 @@ services:
   # ============================================================
   pgbouncer:
     image: edoburu/pgbouncer:1.24.1
-    container_name: ecolpro-pgbouncer
+    container_name: ecolemiriam-pgbouncer
     restart: unless-stopped
 
     security_opt:
@@ -117,9 +117,9 @@ services:
 
     environment:
       DB_HOST: postgres
-      DB_USER: ${POSTGRES_APP_USER:-ecolpro_app}
+      DB_USER: ${POSTGRES_APP_USER:-ecolemiriam_app}
       DB_PASSWORD_FILE: /run/secrets/postgres_app_password
-      DB_NAME: ${POSTGRES_DB:-ecolpro}
+      DB_NAME: ${POSTGRES_DB:-ecolemiriam}
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 200
       DEFAULT_POOL_SIZE: 20
@@ -146,8 +146,8 @@ services:
     build:
       context: ..
       dockerfile: docker/app/Dockerfile
-    image: ecolpro-app:latest
-    container_name: ecolpro-app
+    image: ecolemiriam-app:latest
+    container_name: ecolemiriam-app
     restart: unless-stopped
 
     # Sécurité conteneur
@@ -175,8 +175,8 @@ services:
       - ../.env.production
 
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_APP_USER:-ecolpro_app}@pgbouncer:6432/${POSTGRES_DB:-ecolpro}?pgbouncer=true&connect_timeout=10&pool_timeout=30
-      DIRECT_URL: postgresql://${POSTGRES_OWNER_USER:-ecolpro_owner}@postgres:5432/${POSTGRES_DB:-ecolpro}?connect_timeout=15
+      DATABASE_URL: postgresql://${POSTGRES_APP_USER:-ecolemiriam_app}@pgbouncer:6432/${POSTGRES_DB:-ecolemiriam}?pgbouncer=true&connect_timeout=10&pool_timeout=30
+      DIRECT_URL: postgresql://${POSTGRES_OWNER_USER:-ecolemiriam_owner}@postgres:5432/${POSTGRES_DB:-ecolemiriam}?connect_timeout=15
       NODE_ENV: production
       RLS_ACTIVE: "true"
 
@@ -203,8 +203,8 @@ services:
     build:
       context: ./caddy
       dockerfile: Dockerfile
-    image: ecolpro-caddy:latest
-    container_name: ecolpro-caddy
+    image: ecolemiriam-caddy:latest
+    container_name: ecolemiriam-caddy
     restart: unless-stopped
 
     security_opt:
@@ -243,7 +243,7 @@ services:
   # ============================================================
   cloudflared:
     image: cloudflare/cloudflared:2025.8.0
-    container_name: ecolpro-cloudflared
+    container_name: ecolemiriam-cloudflared
     restart: unless-stopped
 
     security_opt:
@@ -260,10 +260,13 @@ services:
       caddy:
         condition: service_started
 
-    command: tunnel run
+    command: tunnel --config /etc/cloudflared/config.yml run
 
     environment:
       TUNNEL_TOKEN_FILE: /run/secrets/cloudflare_tunnel_token
+
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
 
     secrets:
       - cloudflare_tunnel_token
@@ -281,7 +284,7 @@ services:
   # Le proxy expose uniquement les endpoints nécessaires (exec, inspect).
   docker-socket-proxy:
     image: tecnativa/docker-socket-proxy:0.3.0
-    container_name: ecolpro-docker-socket-proxy
+    container_name: ecolemiriam-docker-socket-proxy
     restart: unless-stopped
 
     security_opt:
@@ -333,7 +336,7 @@ services:
   # Utilise docker-socket-proxy au lieu de monter docker.sock directement.
   ofelia:
     image: mcuadros/ofelia:0.4.7
-    container_name: ecolpro-ofelia
+    container_name: ecolemiriam-ofelia
     restart: unless-stopped
 
     security_opt:
@@ -372,7 +375,7 @@ services:
   # ============================================================
   pgbackrest:
     image: pgbackrest/pgbackrest:2.54.2
-    container_name: ecolpro-pgbackrest
+    container_name: ecolemiriam-pgbackrest
     restart: unless-stopped
 
     security_opt:
@@ -397,10 +400,10 @@ services:
       - ./secrets/pgbackrest_cipher_pass.txt:/run/secrets/pgbackrest_cipher_pass:ro
 
     command: >
-      sh -c "pgbackrest --stanza=ecolpro check &&
+      sh -c "pgbackrest --stanza=ecolemiriam check &&
              while true; do
-               pgbackrest --stanza=ecolpro --type=incr backup;
-               pgbackrest --stanza=ecolpro expire;
+               pgbackrest --stanza=ecolemiriam --type=incr backup;
+               pgbackrest --stanza=ecolemiriam expire;
                sleep 86400;
              done"
 
@@ -415,7 +418,7 @@ services:
   # ============================================================
   monitoring:
     image: louislam/uptime-kuma:1.23.16-alpine
-    container_name: ecolpro-monitoring
+    container_name: ecolemiriam-monitoring
     restart: unless-stopped
 
     security_opt:
@@ -472,3 +475,5 @@ secrets:
     file: ./secrets/postgres_app_password.txt
   cloudflare_tunnel_token:
     file: ./secrets/cloudflare_tunnel_token.txt
+  cloudflare_api_token:
+    file: ./secrets/cloudflare_api_token.txt

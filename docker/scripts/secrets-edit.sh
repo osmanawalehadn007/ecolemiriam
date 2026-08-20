@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============================================================
-# EcolPro — Édition des secrets SOPS
+# École Miriam — Édition des secrets SOPS
 # ============================================================
 #
 # Déchiffre, ouvre dans $EDITOR, rechiffre automatiquement.

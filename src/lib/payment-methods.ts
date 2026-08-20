@@ -1,5 +1,5 @@
 /**
- * EcolPro — Moyens de paiement acceptés
+ * École Miriam — Moyens de paiement acceptés
  * ======================================
  * Source unique de vérité pour les modes de règlement (cash, mobile money,
  * virement, carte). Utilisée par les formulaires, les badges et la validation Zod.

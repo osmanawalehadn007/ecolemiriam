@@ -4,14 +4,14 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("🌱 Seeding EcolPro database...");
+  console.log("🌱 Seeding École Miriam database...");
 
   // --- Tenant de démonstration ---
   const tenant = await prisma.tenant.upsert({
     where: { slug: "lycee-demo" },
     update: {},
     create: {
-      name: "Lycée de Démonstration EcolPro",
+      name: "Lycée de Démonstration École Miriam",
       slug: "lycee-demo",
       plan: PlanType.PRO,
       country: "SN",
@@ -31,11 +31,11 @@ async function main() {
   const passwordHash = await bcrypt.hash("Demo@2026!", 12);
 
   const adminUser = await prisma.user.upsert({
-    where: { email: "admin@lycee-demo.ecolpro.app" },
+    where: { email: "admin@lycee-demo.ecolemiriam.app" },
     update: {},
     create: {
       tenantId: tenant.id,
-      email: "admin@lycee-demo.ecolpro.app",
+      email: "admin@lycee-demo.ecolemiriam.app",
       password: passwordHash,
       name: "Mamadou Diallo",
       firstName: "Mamadou",
@@ -45,11 +45,11 @@ async function main() {
   });
 
   const enseignantUser = await prisma.user.upsert({
-    where: { email: "enseignant@lycee-demo.ecolpro.app" },
+    where: { email: "enseignant@lycee-demo.ecolemiriam.app" },
     update: {},
     create: {
       tenantId: tenant.id,
-      email: "enseignant@lycee-demo.ecolpro.app",
+      email: "enseignant@lycee-demo.ecolemiriam.app",
       password: passwordHash,
       name: "Fatou Ndiaye",
       firstName: "Fatou",
@@ -59,11 +59,11 @@ async function main() {
   });
 
   const parentUser = await prisma.user.upsert({
-    where: { email: "parent@lycee-demo.ecolpro.app" },
+    where: { email: "parent@lycee-demo.ecolemiriam.app" },
     update: {},
     create: {
       tenantId: tenant.id,
-      email: "parent@lycee-demo.ecolpro.app",
+      email: "parent@lycee-demo.ecolemiriam.app",
       password: passwordHash,
       name: "Oumar Sow",
       firstName: "Oumar",
@@ -251,7 +251,7 @@ async function main() {
       userId: parentUser.id,
       nom: "Sow",
       prenom: "Oumar",
-      email: "parent@lycee-demo.ecolpro.app",
+      email: "parent@lycee-demo.ecolemiriam.app",
       phone: "+221 77 123 45 67",
       profession: "Commerçant",
     },
@@ -305,9 +305,9 @@ async function main() {
 
   console.log("\n🎉 Seed terminé avec succès !");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log("📧 Admin:       admin@lycee-demo.ecolpro.app");
-  console.log("📧 Enseignant:  enseignant@lycee-demo.ecolpro.app");
-  console.log("📧 Parent:      parent@lycee-demo.ecolpro.app");
+  console.log("📧 Admin:       admin@lycee-demo.ecolemiriam.app");
+  console.log("📧 Enseignant:  enseignant@lycee-demo.ecolemiriam.app");
+  console.log("📧 Parent:      parent@lycee-demo.ecolemiriam.app");
   console.log("🔑 Mot de passe: Demo@2026!");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 }

@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { phone, type, eleveNom, ecoleNom } = parsed.data;
-  const nom = ecoleNom ?? "EcolPro Test";
+  const nom = ecoleNom ?? "École Miriam Test";
   const eleve = eleveNom ?? "Élève Test";
   const date = new Date().toLocaleDateString("fr-FR");
 
@@ -40,11 +40,11 @@ export async function POST(req: NextRequest) {
       result = await sendRetardWhatsApp(phone, eleve, date, nom);
       break;
     case "sms":
-      result = await sendSMS(phone, `[${nom}] Test SMS depuis EcolPro le ${date}`);
+      result = await sendSMS(phone, `[${nom}] Test SMS depuis École Miriam le ${date}`);
       break;
     case "test":
     default:
-      result = await sendWhatsAppMessage(phone, `🎓 *${nom}*\n\nCeci est un message de test depuis EcolPro.\n\nSi vous recevez ce message, l'intégration WhatsApp fonctionne correctement !\n\n— EcolPro`);
+      result = await sendWhatsAppMessage(phone, `🎓 *${nom}*\n\nCeci est un message de test depuis École Miriam.\n\nSi vous recevez ce message, l'intégration WhatsApp fonctionne correctement !\n\n— École Miriam`);
       break;
   }
 

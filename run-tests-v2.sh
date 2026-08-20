@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test EcolPro - Actions reelles (messagerie, notification, appel)
+# Test École Miriam - Actions reelles (messagerie, notification, appel)
 # Usage: bash run-tests-v2.sh
 
 B="$HOME/.claude/skills/gstack/browse/dist/browse"
@@ -8,7 +8,7 @@ BASE="http://localhost:3002"
 echo "=== 1. Login admin ==="
 $B goto "$BASE/login"
 $B wait --networkidle
-$B fill 'input[type="email"]' "admin@lycee-demo.ecolpro.app"
+$B fill 'input[type="email"]' "admin@lycee-demo.ecolemiriam.app"
 $B fill 'input[type="password"]' "Demo@2026!"
 $B click 'button[type="submit"]'
 $B wait --networkidle
@@ -31,7 +31,7 @@ $B screenshot /tmp/v2-02-add-form.png
 # Fill the form
 $B fill 'input#name' "Awa Diallo"
 sleep 0.5
-$B fill 'input#email' "awa.diallo@lycee-demo.ecolpro.app"
+$B fill 'input#email' "awa.diallo@lycee-demo.ecolemiriam.app"
 sleep 0.5
 $B select 'select#role' "TEACHER"
 sleep 0.5
@@ -57,7 +57,7 @@ $B click 'button:has-text("Ajouter")'
 sleep 2
 $B fill 'input#name' "Fatou Ndiaye"
 sleep 0.5
-$B fill 'input#email' "fatou.ndiaye@lycee-demo.ecolpro.app"
+$B fill 'input#email' "fatou.ndiaye@lycee-demo.ecolemiriam.app"
 sleep 0.5
 $B select 'select#role' "PARENT"
 sleep 0.5

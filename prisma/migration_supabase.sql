@@ -1,5 +1,5 @@
 -- ============================================================
--- EcolPro — Migration SQL Complète pour Supabase
+-- École Miriam — Migration SQL Complète pour Supabase
 -- À exécuter dans : Supabase Dashboard → SQL Editor
 -- ============================================================
 
@@ -494,5 +494,5 @@ CREATE INDEX IF NOT EXISTS idx_cours_tenantId ON "cours"("tenantId");
 CREATE INDEX IF NOT EXISTS idx_messages_conversationId ON "messages"("conversationId");
 
 -- ============================================================
--- Migration EcolPro terminée avec succès ✓
+-- Migration École Miriam terminée avec succès ✓
 -- ============================================================

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============================================================
-# EcolPro — Durcissement OS du VPS (à exécuter une fois)
+# École Miriam — Durcissement OS du VPS (à exécuter une fois)
 # ============================================================
 #
 # Actions :
@@ -118,7 +118,7 @@ log "  → fail2ban : SSH banni après 3 tentatives (2h)"
 # --- 5. sysctl ---
 log "5/7 — durcissement noyau (sysctl)..."
 
-cat > /etc/sysctl.d/99-ecolpro-hardening.conf <<'EOF'
+cat > /etc/sysctl.d/99-ecolemiriam-hardening.conf <<'EOF'
 # IP spoofing
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
@@ -208,6 +208,6 @@ log ""
 log "PROCHAINES ÉTAPES :"
 log "  1. Tester SSH : ssh -p ${SSH_PORT} user@vps-ip"
 log "  2. NE PAS fermer la session actuelle avant d'avoir testé"
-log "  3. Déployer : cd /opt/ecolpro/docker && docker compose up -d"
+log "  3. Déployer : cd /opt/ecolemiriam/docker && docker compose up -d"
 warn ""
 warn "⚠  NE PAS FERMER CETTE SESSION avant d'avoir testé SSH sur le port ${SSH_PORT}"

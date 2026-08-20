@@ -1,5 +1,5 @@
 /**
- * EcolPro — Extension Prisma pour RLS (Row Level Security)
+ * École Miriam — Extension Prisma pour RLS (Row Level Security)
  * ============================================================
  *
  * Injecte le contexte tenant/site dans chaque transaction Prisma

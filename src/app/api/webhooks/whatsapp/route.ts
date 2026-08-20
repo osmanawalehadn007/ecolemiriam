@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyMetaSignature } from "@/lib/webhooks";
 
-const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN ?? "ecolpro_whatsapp_token";
+const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN ?? "ecolemiriam_whatsapp_token";
 
 /**
  * GET /api/webhooks/whatsapp
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
             // est inter-tenants par nécessité.
             // Limite connue : si deux établissements enregistrent le même
             // numéro, le message est rattaché au premier trouvé.
-            // eslint-disable-next-line ecolpro/require-tenant-id
+            // eslint-disable-next-line ecolemiriam/require-tenant-id
             const parent = await prisma.parent.findFirst({
               where: {
                 OR: [

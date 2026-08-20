@@ -95,7 +95,7 @@ export async function createFacture(data: FactureFormData) {
   const numero = `FAC-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
 
   // Récupérer le siteId de l'élève pour assigner la facture au bon site
-  // eslint-disable-next-line ecolpro/require-site-filter, ecolpro/require-tenant-id -- lookup to get siteId for creation
+  // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-tenant-id -- lookup to get siteId for creation
   const eleve = await prisma.eleve.findUnique({
     where: { id: values.eleveId },
     select: { siteId: true },
@@ -242,7 +242,7 @@ export async function annulerFacture(factureId: string) {
     throw new Error("Impossible d'annuler une facture déjà payée");
   }
 
-  // eslint-disable-next-line ecolpro/require-site-filter -- comptage par factureId déjà vérifié tenant et via la relation facture
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- comptage par factureId déjà vérifié tenant et via la relation facture
   const nbPaiements = await prisma.paiement.count({
     where: { factureId },
   });

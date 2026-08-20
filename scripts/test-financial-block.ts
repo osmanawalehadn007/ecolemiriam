@@ -37,7 +37,7 @@ async function simulate() {
     // Créer un parent de test
     const testUser = await prisma.user.create({
       data: {
-        email: `test-parent-${Date.now()}@ecolpro.test`,
+        email: `test-parent-${Date.now()}@ecolemiriam.test`,
         name: "Parent Test Simulation",
         role: "PARENT",
         tenantId,

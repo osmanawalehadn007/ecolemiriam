@@ -1,5 +1,5 @@
 /**
- * EcolPro — Rate Limiting (in-memory token bucket)
+ * École Miriam — Rate Limiting (in-memory token bucket)
  * ============================================================
  * Simple rate limiter pour les routes API sensibles (login, upload, etc.).
  * Utilise un Map en mémoire — suffisant pour un seul serveur.

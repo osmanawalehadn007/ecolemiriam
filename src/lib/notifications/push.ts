@@ -1,5 +1,5 @@
 /**
- * EcolPro — Canal Push (Firebase Cloud Messaging, API HTTP v1)
+ * École Miriam — Canal Push (Firebase Cloud Messaging, API HTTP v1)
  * Docs: https://firebase.google.com/docs/cloud-messaging/migrate-v1
  *
  * Variable d'environnement :

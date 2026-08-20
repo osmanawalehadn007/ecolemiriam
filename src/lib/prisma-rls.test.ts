@@ -3,8 +3,8 @@
  *
  * Prérequis :
  * - La migration `migration_rls_hardening.sql` a été exécutée.
- * - Le rôle `ecolpro_app` existe avec NOBYPASSRLS.
- * - DATABASE_URL pointe vers le rôle `ecolpro_app`.
+ * - Le rôle `ecolemiriam_app` existe avec NOBYPASSRLS.
+ * - DATABASE_URL pointe vers le rôle `ecolemiriam_app`.
  * - Deux tenants de test existent en base avec des élèves.
  *
  * Ce test vérifie que :
@@ -15,7 +15,7 @@
  *
  * NOTE : ce test nécessite une vraie base PostgreSQL. Il est
  * marqué skip si DATABASE_URL n'est pas configurée pour le rôle
- * ecolpro_app (détecté par la présence de RLS_ACTIVE=true).
+ * ecolemiriam_app (détecté par la présence de RLS_ACTIVE=true).
  */
 
 import { describe, it, expect, beforeAll } from "vitest";

@@ -1,22 +1,22 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 /**
- * Configuration Capacitor — EcolPro Mobile
+ * Configuration Capacitor — École Miriam Mobile
  * ============================================================
- * L'application EcolPro est full-stack (server components + API + auth),
+ * L'application École Miriam est full-stack (server components + API + auth),
  * elle ne peut pas être exportée en statique. La coque native charge donc
  * l'application HÉBERGÉE via `server.url` et y ajoute les capacités natives
  * (notifications push, caméra, biométrie, statut réseau).
  *
  * Définir l'URL de production via la variable d'environnement CAP_SERVER_URL
  * avant `npx cap sync` :
- *   CAP_SERVER_URL=https://app.ecolpro.app npx cap sync
+ *   CAP_SERVER_URL=https://app.ecolemiriam.app npx cap sync
  */
-const SERVER_URL = process.env.CAP_SERVER_URL ?? "https://app.ecolpro.app";
+const SERVER_URL = process.env.CAP_SERVER_URL ?? "https://app.ecolemiriam.app";
 
 const config: CapacitorConfig = {
-  appId: "app.ecolpro.mobile",
-  appName: "EcolPro",
+  appId: "app.ecolemiriam.mobile",
+  appName: "École Miriam",
   // Dossier web de repli (page hors-ligne) embarqué dans le binaire.
   webDir: "mobile/www",
   server: {
@@ -26,8 +26,8 @@ const config: CapacitorConfig = {
     cleartext: false,
     // Domaines autorisés à rester dans la webview (sinon ouverts dans le navigateur système).
     allowNavigation: [
-      "*.ecolpro.app",
-      "ecolpro.app",
+      "*.ecolemiriam.app",
+      "ecolemiriam.app",
     ],
   },
   ios: {

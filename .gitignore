@@ -71,3 +71,4 @@ next-env.d.ts
 docker/secrets/
 docker/keys/
 .env.production
+.cf-token.env

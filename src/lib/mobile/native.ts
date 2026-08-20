@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Pont natif Capacitor — EcolPro Mobile
+ * Pont natif Capacitor — École Miriam Mobile
  * ============================================================
  * Toutes les fonctions sont des no-op côté web : `Capacitor.isNativePlatform()`
  * renvoie `false` dans un navigateur, donc le même code tourne en web et en natif.

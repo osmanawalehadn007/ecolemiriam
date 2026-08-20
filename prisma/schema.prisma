@@ -1,5 +1,5 @@
 // ============================================================
-// EcolPro — Schéma Prisma Multi-Tenant
+// École Miriam — Schéma Prisma Multi-Tenant
 // Strategy: Row-level isolation via tenantId sur toutes les tables
 // ============================================================
 
@@ -288,7 +288,7 @@ model Periode {
 // ============================================================
 
 enum Role {
-  SUPER_ADMIN // Équipe EcolPro
+  SUPER_ADMIN // Équipe École Miriam
   TENANT_ADMIN // Directeur/Propriétaire
   PRINCIPAL // Chef d'établissement
   SECRETARY // Secrétariat

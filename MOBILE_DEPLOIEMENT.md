@@ -1,6 +1,6 @@
-# EcolPro Mobile — Guide de publication (App Store & Play Store)
+# École Miriam Mobile — Guide de publication (App Store & Play Store)
 
-> Approche : **Capacitor** encapsule l'application web EcolPro hébergée.
+> Approche : **Capacitor** encapsule l'application web École Miriam hébergée.
 > La coque native charge `server.url` (l'app déployée) et ajoute les capacités
 > natives : notifications push, caméra, biométrie, état réseau, splash screen.
 
@@ -26,16 +26,16 @@
 
 La coque mobile pointe vers l'app **déployée** (pas le code local). Déployer le
 front Next.js (Vercel recommandé) et noter l'URL de production, ex.
-`https://app.ecolpro.app`.
+`https://app.ecolemiriam.app`.
 
-> **Multi-tenant :** chaque école a un sous-domaine (`lycee-x.ecolpro.app`).
+> **Multi-tenant :** chaque école a un sous-domaine (`lycee-x.ecolemiriam.app`).
 > Pour le mobile, deux options :
-> 1. **Point d'entrée unique** `app.ecolpro.app` avec un écran « Choisir mon
+> 1. **Point d'entrée unique** `app.ecolemiriam.app` avec un écran « Choisir mon
 >    établissement » (saisie du slug) → recommandé pour une app unique sur les stores.
 > 2. **App en marque blanche** par école (un build par tenant) → réservé aux
 >    contrats Enterprise.
 >
-> Le `allowNavigation: ["*.ecolpro.app"]` de `capacitor.config.ts` permet déjà
+> Le `allowNavigation: ["*.ecolemiriam.app"]` de `capacitor.config.ts` permet déjà
 > de naviguer entre sous-domaines sans sortir de la webview.
 
 ---
@@ -44,7 +44,7 @@ front Next.js (Vercel recommandé) et noter l'URL de production, ex.
 
 ```bash
 # Définir l'URL de prod (sinon valeur par défaut de capacitor.config.ts)
-export CAP_SERVER_URL=https://app.ecolpro.app
+export CAP_SERVER_URL=https://app.ecolemiriam.app
 
 npm run cap:add:ios       # crée ./ios
 npm run cap:add:android   # crée ./android
@@ -67,12 +67,12 @@ npm run cap:sync
 ## 4. Notifications push
 
 ### Android (FCM)
-1. Créer un projet **Firebase** → ajouter une app Android (`app.ecolpro.mobile`).
+1. Créer un projet **Firebase** → ajouter une app Android (`app.ecolemiriam.mobile`).
 2. Télécharger `google-services.json` → le placer dans `android/app/`.
 3. `npm run cap:sync`.
 
 ### iOS (APNs)
-1. Dans Firebase, ajouter une app iOS (`app.ecolpro.mobile`) → `GoogleService-Info.plist`
+1. Dans Firebase, ajouter une app iOS (`app.ecolemiriam.mobile`) → `GoogleService-Info.plist`
    dans `ios/App/App/`.
 2. Apple Developer → créer une **APNs Auth Key** (.p8) → l'uploader dans Firebase.
 3. Dans Xcode → onglet *Signing & Capabilities* → ajouter **Push Notifications**

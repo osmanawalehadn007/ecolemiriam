@@ -5,7 +5,7 @@ import { Header } from "@/components/layout/Header";
 import { AlumniView } from "@/components/alumni/AlumniView";
 import { getTranslations } from "next-intl/server";
 
-export const metadata = { title: "Alumni — Anciens élèves | EcolPro" };
+export const metadata = { title: "Alumni — Anciens élèves | École Miriam" };
 
 export default async function AlumniPage() {
   const [session, t] = await Promise.all([

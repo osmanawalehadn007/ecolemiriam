@@ -5,7 +5,7 @@ description: Guide et règles de conception pour créer des interfaces utilisate
 
 # Directives UI/UX Pro Max
 
-Ce skill définit les standards esthétiques et ergonomiques pour toutes les interfaces utilisateur du projet EcolPro.
+Ce skill définit les standards esthétiques et ergonomiques pour toutes les interfaces utilisateur du projet École Miriam.
 
 ## 1. Palette de Couleurs & Thème
 * **Pas de couleurs brutes :** Éviter le rouge pur (`#FF0000`), bleu pur (`#0000FF`), etc. Utiliser des palettes de couleurs harmonieuses basées sur les variables HSL du thème Tailwind de shadcn/ui.

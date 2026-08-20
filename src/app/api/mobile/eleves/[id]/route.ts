@@ -57,7 +57,7 @@ export async function GET(
   // au périmètre de sites et — pour un parent — au foyer vient d'être vérifiée par
   // le `findFirst` ci-dessus, suivi d'un 404 : la portée est acquise en amont.
   const [parents, notes, absences, incidents] = await Promise.all([
-    // eslint-disable-next-line ecolpro/require-site-filter
+    // eslint-disable-next-line ecolemiriam/require-site-filter
     prisma.eleveParent.findMany({
       where: { eleveId: id },
       select: {
@@ -68,7 +68,7 @@ export async function GET(
         },
       },
     }),
-    // eslint-disable-next-line ecolpro/require-site-filter
+    // eslint-disable-next-line ecolemiriam/require-site-filter
     prisma.note.findMany({
       where: { eleveId: id, tenantId: user.tenantId },
       select: {
@@ -83,14 +83,14 @@ export async function GET(
       orderBy: { date: "desc" },
       take: 20,
     }),
-    // eslint-disable-next-line ecolpro/require-site-filter
+    // eslint-disable-next-line ecolemiriam/require-site-filter
     prisma.absence.findMany({
       where: { eleveId: id, tenantId: user.tenantId },
       select: { id: true, date: true, isRetard: true, statut: true, motif: true },
       orderBy: { date: "desc" },
       take: 10,
     }),
-    // eslint-disable-next-line ecolpro/require-site-filter
+    // eslint-disable-next-line ecolemiriam/require-site-filter
     prisma.incident.findMany({
       where: { eleveId: id, tenantId: user.tenantId },
       select: { id: true, type: true, statut: true, gravite: true, description: true, date: true },

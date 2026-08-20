@@ -325,7 +325,7 @@ export async function envoyerRelance(factureId: string, canal: string) {
         restant,
         facture.devise,
         facture.numero,
-        tenant?.name ?? "EcolPro"
+        tenant?.name ?? "École Miriam"
       );
     }
   }

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============================================================
-# EcolPro — Rotation des secrets SOPS
+# École Miriam — Rotation des secrets SOPS
 # ============================================================
 #
 # Régénère tous les secrets (sauf le token Cloudflare) et

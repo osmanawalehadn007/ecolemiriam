@@ -1,4 +1,4 @@
-// EcolPro — Service Worker v5 (self-unregister for dev compatibility)
+// École Miriam — Service Worker v5 (self-unregister for dev compatibility)
 self.addEventListener("install", (event) => {
   self.skipWaiting();
   event.waitUntil(
@@ -30,7 +30,7 @@ self.addEventListener("push", (event) => {
     body: data.body ?? "",
     icon: "/icons/icon-192x192.png",
     badge: "/icons/icon-72x72.png",
-    tag: data.tag ?? "ecolpro-notif",
+    tag: data.tag ?? "ecolemiriam-notif",
     data: { url: data.url ?? "/dashboard" },
     actions: [
       { action: "open", title: "Ouvrir" },
@@ -39,7 +39,7 @@ self.addEventListener("push", (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title ?? "EcolPro", options)
+    self.registration.showNotification(data.title ?? "École Miriam", options)
   );
 });
 

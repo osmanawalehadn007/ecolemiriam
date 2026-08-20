@@ -1,5 +1,5 @@
 # ============================================================
-# EcolPro — PgBouncer userlist (PLACEHOLDER)
+# École Miriam — PgBouncer userlist (PLACEHOLDER)
 # ============================================================
 # Format : "username" "scram-sha-256-hash"
 #
@@ -7,10 +7,10 @@
 #   docker/scripts/generate-pgbouncer-userlist.sh
 #
 # Le hash est récupéré depuis pg_authid après création des rôles :
-#   SELECT rolname, rolpassword FROM pg_authid WHERE rolname IN ('ecolpro_app','ecolpro_owner');
+#   SELECT rolname, rolpassword FROM pg_authid WHERE rolname IN ('ecolemiriam_app','ecolemiriam_owner');
 #
 # NE JAMAIS committer ce fichier avec des hashes réels.
 # ============================================================
 
-"ecolpro_app" "SCRAM-SHA-256$4096$REMPLACER_PAR_HASH_REEL$REMPLACER"
-"ecolpro_owner" "SCRAM-SHA-256$4096$REMPLACER_PAR_HASH_REEL$REMPLACER"
+"ecolemiriam_app" "SCRAM-SHA-256$4096$REMPLACER_PAR_HASH_REEL$REMPLACER"
+"ecolemiriam_owner" "SCRAM-SHA-256$4096$REMPLACER_PAR_HASH_REEL$REMPLACER"

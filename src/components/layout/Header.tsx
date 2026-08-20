@@ -50,7 +50,7 @@ export function Header({ title, subtitle, site, siteColor, userName = "Admin", u
   }
 
   useEffect(() => {
-    const CACHE_KEY = "ecolpro_notif_cache";
+    const CACHE_KEY = "ecolemiriam_notif_cache";
     const CACHE_TTL = 120_000; // 2 minutes
 
     // Try cache first

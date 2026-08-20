@@ -1,5 +1,5 @@
 # ============================================================
-# EcolPro — Makefile (point d'entrée unique des opérations)
+# École Miriam — Makefile (point d'entrée unique des opérations)
 # ============================================================
 #
 # Usage :
@@ -30,12 +30,15 @@ DOCKER_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 PROJECT_DIR := $(abspath $(DOCKER_DIR)/..)
 COMPOSE := docker compose -f $(DOCKER_DIR)/docker-compose.yml
 
-.PHONY: setup secrets secrets-edit secrets-rotate build up down restart deploy rollback backup restore-test audit migrate logs logs-db ps health shell shell-db clean
+.PHONY: setup secrets secrets-edit secrets-rotate build up down restart deploy rollback backup restore-test audit migrate logs logs-db ps health shell shell-db clean cf-setup
 
 # --- Setup ---
 
 setup:
 	sudo bash $(DOCKER_DIR)/scripts/harden-os.sh
+
+cf-setup:
+	bash $(DOCKER_DIR)/scripts/cloudflare-setup.sh
 
 secrets:
 	bash $(DOCKER_DIR)/scripts/secrets-init.sh
@@ -49,7 +52,7 @@ secrets-rotate:
 # --- Build & Deploy ---
 
 build:
-	docker build -t ecolpro-app:latest $(PROJECT_DIR) -f $(DOCKER_DIR)/app/Dockerfile
+	docker build -t ecolemiriam-app:latest $(PROJECT_DIR) -f $(DOCKER_DIR)/app/Dockerfile
 	$(COMPOSE) build
 
 up:
@@ -70,7 +73,7 @@ rollback:
 # --- Backup & Restore ---
 
 backup:
-	docker exec ecolpro-pgbackrest pgbackrest --stanza=ecolpro --type=full backup
+	docker exec ecolemiriam-pgbackrest pgbackrest --stanza=ecolemiriam --type=full backup
 
 restore-test:
 	bash $(DOCKER_DIR)/scripts/restore-test.sh
@@ -88,23 +91,23 @@ migrate:
 # --- Operations ---
 
 logs:
-	docker logs ecolpro-app --tail 50 -f
+	docker logs ecolemiriam-app --tail 50 -f
 
 logs-db:
-	docker logs ecolpro-postgres --tail 50 -f
+	docker logs ecolemiriam-postgres --tail 50 -f
 
 ps:
 	$(COMPOSE) ps
 
 health:
-	docker exec ecolpro-app curl -sf http://localhost:3000/api/health && echo "OK" || echo "FAIL"
+	docker exec ecolemiriam-app curl -sf http://localhost:3000/api/health && echo "OK" || echo "FAIL"
 
 shell:
-	docker exec -it ecolpro-app sh
+	docker exec -it ecolemiriam-app sh
 
 shell-db:
-	docker exec -it ecolpro-postgres psql -U ecolpro_owner -d ecolpro
+	docker exec -it ecolemiriam-postgres psql -U ecolemiriam_owner -d ecolemiriam
 
 clean:
 	docker image prune -f
-	docker volume prune -f --filter "label!=com.docker.compose.project=ecolpro"
+	docker volume prune -f --filter "label!=com.docker.compose.project=ecolemiriam"

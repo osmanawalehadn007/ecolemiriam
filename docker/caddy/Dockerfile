@@ -1,5 +1,5 @@
 # ============================================================
-# EcolPro — Image Caddy custom (xcaddy + rate limit plugin)
+# École Miriam — Image Caddy custom (xcaddy + rate limit plugin)
 # ============================================================
 # Caddy compilé avec le plugin rate-limit via xcaddy.
 # Rate limiting au niveau du reverse proxy (avant l'app).

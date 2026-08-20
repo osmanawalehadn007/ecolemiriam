@@ -1,5 +1,5 @@
 /**
- * EcolPro — Helper d'export réutilisable (Excel, CSV, PDF)
+ * École Miriam — Helper d'export réutilisable (Excel, CSV, PDF)
  * Utilisé par ExportMenu.tsx et les routes API d'export.
  */
 

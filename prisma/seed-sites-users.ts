@@ -113,7 +113,7 @@ async function main() {
   }
 
   // 5. Hash du mot de passe par défaut
-  const defaultPassword = await bcrypt.hash("EcolPro@2026", 12);
+  const defaultPassword = await bcrypt.hash("École Miriam@2026", 12);
 
   // 6. Créer Mouna Mohamed — Directrice Site 1 (+ Site 3)
   const mouna = await prisma.user.upsert({
@@ -228,7 +228,7 @@ async function main() {
   console.log(`Mouna Mohamed (ahdimounomar@gmail.com) → PRINCIPAL, Site 1 + Site 3`);
   console.log(`Ilyas Aden (Ilyasadendjama@gmail.com) → PRINCIPAL, Site 2`);
   console.log(`Mohamed Abdi Ali (Mohamed.abdi.pk12@gmail.com) → TENANT_ADMIN, tous les sites`);
-  console.log(`\n🔑 Mot de passe par défaut pour tous: EcolPro@2026`);
+  console.log(`\n🔑 Mot de passe par défaut pour tous: École Miriam@2026`);
   console.log("✨ Terminé !");
 }
 

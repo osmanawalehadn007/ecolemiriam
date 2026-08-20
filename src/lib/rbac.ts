@@ -1,5 +1,5 @@
 /**
- * EcolPro — Contrôle d'accès basé sur les rôles (RBAC)
+ * École Miriam — Contrôle d'accès basé sur les rôles (RBAC)
  * ============================================================
  * Source unique de vérité pour l'autorisation côté serveur.
  *
@@ -27,7 +27,7 @@ export type Permission = string;
 // Matrice des permissions par rôle
 // ------------------------------------------------------------
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
-  // Plateforme EcolPro — accès total (y compris super-admin)
+  // Plateforme École Miriam — accès total (y compris super-admin)
   SUPER_ADMIN: ["*"],
 
   // Directeur / Propriétaire de l'établissement — tout sauf l'administration plateforme
@@ -245,7 +245,7 @@ export function checkPermission(
   return null;
 }
 
-/** Réservé aux administrateurs de la plateforme EcolPro. */
+/** Réservé aux administrateurs de la plateforme École Miriam. */
 export async function authorizeSuperAdmin(): Promise<AuthSuccess | AuthFailure> {
   const session = await auth();
   if (!session?.user?.id) {

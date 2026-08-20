@@ -115,7 +115,7 @@ function PalmaresReport({ data, tenant }: { data: any[]; tenant: any }) {
       )}
 
       <p className="text-xs text-gray-400 mt-8 text-center">
-        {t("docGeneratedOn")} {new Date().toLocaleDateString("fr-FR")} · EcolPro
+        {t("docGeneratedOn")} {new Date().toLocaleDateString("fr-FR")} · École Miriam
       </p>
     </div>
   );
@@ -193,7 +193,7 @@ function StatistiquesReport({ data, tenant }: { data: any; tenant: any }) {
       </div>
 
       <p className="text-xs text-gray-400 mt-8 text-center">
-        {t("docGeneratedOn")} {new Date().toLocaleDateString("fr-FR")} · EcolPro
+        {t("docGeneratedOn")} {new Date().toLocaleDateString("fr-FR")} · École Miriam
       </p>
     </div>
   );
@@ -282,7 +282,7 @@ function InspectionReport({ data, tenant }: { data: any; tenant: any }) {
       </section>
 
       <p className="text-xs text-gray-400 mt-8 text-center">
-        {t("docGeneratedOn")} {new Date().toLocaleDateString("fr-FR")} · EcolPro
+        {t("docGeneratedOn")} {new Date().toLocaleDateString("fr-FR")} · École Miriam
       </p>
     </div>
   );

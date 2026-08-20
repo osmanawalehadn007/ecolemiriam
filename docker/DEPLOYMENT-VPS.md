@@ -1,8 +1,8 @@
-# EcolPro — Guide de Déploiement VPS
+# École Miriam — Guide de Déploiement VPS
 
 ## Vue d'ensemble
 
-Ce document décrit le déploiement complet d'EcolPro sur un VPS avec Docker, Cloudflare Tunnel, et une architecture de sécurité zero-trust.
+Ce document décrit le déploiement complet d'École Miriam sur un VPS avec Docker, Cloudflare Tunnel, et une architecture de sécurité zero-trust.
 
 ## Architecture
 
@@ -34,34 +34,67 @@ Internet → Cloudflare (WAF/DDoS/TLS) → Cloudflare Tunnel → VPS
 
 ## Étapes de déploiement
 
+### 0. Créer le VPS sur Vultr (Dubaï)
+
+1. Aller sur https://www.vultr.com → Products → Deploy New Server
+2. Choisir **Cloud Compute** → **Dubai (United Arab Emirates)** region
+3. Image : **Ubuntu 24.04 LTS x64**
+4. Plan : **2 vCPU, 4 Go RAM, 80 Go SSD** (~$24/mois) ou **2 vCPU, 8 Go RAM, 120 Go SSD** (~$48/mois)
+5. Activer **Auto Backup** ($2,40/mois supplémentaire)
+6. SSH Keys : ajouter votre clé publique SSH
+7. Hostname : `ecolemiriam-prod`
+8. Firewall : bloquer tous les ports entrants sauf SSH (22) depuis votre IP uniquement
+   - **Aucun port HTTP/HTTPS ouvert** — Cloudflare Tunnel gère tout en sortant
+9. Deploy et noter l'IP publique
+
 ### 1. Préparer le VPS
 ```bash
-ssh root@vps-ip
-git clone https://github.com/wilsan007/EcolPro.git /opt/ecolpro
-cd /opt/ecolpro
+ssh root@<VPS-IP>
+apt update && apt upgrade -y
+# Installer Docker
+curl -fsSL https://get.docker.com | sh
+# Cloner le projet
+git clone https://github.com/wilsan007/ecolemiriam.git /opt/ecolemiriam
+cd /opt/ecolemiriam
+# Durcir l'OS
 sudo bash docker/scripts/harden-os.sh
 ```
 
-### 2. Configurer Cloudflare
-1. Aller sur https://one.dash.cloudflare.com
-2. Networks → Tunnels → Create tunnel → nommer `ecolpro`
-3. Copier le token
-4. Configurer les ingress rules :
-   - `app.ecloemiriam.com` → `http://caddy:8080`
-   - `status.ecloemiriam.com` → `http://caddy:8081`
-5. DNS : les enregistrements sont créés automatiquement par Cloudflare
+### 2. Configurer Cloudflare (déjà fait)
+
+La configuration Cloudflare est **déjà en place** :
+- Zone : `ecolemiriam.com` (active)
+- Tunnel : `Ecolemiriam` (ID: `4d0ebccb-dbaf-433c-9acd-0bb986827599`)
+- DNS CNAME : `app.ecolemiriam.com` et `status.ecolemiriam.com` → tunnel
+- SSL/TLS : Full (strict), Always Use HTTPS, HSTS, TLS 1.2 minimum
+- Ingress rules : configurées dans `docker/cloudflared/config.yml`
+- Tunnel token : stocké dans `docker/secrets/cloudflare_tunnel_token.txt`
+
+### 2b. Automatiser la configuration Cloudflare via API (optionnel)
+```bash
+# La configuration est déjà faite, mais pour reconfigurer :
+cp .cf-token.env.example .cf-token.env
+# Éditer .cf-token.env avec CF_API_TOKEN, CF_TUNNEL_ID, etc.
+make cf-setup
+```
 
 ### 3. Générer les secrets
 ```bash
 bash docker/scripts/secrets-init.sh
-# Remplacer le token Cloudflare
-echo "VOTRE_TOKEN" > docker/secrets/cloudflare_tunnel_token.txt
+# Le token Cloudflare Tunnel est déjà dans docker/secrets/cloudflare_tunnel_token.txt
+# Le token API Cloudflare est dans .cf-token.env
 ```
 
 ### 4. Créer .env.production
 ```bash
 cp .env.example .env.production
-# Éditer avec les valeurs des secrets + clés externes
+# Éditer avec les valeurs de production :
+#   NEXT_PUBLIC_APP_URL=https://app.ecolemiriam.com
+#   AUTH_URL=https://app.ecolemiriam.com
+#   DATABASE_URL=postgresql://ecolemiriam_app:...@pgbouncer:6432/ecolemiriam?pgbouncer=true
+#   AUTH_SECRET=<généré par secrets-init.sh>
+#   CRON_SECRET=<généré par secrets-init.sh>
+#   + clés externes (Resend, Stripe, Twilio, etc.)
 ```
 
 ### 5. Migrer les données (si migration depuis Supabase)
@@ -73,19 +106,31 @@ bash docker/scripts/migrate-from-supabase.sh
 ### 6. Démarrer la stack
 ```bash
 cd docker
-docker compose up -d
+make build
+make up
 ```
 
 ### 7. Vérifier
 ```bash
 make health    # app
 make audit     # audit sécurité (score ≥ 75)
+curl -f https://app.ecolemiriam.com/api/health
 ```
+
+### 8. Configurer le firewall Vultr (important)
+
+Dans le panel Vultr → Firewall → créer un groupe `ecolemiriam` :
+| Protocol | Port | Source | Action |
+|---|---|---|---|
+| TCP | 22 | Votre IP uniquement | Allow |
+| TCP | 1-65535 | All | **Deny** (défaut) |
+
+**Aucun port HTTP/HTTPS n'est ouvert** — Cloudflare Tunnel établit une connexion sortante.
 
 ## Déploiements ultérieurs
 
 ```bash
-cd /opt/ecolpro
+cd /opt/ecolemiriam
 git pull origin main
 make deploy
 ```
@@ -105,7 +150,7 @@ make rollback
 
 ## Monitoring
 
-- Uptime Kuma : `https://status.ecloemiriam.com`
+- Uptime Kuma : `https://status.ecolemiriam.com`
 - Alertes Telegram configurées pour :
   - App down
   - Postgres down

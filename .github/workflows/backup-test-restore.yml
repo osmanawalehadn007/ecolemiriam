@@ -29,7 +29,7 @@ jobs:
       - name: Run restore test
         env:
           BACKUP_AGE_KEY_PRIVATE: ${{ secrets.BACKUP_AGE_KEY_PRIVATE }}
-          BACKUP_RCLONE_REMOTE: ecolpro-backup
+          BACKUP_RCLONE_REMOTE: ecolemiriam-backup
         run: |
           chmod +x scripts/backups/test-restore.sh
           ./scripts/backups/test-restore.sh

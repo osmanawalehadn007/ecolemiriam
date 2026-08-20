@@ -7,9 +7,9 @@ const API_URL =
     ? "http://localhost:3000"
     : "https://ecol-pro-ace391.netlify.app");
 
-const TOKEN_KEY = "ecolpro_token";
-const USER_KEY = "ecolpro_user";
-const TENANT_KEY = "ecolpro_tenant";
+const TOKEN_KEY = "ecolemiriam_token";
+const USER_KEY = "ecolemiriam_user";
+const TENANT_KEY = "ecolemiriam_tenant";
 
 const isWeb = Platform.OS === "web";
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============================================================
-# EcolPro — Migration Supabase → VPS Postgres
+# École Miriam — Migration Supabase → VPS Postgres
 # ============================================================
 #
 # Étapes :
@@ -40,7 +40,7 @@ source "$ENV_FILE"
 [ -n "${VPS_DB_URL:-}" ] || err "VPS_DB_URL requis dans $ENV_FILE"
 
 TMPDIR=$(mktemp -d)
-DUMP_FILE="${TMPDIR}/ecolpro-supabase.dump"
+DUMP_FILE="${TMPDIR}/ecolemiriam-supabase.dump"
 RLS_FILE="${PROJECT_DIR}/prisma/migration_rls_hardening.sql"
 
 trap 'rm -rf "$TMPDIR"' EXIT
@@ -66,7 +66,7 @@ pg_restore "$VPS_DB_URL" \
   --if-exists \
   --no-owner \
   --no-privileges \
-  --dbname=ecolpro \
+  --dbname=ecolemiriam \
   "$DUMP_FILE" 2>&1 | grep -v "^$" || true
 
 # 3. Migration RLS
@@ -95,20 +95,20 @@ log "  → utilisateurs: $USERS"
 RLS_TABLES=$(psql "$VPS_DB_URL" -t -c "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='r' AND c.relrowsecurity" 2>/dev/null | xargs)
 log "  → tables avec RLS: $RLS_TABLES"
 
-BYPASS=$(psql "$VPS_DB_URL" -t -c "SELECT rolbypassrls FROM pg_roles WHERE rolname='ecolpro_app'" 2>/dev/null | xargs)
-log "  → ecolpro_app bypassrls: $BYPASS (doit être f)"
+BYPASS=$(psql "$VPS_DB_URL" -t -c "SELECT rolbypassrls FROM pg_roles WHERE rolname='ecolemiriam_app'" 2>/dev/null | xargs)
+log "  → ecolemiriam_app bypassrls: $BYPASS (doit être f)"
 
 # 5. Hashes PgBouncer
 log "5/5 — génération des hashes PgBouncer..."
-APP_HASH=$(psql "$VPS_DB_URL" -t -c "SELECT rolpassword FROM pg_authid WHERE rolname='ecolpro_app'" 2>/dev/null | xargs)
-OWNER_HASH=$(psql "$VPS_DB_URL" -t -c "SELECT rolpassword FROM pg_authid WHERE rolname='ecolpro_owner'" 2>/dev/null | xargs)
+APP_HASH=$(psql "$VPS_DB_URL" -t -c "SELECT rolpassword FROM pg_authid WHERE rolname='ecolemiriam_app'" 2>/dev/null | xargs)
+OWNER_HASH=$(psql "$VPS_DB_URL" -t -c "SELECT rolpassword FROM pg_authid WHERE rolname='ecolemiriam_owner'" 2>/dev/null | xargs)
 
 if [ -n "$APP_HASH" ] && [ -n "$OWNER_HASH" ]; then
   USERLIST="${SCRIPT_DIR}/../pgbouncer/userlist.txt"
   cat > "$USERLIST" <<EOF
 # Généré automatiquement le $(date -u +%FT%TZ)
-"ecolpro_app" "$APP_HASH"
-"ecolpro_owner" "$OWNER_HASH"
+"ecolemiriam_app" "$APP_HASH"
+"ecolemiriam_owner" "$OWNER_HASH"
 EOF
   chmod 600 "$USERLIST"
   log "  → hashes écrits dans $USERLIST"

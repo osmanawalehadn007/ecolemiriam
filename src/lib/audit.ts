@@ -1,5 +1,5 @@
 /**
- * EcolPro — Helper d'audit non-bloquant
+ * École Miriam — Helper d'audit non-bloquant
  * ============================================================
  * Journalise les actions sensibles et les refus d'autorisation.
  * Ne lève JAMAIS d'exception — l'audit ne doit pas casser le flux métier.

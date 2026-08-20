@@ -44,7 +44,7 @@ INSERT INTO public.users (id, "tenantId", email, name, "firstName", "lastName", 
 VALUES (
   'cly-user-admin-0001',
   'cly-djibouti-tenant-0001',
-  'admin@lycee-djibouti.ecolpro.app',
+  'admin@lycee-djibouti.ecolemiriam.app',
   'Ahmed Omar Farah',
   'Ahmed',
   'Farah',

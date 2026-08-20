@@ -31,7 +31,7 @@ jobs:
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           BACKUP_AGE_KEY: ${{ secrets.BACKUP_AGE_KEY }}
-          BACKUP_RCLONE_REMOTE: ecolpro-backup
+          BACKUP_RCLONE_REMOTE: ecolemiriam-backup
           BACKUP_RETENTION_DAYS: "30"
         run: |
           chmod +x scripts/backups/backup.sh

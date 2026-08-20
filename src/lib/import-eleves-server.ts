@@ -118,7 +118,7 @@ export async function preparerPlan(
  * milieu d'un lot.
  */
 export async function dernierMatricule(tenantId: string, annee: number): Promise<string | null> {
-  // eslint-disable-next-line ecolpro/require-site-filter -- unicité du matricule au niveau tenant, par construction
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- unicité du matricule au niveau tenant, par construction
   const dernier = await prisma.eleve.findFirst({
     where: { tenantId, matricule: { startsWith: `${annee}-` } },
     orderBy: { matricule: "desc" },

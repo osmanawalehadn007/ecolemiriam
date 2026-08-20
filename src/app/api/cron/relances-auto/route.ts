@@ -46,7 +46,7 @@ async function handler(req: NextRequest) {
     dateFin.setDate(dateFin.getDate() - palier.joursApresEcheance);
 
     // Factures en retard dont l'échéance tombe dans la fenêtre du palier
-    // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter -- cron cross-tenant : traite toutes les factures en retard, protégé par CRON_SECRET
+    // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- cron cross-tenant : traite toutes les factures en retard, protégé par CRON_SECRET
     const factures = await prisma.facture.findMany({
       where: {
         statut: { in: ["EN_ATTENTE", "EN_RETARD"] },
@@ -144,7 +144,7 @@ async function handler(req: NextRequest) {
 
         // Marquer la facture comme EN_RETARD si pas déjà fait
         if (facture.statut === "EN_ATTENTE") {
-          // eslint-disable-next-line ecolpro/require-tenant-id -- facture.id provient de la requête ci-dessus
+          // eslint-disable-next-line ecolemiriam/require-tenant-id -- facture.id provient de la requête ci-dessus
           await prisma.facture.update({
             where: { id: facture.id },
             data: { statut: "EN_RETARD" },

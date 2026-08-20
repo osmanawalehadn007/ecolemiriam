@@ -1,5 +1,5 @@
 /**
- * Générateur d'attestation de scolarité PDF — EcolPro
+ * Générateur d'attestation de scolarité PDF — École Miriam
  * Calqué sur bulletin-generator.ts, utilise les données existantes (Eleve, Classe, Tenant).
  */
 

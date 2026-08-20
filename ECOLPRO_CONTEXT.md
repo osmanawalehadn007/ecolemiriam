@@ -1,9 +1,9 @@
-# EcolPro — Contexte de développement (reprise de session)
+# École Miriam — Contexte de développement (reprise de session)
 
 > **Objectif :** SaaS multi-tenant de gestion scolaire, marché africain francophone.  
 > **Stack :** Next.js 15 (App Router) · Prisma 6 · PostgreSQL · NextAuth v5 · Tailwind CSS · shadcn/ui · TypeScript strict  
-> **Dossier projet :** `/Users/awalehosman/Documents/logiciel EcolPro`  
-> **URL démo :** `lycee-demo.ecolpro.app` — slug `lycee-demo`, pays `SN`, devise `XOF`
+> **Dossier projet :** `/Users/awalehosman/Documents/logiciel École Miriam`  
+> **URL démo :** `lycee-demo.ecolemiriam.app` — slug `lycee-demo`, pays `SN`, devise `XOF`
 
 ---
 
@@ -11,9 +11,9 @@
 
 | Rôle | Email | Mot de passe |
 |------|-------|-------------|
-| Admin | admin@lycee-demo.ecolpro.app | Demo@2026! |
-| Enseignant | enseignant@lycee-demo.ecolpro.app | Demo@2026! |
-| Parent | parent@lycee-demo.ecolpro.app | Demo@2026! |
+| Admin | admin@lycee-demo.ecolemiriam.app | Demo@2026! |
+| Enseignant | enseignant@lycee-demo.ecolemiriam.app | Demo@2026! |
+| Parent | parent@lycee-demo.ecolemiriam.app | Demo@2026! |
 
 ---
 
@@ -21,7 +21,7 @@
 
 - **Multi-tenant** : isolation par `tenantId` (row-level) sur chaque modèle Prisma
 - **Auth** : NextAuth v5 JWT, bcrypt, RBAC 11 rôles (`Role` enum)
-- **Subdomain** : `lycee-demo.ecolpro.app` → slug détecté dans `src/lib/tenant.ts`
+- **Subdomain** : `lycee-demo.ecolemiriam.app` → slug détecté dans `src/lib/tenant.ts`
 - **Middleware** : `src/middleware.ts` — routes publiques : `/login`, `/register`, `/api/auth`, `/`, `/_next`
 - **Seed** : `prisma/seed.ts` — 1 tenant, 3 users, 6 matières, 3 périodes T1/T2/T3, 1 classe "Terminale A1", 10 élèves
 
@@ -181,7 +181,7 @@ Les routes sont **sans** préfixe `/dashboard` :
 
 ```bash
 # Installer les dépendances
-cd "/Users/awalehosman/Documents/logiciel EcolPro"
+cd "/Users/awalehosman/Documents/logiciel École Miriam"
 npm install
 
 # Générer le client Prisma + migrer
@@ -210,7 +210,7 @@ Tous les modules fonctionnels sont construits. Priorités restantes (ordre conse
 3. **Intégrations paiement** Wave / Orange Money (réel) et Stripe.
 4. **Tests automatisés** (Jest/Playwright) — actuellement absents.
 
-Le projet est dans `/Users/awalehosman/Documents/logiciel EcolPro`.
+Le projet est dans `/Users/awalehosman/Documents/logiciel École Miriam`.
 Vérifier après toute modif : `node_modules/.bin/tsc --noEmit` puis `npm run build`.
 
 > ⚠️ Vérifier `npx prisma migrate status` : le schéma contient `DeviceToken`

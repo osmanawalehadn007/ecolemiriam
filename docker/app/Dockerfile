@@ -1,5 +1,5 @@
 # ============================================================
-# EcolPro — Dockerfile app (Next.js standalone, non-root, read-only)
+# École Miriam — Dockerfile app (Next.js standalone, non-root, read-only)
 # ============================================================
 # Build multi-étapes :
 #   1. deps    — installe les dépendances (cache Docker)

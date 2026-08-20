@@ -1,5 +1,5 @@
 /**
- * EcolPro — Client Assistant IA (GLM via OpenRouter, API compatible OpenAI)
+ * École Miriam — Client Assistant IA (GLM via OpenRouter, API compatible OpenAI)
  * ============================================================
  * Variables d'environnement :
  *   GLM_API_KEY=...
@@ -107,7 +107,7 @@ export async function generateChat(
   }
 
   const baseUrl = process.env.GLM_API_BASE_URL ?? DEFAULT_BASE_URL;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://ecolpro.app";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://ecolemiriam.app";
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
@@ -116,7 +116,7 @@ export async function generateChat(
       Authorization: `Bearer ${apiKey}`,
       // Recommandé par OpenRouter pour l'attribution des requêtes.
       "HTTP-Referer": appUrl,
-      "X-Title": "EcolPro",
+      "X-Title": "École Miriam",
     },
     body: JSON.stringify({
       model,

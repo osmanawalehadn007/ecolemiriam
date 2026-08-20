@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
         // borné au tenant et au périmètre de sites : l'isolation est portée par la
         // relation. (BulletinMatiere n'a par ailleurs aucun chemin propre vers le
         // site : son rattachement passe uniquement par ce bulletin.)
-        // eslint-disable-next-line ecolpro/require-site-filter
+        // eslint-disable-next-line ecolemiriam/require-site-filter
         matieres: { include: { matiere: true } },
         periode: true,
       },

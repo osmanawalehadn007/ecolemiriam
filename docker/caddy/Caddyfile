@@ -1,5 +1,5 @@
 # ============================================================
-# EcolPro — Caddyfile (reverse proxy + TLS interne + sécurité)
+# École Miriam — Caddyfile (reverse proxy + TLS interne + sécurité)
 # ============================================================
 # Caddy reçoit le trafic depuis cloudflared (port 8080 interne).
 # TLS interne (self-signed), Cloudflare termine le TLS externe.
@@ -9,11 +9,11 @@
 {
 	# Désactiver le HTTPS public (Cloudflare gère le TLS externe)
 	auto_https off
-	email admin@ecloemiriam.com
+	email admin@ecolemiriam.com
 }
 
 # ============================================================
-# Proxy principal : app.ecloemiriam.com
+# Proxy principal : app.ecolemiriam.com
 # ============================================================
 :8080 {
 	# TLS interne (certificat self-signed, Cloudflare termine le TLS externe)
@@ -118,7 +118,7 @@
 }
 
 # ============================================================
-# Monitoring : status.ecloemiriam.com (Uptime Kuma)
+# Monitoring : status.ecolemiriam.com (Uptime Kuma)
 # ============================================================
 :8081 {
 	tls internal {

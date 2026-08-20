@@ -5,7 +5,7 @@
  * Détecte: prisma.eleve.findMany({ where: { ... } }) sans tenantId
  *
  * @example .eslintrc.js
- * rules: { "ecolpro/require-tenant-id": "error" }
+ * rules: { "ecolemiriam/require-tenant-id": "error" }
  */
 
 "use strict";

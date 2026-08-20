@@ -1,10 +1,10 @@
 /**
- * EcolPro — Canal Email (Resend)
+ * École Miriam — Canal Email (Resend)
  * Docs: https://resend.com/docs
  *
  * Variables d'environnement :
  *   RESEND_API_KEY=re_...
- *   EMAIL_FROM="EcolPro <noreply@ecolpro.app>"
+ *   EMAIL_FROM="École Miriam <noreply@ecolemiriam.app>"
  *
  * Si la clé est absente, l'envoi est simulé (utile en dev / sandbox).
  */
@@ -17,7 +17,7 @@ export interface EmailResult {
   error?: string;
 }
 
-const FROM = process.env.EMAIL_FROM ?? "EcolPro <noreply@ecolpro.app>";
+const FROM = process.env.EMAIL_FROM ?? "École Miriam <noreply@ecolemiriam.app>";
 const BATCH = 50; // limite Resend par appel
 
 /**
@@ -66,7 +66,7 @@ export async function sendEmail(
 }
 
 /**
- * Gabarit HTML simple aux couleurs EcolPro pour les notifications.
+ * Gabarit HTML simple aux couleurs École Miriam pour les notifications.
  */
 export function renderNotificationEmail(
   ecoleNom: string,
@@ -85,7 +85,7 @@ export function renderNotificationEmail(
           <div style="font-size:15px;line-height:1.6;color:#374151;">${body}</div>
         </td></tr>
         <tr><td style="padding:16px 28px;border-top:1px solid #eee;font-size:12px;color:#9ca3af;">
-          Envoyé via EcolPro — merci de ne pas répondre à cet email.
+          Envoyé via École Miriam — merci de ne pas répondre à cet email.
         </td></tr>
       </table>
     </td></tr>

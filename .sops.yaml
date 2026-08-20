@@ -1,5 +1,5 @@
 # ============================================================
-# EcolPro — SOPS config (chiffrement des secrets avec age)
+# École Miriam — SOPS config (chiffrement des secrets avec age)
 # ============================================================
 # SOPS chiffre les fichiers de secrets avec age (X25519).
 # La clé age est stockée hors du repo (VPS, 1Password, etc.).

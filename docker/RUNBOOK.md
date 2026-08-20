@@ -1,4 +1,4 @@
-# EcolPro — Runbook VPS
+# École Miriam — Runbook VPS
 
 ## 1. PRÉREQUIS VPS
 
@@ -8,11 +8,11 @@
 - **Région** : Falkenstein (fsn1) ou Helsinki (hel1)
 
 ### 1.2 Domaine & DNS
-- Domaine : `ecloemiriam.com` (acheté sur Cloudflare)
+- Domaine : `ecolemiriam.com` (acheté sur Cloudflare)
 - Nameservers : Cloudflare
 - Sous-domaines :
-  - `app.ecloemiriam.com` → application principale
-  - `status.ecloemiriam.com` → Uptime Kuma (accès restreint)
+  - `app.ecolemiriam.com` → application principale
+  - `status.ecolemiriam.com` → Uptime Kuma (accès restreint)
 
 ---
 
@@ -20,8 +20,8 @@
 
 ```bash
 ssh root@vps-ip
-git clone <repo> /opt/ecolpro
-cd /opt/ecolpro
+git clone <repo> /opt/ecolemiriam
+cd /opt/ecolemiriam
 sudo bash docker/scripts/harden-os.sh
 ```
 
@@ -45,14 +45,14 @@ ssh -p 22022 user@vps-ip
 
 ### 3.1 Créer le tunnel
 1. https://one.dash.cloudflare.com → Networks → Tunnels → Create tunnel
-2. Nommer `ecolpro`
+2. Nommer `ecolemiriam`
 3. Copier le token
 
 ### 3.2 Ingress rules
 | Sous-domaine | Service | Access Policy |
 |---|---|---|
-| `app.ecloemiriam.com` | `http://caddy:8080` | Public (WAF + Bot Fight) |
-| `status.ecloemiriam.com` | `http://caddy:8081` | Email whitelist (admin) |
+| `app.ecolemiriam.com` | `http://caddy:8080` | Public (WAF + Bot Fight) |
+| `status.ecolemiriam.com` | `http://caddy:8081` | Email whitelist (admin) |
 
 ### 3.3 Sécurité Cloudflare
 - SSL/TLS : Full (strict)
@@ -68,12 +68,37 @@ echo "TOKEN" > docker/secrets/cloudflare_tunnel_token.txt
 chmod 600 docker/secrets/cloudflare_tunnel_token.txt
 ```
 
+### 3.5 Configurer Cloudflare via API (automatisé)
+```bash
+# Copier le template et remplir
+cp .cf-token.env.example .cf-token.env
+# Éditer .cf-token.env avec CF_API_TOKEN, CF_TUNNEL_ID, etc.
+
+# Lancer la configuration automatique
+make cf-setup
+# ou
+bash docker/scripts/cloudflare-setup.sh
+```
+Le script configure automatiquement :
+- SSL/TLS Full (strict) + TLS 1.2 minimum
+- Always Use HTTPS + HSTS
+- Enregistrements DNS (CNAME vers tunnel)
+- Bot Fight Mode
+- Rate limiting (100 req/min par IP)
+- Ingress rules du tunnel
+
+### 3.6 Access Policy pour status.ecolemiriam.com
+Dashboard Zero Trust → Access → Applications → Create application :
+- Domain : `status.ecolemiriam.com`
+- Policy : Email whitelist (admin@ecolemiriam.com)
+- Session duration : 12h
+
 ---
 
 ## 4. SECRETS (SOPS + age)
 
 ```bash
-cd /opt/ecolpro
+cd /opt/ecolemiriam
 bash docker/scripts/secrets-init.sh
 ```
 
@@ -103,8 +128,8 @@ cp .env.example .env.production
 Remplir avec :
 - `AUTH_SECRET` → valeur de `secrets/auth_secret.txt`
 - `CRON_SECRET` → valeur de `secrets/cron_secret.txt`
-- `NEXT_PUBLIC_APP_URL` → `https://app.ecloemiriam.com`
-- `AUTH_URL` → `https://app.ecloemiriam.com`
+- `NEXT_PUBLIC_APP_URL` → `https://app.ecolemiriam.com`
+- `AUTH_URL` → `https://app.ecolemiriam.com`
 - `RLS_ACTIVE` → `true`
 - Clés externes (Resend, Telegram, Africa's Talking, etc.)
 
@@ -114,7 +139,7 @@ Remplir avec :
 
 ### 6.1 Démarrer Postgres
 ```bash
-cd /opt/ecolpro/docker
+cd /opt/ecolemiriam/docker
 docker compose up -d postgres pgbouncer
 ```
 
@@ -122,7 +147,7 @@ docker compose up -d postgres pgbouncer
 ```bash
 cat > .env.local <<EOF
 SUPABASE_DB_URL="postgresql://postgres:PASSWORD@db.hyejtirvtdhxseambzyg.supabase.co:5432/postgres"
-VPS_DB_URL="postgresql://ecolpro_owner:PASSWORD@localhost:5432/ecolpro"
+VPS_DB_URL="postgresql://ecolemiriam_owner:PASSWORD@localhost:5432/ecolemiriam"
 EOF
 ```
 
@@ -141,7 +166,7 @@ docker compose up -d
 ## 7. DÉPLOIEMENT QUOTIDIEN
 
 ```bash
-cd /opt/ecolpro
+cd /opt/ecolemiriam
 git pull origin main
 make deploy
 # ou
@@ -181,7 +206,7 @@ make backup
 
 ### Vérifier les backups
 ```bash
-docker exec ecolpro-pgbackrest pgbackrest --stanza=ecolpro info
+docker exec ecolemiriam-pgbackrest pgbackrest --stanza=ecolemiriam info
 ```
 
 ### Test de restauration
@@ -192,7 +217,7 @@ make restore-test
 ### Restauration PITR réelle
 ```bash
 docker compose stop app
-docker exec ecolpro-pgbackrest pgbackrest --stanza=ecolpro \
+docker exec ecolemiriam-pgbackrest pgbackrest --stanza=ecolemiriam \
   --type=time --target="2026-08-19 14:30:00" --target-action=promote restore
 docker compose start postgres app
 ```
@@ -231,10 +256,10 @@ Temps estimé : 15-30 min
 - [ ] SSH : `ss -tlnp | grep 22022`
 - [ ] UFW : `ufw status`
 - [ ] Postgres non exposé : `ss -tlnp | grep 5432` (rien)
-- [ ] RLS : `SELECT rolbypassrls FROM pg_roles WHERE rolname='ecolpro_app'` → `f`
-- [ ] Tunnel : `docker logs ecolpro-cloudflared`
-- [ ] TLS : `curl -vI https://app.ecloemiriam.com 2>&1 | grep SSL`
-- [ ] Headers : `curl -sI https://app.ecloemiriam.com | grep -i security`
-- [ ] Healthcheck : `curl -f https://app.ecloemiriam.com/api/health`
-- [ ] Backup : `docker exec ecolpro-pgbackrest pgbackrest --stanza=ecolpro check`
+- [ ] RLS : `SELECT rolbypassrls FROM pg_roles WHERE rolname='ecolemiriam_app'` → `f`
+- [ ] Tunnel : `docker logs ecolemiriam-cloudflared`
+- [ ] TLS : `curl -vI https://app.ecolemiriam.com 2>&1 | grep SSL`
+- [ ] Headers : `curl -sI https://app.ecolemiriam.com | grep -i security`
+- [ ] Healthcheck : `curl -f https://app.ecolemiriam.com/api/health`
+- [ ] Backup : `docker exec ecolemiriam-pgbackrest pgbackrest --stanza=ecolemiriam check`
 - [ ] Audit : `make audit` → score ≥ 75

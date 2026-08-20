@@ -17,26 +17,26 @@
 -- 20 Users enseignants (mot de passe : Demo@2026!)
 INSERT INTO public.users (id, "tenantId", email, name, "firstName", "lastName", role, "isActive", password, "createdAt", "updatedAt")
 VALUES
-  ('cly-user-ens-01', 'cly-djibouti-tenant-0001', 'mohamed.ali@lycee-djibouti.ecolpro.app', 'Mohamed Ali', 'Mohamed', 'Ali', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-02', 'cly-djibouti-tenant-0001', 'fatima.aden@lycee-djibouti.ecolpro.app', 'Fatima Aden', 'Fatima', 'Aden', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-03', 'cly-djibouti-tenant-0001', 'abdi.warsame@lycee-djibouti.ecolpro.app', 'Abdi Warsame', 'Abdi', 'Warsame', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-04', 'cly-djibouti-tenant-0001', 'halima.hassan@lycee-djibouti.ecolpro.app', 'Halima Hassan', 'Halima', 'Hassan', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-05', 'cly-djibouti-tenant-0001', 'said.guelleh@lycee-djibouti.ecolpro.app', 'Said Guelleh', 'Said', 'Guelleh', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-06', 'cly-djibouti-tenant-0001', 'asha.mahamoud@lycee-djibouti.ecolpro.app', 'Asha Mahamoud', 'Asha', 'Mahamoud', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-07', 'cly-djibouti-tenant-0001', 'omar.farah@lycee-djibouti.ecolpro.app', 'Omar Farah', 'Omar', 'Farah', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-08', 'cly-djibouti-tenant-0001', 'lul.barkat@lycee-djibouti.ecolpro.app', 'Lul Barkat', 'Lul', 'Barkat', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-09', 'cly-djibouti-tenant-0001', 'yacin.djama@lycee-djibouti.ecolpro.app', 'Yacin Djama', 'Yacin', 'Djama', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-10', 'cly-djibouti-tenant-0001', 'hodan.osman@lycee-djibouti.ecolpro.app', 'Hodan Osman', 'Hodan', 'Osman', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-11', 'cly-djibouti-tenant-0001', 'khalid.ibrahim@lycee-djibouti.ecolpro.app', 'Khalid Ibrahim', 'Khalid', 'Ibrahim', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-12', 'cly-djibouti-tenant-0001', 'nasra.hared@lycee-djibouti.ecolpro.app', 'Nasra Hared', 'Nasra', 'Hared', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-13', 'cly-djibouti-tenant-0001', 'ridwan.abdi@lycee-djibouti.ecolpro.app', 'Ridwan Abdi', 'Ridwan', 'Abdi', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-14', 'cly-djibouti-tenant-0001', 'leyla.yusuf@lycee-djibouti.ecolpro.app', 'Leyla Yusuf', 'Leyla', 'Yusuf', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-15', 'cly-djibouti-tenant-0001', 'ahmed.mumin@lycee-djibouti.ecolpro.app', 'Ahmed Mumin', 'Ahmed', 'Mumin', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-16', 'cly-djibouti-tenant-0001', 'fartun.nour@lycee-djibouti.ecolpro.app', 'Fartun Nour', 'Fartun', 'Nour', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-17', 'cly-djibouti-tenant-0001', 'ismail.robleh@lycee-djibouti.ecolpro.app', 'Ismail Robleh', 'Ismail', 'Robleh', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-18', 'cly-djibouti-tenant-0001', 'deqa.elmi@lycee-djibouti.ecolpro.app', 'Deqa Elmi', 'Deqa', 'Elmi', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-19', 'cly-djibouti-tenant-0001', 'mukhtar.awale@lycee-djibouti.ecolpro.app', 'Mukhtar Awale', 'Mukhtar', 'Awale', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
-  ('cly-user-ens-20', 'cly-djibouti-tenant-0001', 'faiza.keyd@lycee-djibouti.ecolpro.app', 'Faiza Keyd', 'Faiza', 'Keyd', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW());
+  ('cly-user-ens-01', 'cly-djibouti-tenant-0001', 'mohamed.ali@lycee-djibouti.ecolemiriam.app', 'Mohamed Ali', 'Mohamed', 'Ali', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-02', 'cly-djibouti-tenant-0001', 'fatima.aden@lycee-djibouti.ecolemiriam.app', 'Fatima Aden', 'Fatima', 'Aden', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-03', 'cly-djibouti-tenant-0001', 'abdi.warsame@lycee-djibouti.ecolemiriam.app', 'Abdi Warsame', 'Abdi', 'Warsame', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-04', 'cly-djibouti-tenant-0001', 'halima.hassan@lycee-djibouti.ecolemiriam.app', 'Halima Hassan', 'Halima', 'Hassan', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-05', 'cly-djibouti-tenant-0001', 'said.guelleh@lycee-djibouti.ecolemiriam.app', 'Said Guelleh', 'Said', 'Guelleh', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-06', 'cly-djibouti-tenant-0001', 'asha.mahamoud@lycee-djibouti.ecolemiriam.app', 'Asha Mahamoud', 'Asha', 'Mahamoud', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-07', 'cly-djibouti-tenant-0001', 'omar.farah@lycee-djibouti.ecolemiriam.app', 'Omar Farah', 'Omar', 'Farah', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-08', 'cly-djibouti-tenant-0001', 'lul.barkat@lycee-djibouti.ecolemiriam.app', 'Lul Barkat', 'Lul', 'Barkat', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-09', 'cly-djibouti-tenant-0001', 'yacin.djama@lycee-djibouti.ecolemiriam.app', 'Yacin Djama', 'Yacin', 'Djama', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-10', 'cly-djibouti-tenant-0001', 'hodan.osman@lycee-djibouti.ecolemiriam.app', 'Hodan Osman', 'Hodan', 'Osman', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-11', 'cly-djibouti-tenant-0001', 'khalid.ibrahim@lycee-djibouti.ecolemiriam.app', 'Khalid Ibrahim', 'Khalid', 'Ibrahim', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-12', 'cly-djibouti-tenant-0001', 'nasra.hared@lycee-djibouti.ecolemiriam.app', 'Nasra Hared', 'Nasra', 'Hared', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-13', 'cly-djibouti-tenant-0001', 'ridwan.abdi@lycee-djibouti.ecolemiriam.app', 'Ridwan Abdi', 'Ridwan', 'Abdi', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-14', 'cly-djibouti-tenant-0001', 'leyla.yusuf@lycee-djibouti.ecolemiriam.app', 'Leyla Yusuf', 'Leyla', 'Yusuf', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-15', 'cly-djibouti-tenant-0001', 'ahmed.mumin@lycee-djibouti.ecolemiriam.app', 'Ahmed Mumin', 'Ahmed', 'Mumin', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-16', 'cly-djibouti-tenant-0001', 'fartun.nour@lycee-djibouti.ecolemiriam.app', 'Fartun Nour', 'Fartun', 'Nour', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-17', 'cly-djibouti-tenant-0001', 'ismail.robleh@lycee-djibouti.ecolemiriam.app', 'Ismail Robleh', 'Ismail', 'Robleh', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-18', 'cly-djibouti-tenant-0001', 'deqa.elmi@lycee-djibouti.ecolemiriam.app', 'Deqa Elmi', 'Deqa', 'Elmi', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-19', 'cly-djibouti-tenant-0001', 'mukhtar.awale@lycee-djibouti.ecolemiriam.app', 'Mukhtar Awale', 'Mukhtar', 'Awale', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW()),
+  ('cly-user-ens-20', 'cly-djibouti-tenant-0001', 'faiza.keyd@lycee-djibouti.ecolemiriam.app', 'Faiza Keyd', 'Faiza', 'Keyd', 'TEACHER', true, '$2a$10$laTMZjmMx9xgcPNcZtFNceaC6JIJvqjhHlMMBZ8Gwcwfa.At0b4H6', NOW(), NOW());
 
 -- 20 Enseignants
 INSERT INTO public.enseignants (id, "tenantId", "userId", matricule, specialite, "typeContrat", "dateEntree")

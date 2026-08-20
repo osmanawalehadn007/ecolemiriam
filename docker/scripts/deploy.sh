@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============================================================
-# EcolPro — Déploiement automatisé sur le VPS
+# École Miriam — Déploiement automatisé sur le VPS
 # ============================================================
 #
 # Étapes :
@@ -37,40 +37,40 @@ cd "$DOCKER_DIR"
 # --- Mode rollback ---
 if [ "${1:-}" = "--rollback" ]; then
   log "=== ROLLBACK ==="
-  if docker image inspect ecolpro-app:previous &>/dev/null; then
-    docker tag ecolpro-app:previous ecolpro-app:latest
+  if docker image inspect ecolemiriam-app:previous &>/dev/null; then
+    docker tag ecolemiriam-app:previous ecolemiriam-app:latest
     docker compose -f "$COMPOSE_FILE" up -d app
-    log "Rollback terminé. Vérifier : docker exec ecolpro-app curl -f http://localhost:3000/api/health"
+    log "Rollback terminé. Vérifier : docker exec ecolemiriam-app curl -f http://localhost:3000/api/health"
   else
-    err "Aucune image précédente (ecolpro-app:previous) trouvée"
+    err "Aucune image précédente (ecolemiriam-app:previous) trouvée"
   fi
   exit 0
 fi
 
 # 1. Backup pré-déploiement
 log "1/5 — backup pré-déploiement..."
-docker exec ecolpro-pgbackrest pgbackrest --stanza=ecolpro --type=incr backup 2>/dev/null || warn "Backup a échoué — continuer"
+docker exec ecolemiriam-pgbackrest pgbackrest --stanza=ecolemiriam --type=incr backup 2>/dev/null || warn "Backup a échoué — continuer"
 
 # 2. Build
 log "2/5 — build de l'image Next.js..."
-docker build -t ecolpro-app:new "$PROJECT_DIR" -f "${DOCKER_DIR}/app/Dockerfile"
+docker build -t ecolemiriam-app:new "$PROJECT_DIR" -f "${DOCKER_DIR}/app/Dockerfile"
 
 # 3. Sauvegarder l'image actuelle
-if docker image inspect ecolpro-app:latest &>/dev/null; then
-  docker tag ecolpro-app:latest ecolpro-app:previous
-  log "  → image actuelle sauvegardée comme ecolpro-app:previous"
+if docker image inspect ecolemiriam-app:latest &>/dev/null; then
+  docker tag ecolemiriam-app:latest ecolemiriam-app:previous
+  log "  → image actuelle sauvegardée comme ecolemiriam-app:previous"
 fi
 
 # 4. Déployer
 log "3/5 — déploiement..."
-docker tag ecolpro-app:new ecolpro-app:latest
+docker tag ecolemiriam-app:new ecolemiriam-app:latest
 docker compose -f "$COMPOSE_FILE" up -d app
 
 # 5. Healthcheck
 log "4/5 — healthcheck (60s max)..."
 HEALTH_OK=false
 for i in $(seq 1 12); do
-  if docker exec ecolpro-app curl -sf http://localhost:3000/api/health 2>/dev/null; then
+  if docker exec ecolemiriam-app curl -sf http://localhost:3000/api/health 2>/dev/null; then
     HEALTH_OK=true
     break
   fi
@@ -79,10 +79,10 @@ done
 
 if [ "$HEALTH_OK" = "false" ]; then
   err "Healthcheck échoué — ROLLBACK AUTOMATIQUE"
-  docker tag ecolpro-app:previous ecolpro-app:latest
+  docker tag ecolemiriam-app:previous ecolemiriam-app:latest
   docker compose -f "$COMPOSE_FILE" up -d app
   warn "Rollback effectué."
-  warn "Logs : docker logs ecolpro-app --tail 50"
+  warn "Logs : docker logs ecolemiriam-app --tail 50"
   exit 1
 fi
 
@@ -95,6 +95,6 @@ docker image prune -f >/dev/null 2>&1 || true
 log "=== Déploiement terminé ✓ ==="
 log ""
 log "Vérifications :"
-log "  • App : docker exec ecolpro-app curl -f http://localhost:3000/api/health"
-log "  • Logs : docker logs ecolpro-app --tail 20 -f"
+log "  • App : docker exec ecolemiriam-app curl -f http://localhost:3000/api/health"
+log "  • Logs : docker logs ecolemiriam-app --tail 20 -f"
 log "  • Rollback : $0 --rollback"

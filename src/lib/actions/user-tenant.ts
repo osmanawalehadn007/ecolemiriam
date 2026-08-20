@@ -105,7 +105,7 @@ export async function addUserToTenant(params: {
   }
 
   // Créer un nouvel utilisateur avec mot de passe temporaire
-  const tempPassword = params.temporaryPassword || "EcolPro2026!";
+  const tempPassword = params.temporaryPassword || "École Miriam2026!";
   const hashed = await bcrypt.hash(tempPassword, 10);
 
   const [firstName, ...restName] = params.email.split("@");

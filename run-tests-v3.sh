@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test EcolPro v3 - Actions reelles avec selecteurs precis
+# Test École Miriam v3 - Actions reelles avec selecteurs precis
 B="$HOME/.claude/skills/gstack/browse/dist/browse"
 BASE="http://localhost:3002"
 
@@ -7,7 +7,7 @@ echo "=== 1. Login admin ==="
 $B goto "$BASE/login"
 $B wait --networkidle
 sleep 1
-$B fill 'input[type="email"]' "admin@lycee-demo.ecolpro.app"
+$B fill 'input[type="email"]' "admin@lycee-demo.ecolemiriam.app"
 $B fill 'input[type="password"]' "Demo@2026!"
 $B click 'button[type="submit"]'
 $B wait --networkidle
@@ -28,7 +28,7 @@ $B snapshot -i
 # Fill form - use ID selectors
 $B fill '#name' "Awa Diallo"
 sleep 0.3
-$B fill '#email' "awa.diallo@lycee-demo.ecolpro.app"
+$B fill '#email' "awa.diallo@lycee-demo.ecolemiriam.app"
 sleep 0.3
 $B select '#role' "TEACHER"
 sleep 0.3
@@ -52,7 +52,7 @@ $B click 'button:has-text("Ajouter un utilisateur")'
 sleep 2
 $B fill '#name' "Fatou Ndiaye"
 sleep 0.3
-$B fill '#email' "fatou.ndiaye@lycee-demo.ecolpro.app"
+$B fill '#email' "fatou.ndiaye@lycee-demo.ecolemiriam.app"
 sleep 0.3
 $B select '#role' "PARENT"
 sleep 0.3

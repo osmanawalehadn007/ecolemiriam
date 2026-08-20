@@ -1,5 +1,5 @@
 /**
- * EcolPro — Helper d'import réutilisable (CSV, Excel)
+ * École Miriam — Helper d'import réutilisable (CSV, Excel)
  * Utilise papaparse pour CSV et exceljs pour Excel.
  */
 

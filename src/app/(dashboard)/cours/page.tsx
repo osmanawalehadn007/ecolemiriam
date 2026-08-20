@@ -8,7 +8,7 @@ import { getSitesForUser } from "@/lib/actions/eleve";
 import { getSiteColorMap } from "@/lib/site-colors";
 import { SiteTabs } from "@/components/sites/SiteTabs";
 
-export const metadata = { title: "Cours en ligne — LMS | EcolPro" };
+export const metadata = { title: "Cours en ligne — LMS | École Miriam" };
 
 export default async function CoursPage({
   searchParams,

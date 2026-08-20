@@ -13,7 +13,7 @@ const MobileLoginSchema = z.object({
 
 async function signToken(payload: Record<string, unknown>): Promise<string> {
   const secret = new TextEncoder().encode(
-    process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? "ecolpro-dev-secret"
+    process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? "ecolemiriam-dev-secret"
   );
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
     const { email, password, tenantSlug } = parsed.data;
 
-    // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter -- endpoint d'authentification mobile : lookup par email/password, pas de session utilisateur disponible
+    // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- endpoint d'authentification mobile : lookup par email/password, pas de session utilisateur disponible
     const user = await prisma.user.findUnique({
       where: { email },
       select: {
@@ -76,7 +76,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Cet compte n'appartient pas à cet établissement" }, { status: 403 });
     }
 
-    // eslint-disable-next-line ecolpro/require-tenant-id -- self-update après authentification réussie : user.id provient du findUnique ci-dessus, pas d'entrée utilisateur
+    // eslint-disable-next-line ecolemiriam/require-tenant-id -- self-update après authentification réussie : user.id provient du findUnique ci-dessus, pas d'entrée utilisateur
     await prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },

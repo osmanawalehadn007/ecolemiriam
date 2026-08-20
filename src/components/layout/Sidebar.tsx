@@ -186,7 +186,7 @@ export function Sidebar({ userName = "Admin", userRole = "Directeur", userAvatar
         {!collapsed && (
           <div className="overflow-visible animate-fade-in">
             <p className="text-base font-extrabold bg-gradient-to-r from-indigo-200 via-purple-200 to-pink-200 bg-clip-text text-transparent tracking-wide leading-none">
-              EcolPro
+              École Miriam
             </p>
             <TenantSwitcher currentTenantName={tenantName} currentTenantId={tenantId} availableTenants={availableTenants} />
             <SiteSwitcher currentSiteId={currentSiteId} sites={sites} isAdmin={isSiteAdmin} />

@@ -1,11 +1,11 @@
 {
-  "name": "EcolPro Monitoring",
-  "description": "Configuration Uptime Kuma pour EcolPro VPS",
+  "name": "École Miriam Monitoring",
+  "description": "Configuration Uptime Kuma pour École Miriam VPS",
   "monitors": [
     {
       "name": "App Health",
       "type": "http",
-      "url": "https://app.ecloemiriam.com/api/health",
+      "url": "https://app.ecolemiriam.com/api/health",
       "interval": 60,
       "timeout": 10,
       "retryInterval": 30,
@@ -14,7 +14,7 @@
         "type": "telegram",
         "botToken": "${TELEGRAM_BOT_TOKEN}",
         "chatID": "${TELEGRAM_CHAT_ID}",
-        "message": "🔴 App EcolPro DOWN — {{ msg }}"
+        "message": "🔴 App École Miriam DOWN — {{ msg }}"
       }
     },
     {
@@ -25,18 +25,18 @@
       "interval": 60,
       "notification": {
         "type": "telegram",
-        "message": "🔴 Postgres EcolPro DOWN"
+        "message": "🔴 Postgres École Miriam DOWN"
       }
     },
     {
       "name": "Cloudflare Tunnel",
       "type": "http",
-      "url": "https://app.ecloemiriam.com",
+      "url": "https://app.ecolemiriam.com",
       "interval": 120,
       "timeout": 15,
       "notification": {
         "type": "telegram",
-        "message": "🔴 Cloudflare Tunnel EcolPro DOWN"
+        "message": "🔴 Cloudflare Tunnel École Miriam DOWN"
       }
     },
     {
@@ -45,7 +45,7 @@
       "interval": 86400,
       "notification": {
         "type": "telegram",
-        "message": "🔴 pgBackRest backup EcolPro manquant depuis 24h"
+        "message": "🔴 pgBackRest backup École Miriam manquant depuis 24h"
       }
     }
   ],

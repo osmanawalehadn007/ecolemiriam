@@ -36,7 +36,7 @@ export async function GET(
           },
         },
         tenant: true,
-        // eslint-disable-next-line ecolpro/require-site-filter -- paiement n'a pas de siteId, scopé via la facture parente déjà filtrée par site
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- paiement n'a pas de siteId, scopé via la facture parente déjà filtrée par site
         paiements: {
           orderBy: { date: "desc" },
           include: { enregistrePar: { select: { name: true } } },
@@ -228,7 +228,7 @@ export async function GET(
         <div class="signature-line">Cachet & Signature</div>
       </div>
       <div class="stamp">
-        EcolPro — Facture générée le ${new Date().toLocaleDateString("fr-FR")}
+        École Miriam — Facture générée le ${new Date().toLocaleDateString("fr-FR")}
       </div>
     </div>
   </div>

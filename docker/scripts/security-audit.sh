@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============================================================
-# EcolPro — Audit sécurité scoré (livrable clé)
+# École Miriam — Audit sécurité scoré (livrable clé)
 # ============================================================
 #
 # Vérifie 30+ contrôles de sécurité et attribue un score.
@@ -44,7 +44,7 @@ fail() { FAILS+=("$1 (perte: $2 pts)"); }
 warn() { WARNS+=("$1"); }
 
 echo -e "${BLUE}============================================================${NC}"
-echo -e "${BLUE}  EcolPro — Audit de Sécurité Scoré${NC}"
+echo -e "${BLUE}  École Miriam — Audit de Sécurité Scoré${NC}"
 echo -e "${BLUE}  $(date -u +%Y-%m-%dT%H:%M:%SZ)${NC}"
 echo -e "${BLUE}============================================================${NC}"
 echo ""
@@ -111,7 +111,7 @@ fi
 echo -e "${BLUE}--- 2. Docker & Conteneurs (20 pts) ---${NC}"
 
 # 2.1 Pas de ports publiés (5 pts)
-PUBLISHED=$(docker compose -f /opt/ecolpro/docker/docker-compose.yml config 2>/dev/null | grep -c "published:" || echo "0")
+PUBLISHED=$(docker compose -f /opt/ecolemiriam/docker/docker-compose.yml config 2>/dev/null | grep -c "published:" || echo "0")
 if [ "$PUBLISHED" -eq 0 ]; then
   pass "Docker : aucun port publié" 5
 else
@@ -119,7 +119,7 @@ else
 fi
 
 # 2.2 read_only sur app (3 pts)
-if docker inspect ecolpro-app 2>/dev/null | grep -q '"Readonly": true'; then
+if docker inspect ecolemiriam-app 2>/dev/null | grep -q '"Readonly": true'; then
   pass "App : filesystem read-only" 3
 else
   fail "App : filesystem non read-only" 3
@@ -137,14 +137,14 @@ else
 fi
 
 # 2.4 cap_drop ALL (3 pts)
-if docker inspect ecolpro-app 2>/dev/null | grep -q '"ALL"'; then
+if docker inspect ecolemiriam-app 2>/dev/null | grep -q '"ALL"'; then
   pass "App : cap_drop ALL" 3
 else
   fail "App : capabilities non limitées" 3
 fi
 
 # 2.5 Non-root user (3 pts)
-APP_USER=$(docker inspect ecolpro-app 2>/dev/null | grep -oP '"User":\s*"\K[^"]+' | head -1 || echo "")
+APP_USER=$(docker inspect ecolemiriam-app 2>/dev/null | grep -oP '"User":\s*"\K[^"]+' | head -1 || echo "")
 if [ -n "$APP_USER" ] && [ "$APP_USER" != "root" ] && [ "$APP_USER" != "0" ]; then
   pass "App : utilisateur non-root ($APP_USER)" 3
 else
@@ -164,7 +164,7 @@ fi
 echo -e "${BLUE}--- 3. Postgres & RLS (20 pts) ---${NC}"
 
 # 3.1 RLS activée (5 pts)
-RLS_TABLES=$(docker exec ecolpro-postgres psql -U ecolpro_owner -d ecolpro -t -c \
+RLS_TABLES=$(docker exec ecolemiriam-postgres psql -U ecolemiriam_owner -d ecolemiriam -t -c \
   "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='r' AND c.relrowsecurity" 2>/dev/null || echo "0")
 if [ "$RLS_TABLES" -gt 0 ]; then
   pass "RLS : $RLS_TABLES tables avec RLS" 5
@@ -172,17 +172,17 @@ else
   fail "RLS : aucune table avec RLS" 5
 fi
 
-# 3.2 ecolpro_app NOBYPASSRLS (5 pts)
-BYPASS=$(docker exec ecolpro-postgres psql -U ecolpro_owner -d ecolpro -t -c \
-  "SELECT rolbypassrls FROM pg_roles WHERE rolname='ecolpro_app'" 2>/dev/null | xargs || echo "t")
+# 3.2 ecolemiriam_app NOBYPASSRLS (5 pts)
+BYPASS=$(docker exec ecolemiriam-postgres psql -U ecolemiriam_owner -d ecolemiriam -t -c \
+  "SELECT rolbypassrls FROM pg_roles WHERE rolname='ecolemiriam_app'" 2>/dev/null | xargs || echo "t")
 if [ "$BYPASS" = "f" ]; then
-  pass "ecolpro_app : NOBYPASSRLS" 5
+  pass "ecolemiriam_app : NOBYPASSRLS" 5
 else
-  fail "ecolpro_app : bypassrls activé (CRITIQUE)" 5
+  fail "ecolemiriam_app : bypassrls activé (CRITIQUE)" 5
 fi
 
 # 3.3 scram-sha-256 (3 pts)
-PG_AUTH=$(docker exec ecolpro-postgres psql -U ecolpro_owner -d ecolpro -t -c \
+PG_AUTH=$(docker exec ecolemiriam-postgres psql -U ecolemiriam_owner -d ecolemiriam -t -c \
   "SELECT count(*) FROM pg_authid WHERE rolpassword LIKE 'SCRAM-SHA-256%'" 2>/dev/null || echo "0")
 if [ "$PG_AUTH" -gt 0 ]; then
   pass "Postgres : mots de passe en scram-sha-256" 3
@@ -191,7 +191,7 @@ else
 fi
 
 # 3.4 pgaudit actif (3 pts)
-PGAUDIT=$(docker exec ecolpro-postgres psql -U ecolpro_owner -d ecolpro -t -c \
+PGAUDIT=$(docker exec ecolemiriam-postgres psql -U ecolemiriam_owner -d ecolemiriam -t -c \
   "SELECT count(*) FROM pg_extension WHERE extname='pgaudit'" 2>/dev/null || echo "0")
 if [ "$PGAUDIT" -gt 0 ]; then
   pass "pgaudit : extension active" 3
@@ -200,7 +200,7 @@ else
 fi
 
 # 3.5 pg_hba reject all (4 pts)
-if docker exec ecolpro-postgres cat /etc/postgresql/pg_hba.conf 2>/dev/null | grep -q "reject"; then
+if docker exec ecolemiriam-postgres cat /etc/postgresql/pg_hba.conf 2>/dev/null | grep -q "reject"; then
   pass "pg_hba : règle reject all présente" 4
 else
   fail "pg_hba : pas de règle reject all" 4
@@ -212,14 +212,14 @@ fi
 echo -e "${BLUE}--- 4. Secrets & Chiffrement (15 pts) ---${NC}"
 
 # 4.1 SOPS + age (5 pts)
-if [ -f /opt/ecolpro/docker/keys/age-key.txt ] && command -v sops &>/dev/null; then
+if [ -f /opt/ecolemiriam/docker/keys/age-key.txt ] && command -v sops &>/dev/null; then
   pass "SOPS + age : configuré" 5
 else
   fail "SOPS + age : non configuré" 5
 fi
 
 # 4.2 Docker secrets (pas en clair dans env) (4 pts)
-SECRETS_COUNT=$(docker inspect ecolpro-postgres 2>/dev/null | grep -c "Secrets" || echo "0")
+SECRETS_COUNT=$(docker inspect ecolemiriam-postgres 2>/dev/null | grep -c "Secrets" || echo "0")
 if [ "$SECRETS_COUNT" -gt 0 ]; then
   pass "Docker secrets : utilisés" 4
 else
@@ -227,14 +227,14 @@ else
 fi
 
 # 4.3 .env.production pas en clair dans l'image (3 pts)
-if docker exec ecolpro-app ls /app/.env 2>/dev/null; then
+if docker exec ecolemiriam-app ls /app/.env 2>/dev/null; then
   fail ".env : présent dans l'image (CRITIQUE)" 3
 else
   pass ".env : absent de l'image" 3
 fi
 
 # 4.4 Permissions secrets (3 pts)
-SECRETS_DIR="/opt/ecolpro/docker/secrets"
+SECRETS_DIR="/opt/ecolemiriam/docker/secrets"
 if [ -d "$SECRETS_DIR" ]; then
   BAD_PERMS=$(find "$SECRETS_DIR" -name "*.txt" ! -perm 600 | wc -l)
   if [ "$BAD_PERMS" -eq 0 ]; then
@@ -259,7 +259,7 @@ else
 fi
 
 # 5.2 Backup récent (< 24h) (3 pts)
-LAST_BACKUP=$(docker exec ecolpro-pgbackrest pgbackrest --stanza=ecolpro info 2>/dev/null | grep -oP 'timestamp:\s*\K[^,]+' | head -1 || echo "")
+LAST_BACKUP=$(docker exec ecolemiriam-pgbackrest pgbackrest --stanza=ecolemiriam info 2>/dev/null | grep -oP 'timestamp:\s*\K[^,]+' | head -1 || echo "")
 if [ -n "$LAST_BACKUP" ]; then
   pass "Backup : dernier backup à $LAST_BACKUP" 3
 else
@@ -267,7 +267,7 @@ else
 fi
 
 # 5.3 Chiffrement des backups (3 pts)
-if docker exec ecolpro-pgbackrest cat /etc/pgbackrest/pgbackrest.conf 2>/dev/null | grep -q "cipher-type"; then
+if docker exec ecolemiriam-pgbackrest cat /etc/pgbackrest/pgbackrest.conf 2>/dev/null | grep -q "cipher-type"; then
   pass "Backups : chiffrés (aes-256)" 3
 else
   fail "Backups : non chiffrés" 3
@@ -286,14 +286,14 @@ else
 fi
 
 # 6.2 TLS interne (Caddy) (3 pts)
-if docker exec ecolpro-caddy cat /etc/caddy/Caddyfile 2>/dev/null | grep -q "tls internal"; then
+if docker exec ecolemiriam-caddy cat /etc/caddy/Caddyfile 2>/dev/null | grep -q "tls internal"; then
   pass "TLS interne : configuré (Caddy)" 3
 else
   fail "TLS interne : non configuré" 3
 fi
 
 # 6.3 Headers de sécurité (3 pts)
-if docker exec ecolpro-caddy cat /etc/caddy/Caddyfile 2>/dev/null | grep -q "Strict-Transport-Security"; then
+if docker exec ecolemiriam-caddy cat /etc/caddy/Caddyfile 2>/dev/null | grep -q "Strict-Transport-Security"; then
   pass "Headers de sécurité : HSTS + CSP" 3
 else
   fail "Headers de sécurité : manquants" 3
@@ -312,7 +312,7 @@ else
 fi
 
 # 7.2 Healthcheck app (2 pts)
-if docker inspect ecolpro-app 2>/dev/null | grep -q "healthcheck"; then
+if docker inspect ecolemiriam-app 2>/dev/null | grep -q "healthcheck"; then
   pass "App : healthcheck configuré" 2
 else
   fail "App : pas de healthcheck" 2

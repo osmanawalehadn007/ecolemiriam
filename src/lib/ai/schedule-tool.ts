@@ -1,5 +1,5 @@
 /**
- * EcolPro — Outil IA : proposition de créneau d'emploi du temps
+ * École Miriam — Outil IA : proposition de créneau d'emploi du temps
  * ============================================================
  * L'IA ne crée JAMAIS de créneau directement. Elle résout les noms
  * (classe/matière/enseignant) en identifiants réels, vérifie les conflits
@@ -419,12 +419,12 @@ export async function listCreneaux(
   const emplois = await prisma.emploiTemps.findMany({
     where: { tenantId, ...siteFilterForModel("emploiTemps", siteClaims ?? {}), classeId: classe.id, annee, ...(args.jour ? { jour: args.jour } : {}) },
     include: {
-      // eslint-disable-next-line ecolpro/require-site-filter -- relation to-one depuis emploiTemps déjà filtré par site au niveau parent
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- relation to-one depuis emploiTemps déjà filtré par site au niveau parent
       matiere: { select: { nom: true } },
-      // eslint-disable-next-line ecolpro/require-site-filter -- relation to-one depuis emploiTemps déjà filtré par site au niveau parent
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- relation to-one depuis emploiTemps déjà filtré par site au niveau parent
       enseignant: {
         include: {
-          // eslint-disable-next-line ecolpro/require-site-filter -- user est un modèle d'auth, pas de données tenant
+          // eslint-disable-next-line ecolemiriam/require-site-filter -- user est un modèle d'auth, pas de données tenant
           user: { select: { name: true } },
         },
       },

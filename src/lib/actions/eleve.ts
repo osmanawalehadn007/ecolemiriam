@@ -120,7 +120,7 @@ export async function getEleveForEdit(id: string) {
       // EleveParent n'a pas de colonne siteId propre : l'isolation passe par
       // l'élève parent qui est déjà filtré par tenantId et siteId. Un lien
       // eleveParent appartient forcément au même périmètre que son élève.
-      // eslint-disable-next-line ecolpro/require-site-filter
+      // eslint-disable-next-line ecolemiriam/require-site-filter
       parents: {
         include: { parent: true },
         orderBy: { isGardien: "desc" },
@@ -186,7 +186,7 @@ export async function createEleve(
     matricule = `ECL-${anneeInscription}-${String(count + 1).padStart(4, "0")}`;
   }
 
-  // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter -- findUnique sur contrainte unique tenantId_matricule, le tenantId est dans la clé composite
+  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- findUnique sur contrainte unique tenantId_matricule, le tenantId est dans la clé composite
   const existing = await prisma.eleve.findUnique({
     where: { tenantId_matricule: { tenantId, matricule } },
   });
@@ -236,7 +236,7 @@ export async function createEleve(
   // S'il n'est rattaché à aucune classe, on conserve le site de la session.
   let resolvedSiteId = session.user.siteId ?? null;
   if (values.classeId) {
-    // eslint-disable-next-line ecolpro/require-site-filter, ecolpro/require-tenant-id -- findUnique pour récupérer le siteId de la classe
+    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-tenant-id -- findUnique pour récupérer le siteId de la classe
     const classe = await prisma.classe.findUnique({
       where: { id: values.classeId },
       select: { siteId: true },
@@ -325,7 +325,7 @@ export async function updateEleve(
   const existing = await prisma.eleve.findFirst({
     where: { id, tenantId, ...siteFilterForModel("eleve", session.user) },
     // Voir ci-dessus : eleveParent est isolé par son élève parent.
-    // eslint-disable-next-line ecolpro/require-site-filter
+    // eslint-disable-next-line ecolemiriam/require-site-filter
     include: { parents: { include: { parent: true } } },
   });
   if (!existing) throw new Error("Élève non trouvé");
@@ -382,7 +382,7 @@ export async function updateEleve(
     if (classe?.siteId) resolvedSiteId = classe.siteId;
   }
 
-  // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter -- existing vérifié avec tenantId + siteFilter ci-dessus
+  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- existing vérifié avec tenantId + siteFilter ci-dessus
   await prisma.eleve.update({
     where: { id },
     data: {
@@ -411,7 +411,7 @@ export async function updateEleve(
   const tuteurLink = existing.parents[0];
   if (values.parentNom && values.parentPrenom && values.parentPhone) {
     if (tuteurLink) {
-      // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter -- tuteurLink.parentId vérifié via existing (tenantId + siteFilter)
+      // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- tuteurLink.parentId vérifié via existing (tenantId + siteFilter)
       await prisma.parent.update({
         where: { id: tuteurLink.parentId },
         data: {

@@ -1,5 +1,5 @@
 -- ============================================================
--- EcolPro — Init SQL (exécuté au 1er démarrage Postgres)
+-- École Miriam — Init SQL (exécuté au 1er démarrage Postgres)
 -- ============================================================
 -- Extensions, rôles least-privilege, fonctions RLS, default privileges.
 -- Ce script ne s'exécute qu'une fois (docker-entrypoint-initdb.d).
@@ -13,7 +13,7 @@ CREATE EXTENSION IF NOT EXISTS "pgaudit";
 
 -- 2. Rôle applicatif (NOBYPASSRLS — la RLS s'applique obligatoirement)
 DO $$ BEGIN
-  CREATE ROLE ecolpro_app
+  CREATE ROLE ecolemiriam_app
     WITH LOGIN
     NOBYPASSRLS
     NOSUPERUSER
@@ -28,24 +28,24 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- 4. Privilèges
 -- Owner : tout sur la base (pour Prisma migrations)
-GRANT ALL PRIVILEGES ON DATABASE ecolpro TO ecolpro_owner;
+GRANT ALL PRIVILEGES ON DATABASE ecolemiriam TO ecolemiriam_owner;
 
 -- App : CRUD sur les tables + exécution des fonctions + séquences
-GRANT CONNECT ON DATABASE ecolpro TO ecolpro_app;
-GRANT USAGE ON SCHEMA public TO ecolpro_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ecolpro_app;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ecolpro_app;
+GRANT CONNECT ON DATABASE ecolemiriam TO ecolemiriam_app;
+GRANT USAGE ON SCHEMA public TO ecolemiriam_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ecolemiriam_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ecolemiriam_app;
 
 -- 5. Default privileges pour les futures tables (Prisma db push / migrate)
-ALTER DEFAULT PRIVILEGES FOR ROLE ecolpro_owner IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ecolpro_app;
-ALTER DEFAULT PRIVILEGES FOR ROLE ecolpro_owner IN SCHEMA public
-  GRANT USAGE, SELECT ON SEQUENCES TO ecolpro_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE ecolemiriam_owner IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ecolemiriam_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE ecolemiriam_owner IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO ecolemiriam_app;
 
 -- 6. Exécution des fonctions de contexte RLS
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO ecolpro_app;
-ALTER DEFAULT PRIVILEGES FOR ROLE ecolpro_owner IN SCHEMA public
-  GRANT EXECUTE ON FUNCTIONS TO ecolpro_app;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO ecolemiriam_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE ecolemiriam_owner IN SCHEMA public
+  GRANT EXECUTE ON FUNCTIONS TO ecolemiriam_app;
 
 -- 7. Fonctions de contexte RLS (tenant + site)
 -- Ces fonctions sont appelées par l'app via SET LOCAL au début de chaque transaction.
@@ -83,7 +83,7 @@ $$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
 -- 8. Message de vérification
 \echo '=== Initialisation Postgres terminée ==='
-\echo 'Rôles créés : ecolpro_app (NOBYPASSRLS), pgaudit_log'
+\echo 'Rôles créés : ecolemiriam_app (NOBYPASSRLS), pgaudit_log'
 \echo 'Extensions : pgcrypto, uuid-ossp, pg_stat_statements, pgaudit'
 \echo 'Fonctions RLS : set_tenant_context, set_site_context, current_tenant_id, current_site_id'
-\echo 'Default privileges : configurés pour ecolpro_owner → ecolpro_app'
+\echo 'Default privileges : configurés pour ecolemiriam_owner → ecolemiriam_app'

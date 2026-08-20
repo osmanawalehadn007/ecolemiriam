@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============================================================
-# EcolPro — Test de restauration automatisé + notify Telegram
+# École Miriam — Test de restauration automatisé + notify Telegram
 # ============================================================
 #
 # Effectue un test de restauration pgBackRest en mode dry-run
@@ -55,7 +55,7 @@ fi
 
 # 2. Lister les backups
 log "2/4 — liste des backups..."
-BACKUP_INFO=$(docker exec ecolpro-pgbackrest pgbackrest --stanza=ecolpro info 2>&1 || echo "ERREUR")
+BACKUP_INFO=$(docker exec ecolemiriam-pgbackrest pgbackrest --stanza=ecolemiriam info 2>&1 || echo "ERREUR")
 if echo "$BACKUP_INFO" | grep -q "ERREUR\|error"; then
   RESULT="FAIL"
   DETAILS="Impossible de récupérer les infos backup"
@@ -70,7 +70,7 @@ fi
 if [ "$RESULT" = "SUCCESS" ]; then
   log "3/4 — test restore dry-run (PITR vers il y a 1h)..."
   TARGET_TIME=$(date -u -d '1 hour ago' '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -u -v-1H '+%Y-%m-%d %H:%M:%S')
-  RESTORE_OUTPUT=$(docker exec ecolpro-pgbackrest pgbackrest --stanza=ecolpro \
+  RESTORE_OUTPUT=$(docker exec ecolemiriam-pgbackrest pgbackrest --stanza=ecolemiriam \
     --type=time --target="$TARGET_TIME" --target-action=promote restore --dry-run 2>&1 || echo "FAIL")
 
   if echo "$RESTORE_OUTPUT" | grep -qi "error\|fail"; then
@@ -86,7 +86,7 @@ fi
 # 4. Vérifier l'intégrité
 if [ "$RESULT" = "SUCCESS" ]; then
   log "4/4 — vérification intégrité..."
-  CHECK_OUTPUT=$(docker exec ecolpro-pgbackrest pgbackrest --stanza=ecolpro check 2>&1 || echo "FAIL")
+  CHECK_OUTPUT=$(docker exec ecolemiriam-pgbackrest pgbackrest --stanza=ecolemiriam check 2>&1 || echo "FAIL")
   if echo "$CHECK_OUTPUT" | grep -qi "error\|fail"; then
     warn "  → check : warnings (peut être normal)"
     DETAILS="$DETAILS | Check: warnings"
@@ -100,7 +100,7 @@ fi
 log "Notification Telegram..."
 
 TIMESTAMP=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
-MESSAGE="🔔 *Test de restauration EcolPro*
+MESSAGE="🔔 *Test de restauration École Miriam*
 "
 MESSAGE+="*Date:* ${TIMESTAMP}
 "

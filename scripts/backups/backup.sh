@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============================================================
-# EcolPro — Sauvegarde PostgreSQL chiffrée + upload off-site
+# École Miriam — Sauvegarde PostgreSQL chiffrée + upload off-site
 # ============================================================
 #
 # Usage :
@@ -12,26 +12,26 @@ set -euo pipefail
 #   - pg_dump (libpq-client) installé
 #   - age (chiffrement) : brew install age  /  apt install age
 #   - rclone (upload) configuré pour un remote (R2, S3, Backblaze…)
-#     → rclone config  (nommer le remote "ecolpro-backup")
+#     → rclone config  (nommer le remote "ecolemiriam-backup")
 #
 # Variables d'environnement (à définir dans .env ou CI) :
 #   DIRECT_URL      — URL Postgres directe (rôle propriétaire)
 #   BACKUP_AGE_KEY  — clé publique age pour le chiffrement
-#   BACKUP_RCLONE_REMOTE — nom du remote rclone (défaut: ecolpro-backup)
+#   BACKUP_RCLONE_REMOTE — nom du remote rclone (défaut: ecolemiriam-backup)
 #   BACKUP_RETENTION_DAYS — rétention off-site (défaut: 30)
 #
 # Cron recommandé (quotidien à 02h) :
-#   0 2 * * * /path/to/ecolpro/scripts/backups/backup.sh >> /var/log/ecolpro-backup.log 2>&1
+#   0 2 * * * /path/to/ecolemiriam/scripts/backups/backup.sh >> /var/log/ecolemiriam-backup.log 2>&1
 # ============================================================
 
 DIRECT_URL="${DIRECT_URL:?DIRECT_URL est requis (URL Postgres directe)}"
 AGE_KEY="${BACKUP_AGE_KEY:?BACKUP_AGE_KEY est requis (clé publique age)}"
-REMOTE="${BACKUP_RCLONE_REMOTE:-ecolpro-backup}"
+REMOTE="${BACKUP_RCLONE_REMOTE:-ecolemiriam-backup}"
 RETENTION="${BACKUP_RETENTION_DAYS:-30}"
 
 TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
 HOSTNAME=$(hostname -s)
-FILENAME="ecolpro-${HOSTNAME}-${TIMESTAMP}.sql.gz.age"
+FILENAME="ecolemiriam-${HOSTNAME}-${TIMESTAMP}.sql.gz.age"
 TMPDIR=$(mktemp -d)
 TMPFILE="${TMPDIR}/dump.sql.gz"
 
@@ -83,7 +83,7 @@ echo "  → upload vérifié: $LOCAL_SIZE octets"
 # 5. Nettoyage off-site : supprimer les backups > RETENTION_DAYS
 echo "  → nettoyage off-site (rétention ${RETENTION} jours)..."
 rclone delete "${REMOTE}:/" \
-  --include "ecolpro-${HOSTNAME}-*.sql.gz.age" \
+  --include "ecolemiriam-${HOSTNAME}-*.sql.gz.age" \
   --min-age "${RETENTION}d" \
   --rmdirs=false
 

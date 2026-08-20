@@ -57,7 +57,7 @@ export default function LoginScreen() {
             <View className="w-16 h-16 rounded-2xl bg-primary items-center justify-center mb-4">
               <School color="white" size={32} />
             </View>
-            <Text className="text-2xl font-bold text-gray-900">EcolPro</Text>
+            <Text className="text-2xl font-bold text-gray-900">École Miriam</Text>
             <Text className="text-sm text-gray-500 mt-1">
               Gestion scolaire intelligente
             </Text>
@@ -145,23 +145,23 @@ export default function LoginScreen() {
               </Text>
               <Pressable
                 onPress={() => {
-                  setEmail("admin@lycee-demo.ecolpro.app");
+                  setEmail("admin@lycee-demo.ecolemiriam.app");
                   setPassword("Demo@2026!");
                 }}
                 className="mb-2"
               >
                 <Text className="text-xs text-primary font-medium">
-                  Admin: admin@lycee-demo.ecolpro.app / Demo@2026!
+                  Admin: admin@lycee-demo.ecolemiriam.app / Demo@2026!
                 </Text>
               </Pressable>
               <Pressable
                 onPress={() => {
-                  setEmail("enseignant@lycee-demo.ecolpro.app");
+                  setEmail("enseignant@lycee-demo.ecolemiriam.app");
                   setPassword("Demo@2026!");
                 }}
               >
                 <Text className="text-xs text-primary font-medium">
-                  Enseignant: enseignant@lycee-demo.ecolpro.app / Demo@2026!
+                  Enseignant: enseignant@lycee-demo.ecolemiriam.app / Demo@2026!
                 </Text>
               </Pressable>
             </View>

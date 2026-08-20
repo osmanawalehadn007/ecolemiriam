@@ -1,5 +1,5 @@
 # ============================================================
-# EcolPro — Image PostgreSQL 17 custom (pgaudit + pgBackRest)
+# École Miriam — Image PostgreSQL 17 custom (pgaudit + pgBackRest)
 # ============================================================
 # Image basée sur postgres:17-alpine avec :
 # - pgaudit (audit des accès aux données sensibles)

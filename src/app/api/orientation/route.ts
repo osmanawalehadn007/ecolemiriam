@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
           // Les liens parent-élève sont des enfants de l'élève retourné, lui-même
           // déjà borné au tenant et au périmètre de sites par le `where` ci-dessus :
           // l'isolation est portée par la relation.
-          // eslint-disable-next-line ecolpro/require-site-filter
+          // eslint-disable-next-line ecolemiriam/require-site-filter
           parents: { include: { parent: { select: { nom: true, prenom: true, phone: true } } } },
         },
       }),
@@ -82,11 +82,11 @@ export async function GET(req: NextRequest) {
       // déjà bornés au tenant et au périmètre de sites par le `where` ci-dessus :
       // l'isolation est portée par la relation, la répéter n'ajouterait qu'une
       // jointure vers le même élève.
-      // eslint-disable-next-line ecolpro/require-site-filter
+      // eslint-disable-next-line ecolemiriam/require-site-filter
       parcours: { orderBy: { annee: "desc" }, take: 1 },
-      // eslint-disable-next-line ecolpro/require-site-filter
+      // eslint-disable-next-line ecolemiriam/require-site-filter
       notes: { where: { isPubliee: true }, select: { valeur: true, noteMax: true, coefficient: true, matiere: { select: { nom: true, code: true } } } },
-      // eslint-disable-next-line ecolpro/require-site-filter
+      // eslint-disable-next-line ecolemiriam/require-site-filter
       absences: { where: { statut: "INJUSTIFIEE" }, select: { id: true } },
     },
     orderBy: [{ nom: "asc" }, { prenom: "asc" }],

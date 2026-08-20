@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "EcolPro",
+    "appName": "École Miriam",
     "back": "Back",
     "search": "Raadi",
     "searchPlaceholder": "Raadi arday, fasal...",
@@ -1359,7 +1359,7 @@
   },
   "superAdmin": {
     "title": "Super Admin",
-    "subtitle": "EcolPro school management",
+    "subtitle": "École Miriam school management",
     "createSchool": "Create school",
     "totalSchools": "Total schools",
     "active": "Active",
@@ -1963,14 +1963,14 @@
     "planBusinessDesc": "1000-5000 students",
     "planEnterpriseDesc": "> 5000 students",
     "trialInfo": "You get a 30-day free trial. No credit card required.",
-    "submit": "Create my EcolPro space",
+    "submit": "Create my École Miriam space",
     "backHome": "Back to home",
     "successTitle": "Space created successfully!",
     "successMsg": "Your school {name} has been registered. You get a 30-day free trial.",
     "successLoginMsg": "Log in with your admin email to get started.",
     "login": "Log in",
     "formErrors": "Fadlan sax khaladaadka form-ka",
-    "createdSuccess": "Your EcolPro space has been created! 30-day free trial.",
+    "createdSuccess": "Your École Miriam space has been created! 30-day free trial.",
     "genericError": "Khalad ayaa dhacay",
     "errSchoolName": "School name is required",
     "errCity": "City is required",
@@ -2109,7 +2109,7 @@
     "viewAllExams": "Eeg dhammaan imtixaannada"
   },
   "ai": {
-    "assistantTitle": "EcolPro AI Assistant",
+    "assistantTitle": "École Miriam AI Assistant",
     "newConversation": "New conversation",
     "close": "Xir",
     "confirm": "Ansiin",

@@ -1,9 +1,9 @@
 import { test, expect, Page } from "@playwright/test";
 
 const BASE = "http://localhost:3002";
-const ADMIN_EMAIL = "admin@lycee-demo.ecolpro.app";
-const TEACHER_EMAIL = "enseignant@lycee-demo.ecolpro.app";
-const PARENT_EMAIL = "parent@lycee-demo.ecolpro.app";
+const ADMIN_EMAIL = "admin@lycee-demo.ecolemiriam.app";
+const TEACHER_EMAIL = "enseignant@lycee-demo.ecolemiriam.app";
+const PARENT_EMAIL = "parent@lycee-demo.ecolemiriam.app";
 const PASSWORD = "Demo@2026!";
 
 async function login(page: Page, email: string, password: string) {
@@ -140,7 +140,7 @@ test.describe("PWA — service worker", () => {
     const response = await page.goto(`${BASE}/manifest.json`);
     expect(response?.ok()).toBeTruthy();
     const manifest = await response?.json();
-    expect(manifest?.name).toContain("EcolPro");
+    expect(manifest?.name).toContain("École Miriam");
     expect(manifest?.icons?.length).toBeGreaterThan(0);
     console.log(`  ✅ Manifest: ${manifest.name}, ${manifest.icons.length} icons`);
   });

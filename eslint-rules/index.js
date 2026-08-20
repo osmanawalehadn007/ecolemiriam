@@ -10,10 +10,10 @@ module.exports = {
   },
   configs: {
     recommended: {
-      plugins: ["ecolpro"],
+      plugins: ["ecolemiriam"],
       rules: {
-        "ecolpro/require-tenant-id": "error",
-        "ecolpro/require-site-filter": "error",
+        "ecolemiriam/require-tenant-id": "error",
+        "ecolemiriam/require-site-filter": "error",
       },
     },
   },

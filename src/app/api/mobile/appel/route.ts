@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     where: { id: user.tenantId },
     select: { name: true },
   });
-  const ecoleNom = tenant?.name ?? "EcolPro";
+  const ecoleNom = tenant?.name ?? "École Miriam";
 
   const absentEleveIds = Object.entries(presences as Record<string, string>)
     .filter(([, status]) => status !== "present")
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
     // `absentEleveIds` est un sous-ensemble de `eleveIdsSaisis`, dont l'appartenance
     // à la classe, au tenant et au périmètre de sites vient d'être vérifiée
     // ci-dessus (rejet en 403 sinon) : la portée est acquise en amont.
-    // eslint-disable-next-line ecolpro/require-site-filter
+    // eslint-disable-next-line ecolemiriam/require-site-filter
     const eleveParents = await prisma.eleveParent.findMany({
       where: {
         eleveId: { in: absentEleveIds },

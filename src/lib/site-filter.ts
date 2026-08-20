@@ -10,7 +10,7 @@ import {
 } from "@/lib/site-scope";
 
 /**
- * EcolPro — Isolation par site : liaison avec la session
+ * École Miriam — Isolation par site : liaison avec la session
  * =====================================================
  * La logique de décision vit dans `@/lib/site-scope` (module pur, testable
  * sans runtime d'authentification). Ce fichier n'ajoute que les helpers qui
