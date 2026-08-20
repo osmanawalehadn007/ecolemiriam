@@ -162,7 +162,7 @@ export async function createUser(data: UserFormData) {
   // laisserait créer un doublon qui échouerait ensuite en base. Seule
   // l'existence est utilisée, aucune donnée de l'autre tenant n'est exposée.
   // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter
-  const existing = await prisma.user.findUnique({ where: { email: v.email } });
+  const existing = await prisma.user.findFirst({ where: { email: { equals: v.email, mode: "insensitive" } } });
   if (existing) throw new Error("Un utilisateur avec cet email existe déjà");
 
   const password = v.password || "École Miriam2026!";

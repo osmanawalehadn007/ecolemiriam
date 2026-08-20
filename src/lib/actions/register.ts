@@ -36,8 +36,8 @@ export async function registerTenant(data: RegisterFormData) {
 
   const values = parsed.data;
 
-  const existingUser = await prisma.user.findUnique({
-    where: { email: values.adminEmail },
+  const existingUser = await prisma.user.findFirst({
+    where: { email: { equals: values.adminEmail, mode: "insensitive" } },
   });
   if (existingUser) {
     throw new Error("Un compte existe déjà avec cet email administrateur");

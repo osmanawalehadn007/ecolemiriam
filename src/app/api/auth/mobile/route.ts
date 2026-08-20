@@ -45,8 +45,9 @@ export async function POST(req: Request) {
     const { email, password, tenantSlug } = parsed.data;
 
     // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- endpoint d'authentification mobile : lookup par email/password, pas de session utilisateur disponible
-    const user = await prisma.user.findUnique({
-      where: { email },
+    // Recherche insensible à la casse (voir auth.ts pour le même correctif).
+    const user = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
       select: {
         id: true,
         email: true,

@@ -60,9 +60,9 @@ export async function addUserToTenant(params: {
     throw new Error("Établissement introuvable");
   }
 
-  // Chercher l'utilisateur par email
-  const existingUser = await prisma.user.findUnique({
-    where: { email: params.email },
+  // Chercher l'utilisateur par email (insensible à la casse)
+  const existingUser = await prisma.user.findFirst({
+    where: { email: { equals: params.email, mode: "insensitive" } },
     select: { id: true, name: true, password: true },
   });
 

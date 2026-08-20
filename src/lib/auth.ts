@@ -91,8 +91,11 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         const { email, password } = parsed.data;
 
         // eslint-disable-next-line ecolemiriam/require-site-filter -- login: no session exists yet, user must be looked up across all sites
-        const user = await prisma.user.findUnique({
-          where: { email },
+        // Recherche insensible à la casse : l'email est stocké avec une
+        // casse arbitraire (ex. "Mohamed…") mais l'utilisateur peut taper
+        // "mohamed…" — PostgreSQL + Prisma findUnique est sensible à la casse.
+        const user = await prisma.user.findFirst({
+          where: { email: { equals: email, mode: "insensitive" } },
           select: {
             id: true,
             email: true,
