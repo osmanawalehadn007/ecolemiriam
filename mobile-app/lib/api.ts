@@ -5,7 +5,7 @@ const API_URL =
   process.env.EXPO_PUBLIC_API_URL ??
   (Platform.OS === "web"
     ? "http://localhost:3000"
-    : "https://ecol-pro-ace391.netlify.app");
+    : "https://ecolemiriam.com");
 
 const TOKEN_KEY = "ecolemiriam_token";
 const USER_KEY = "ecolemiriam_user";
