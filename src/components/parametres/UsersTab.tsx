@@ -7,15 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Trash2, Power, Phone, Edit3, Check, X, Building2, MapPin, AlertTriangle, Search, Shield, GraduationCap, Briefcase, Users as UsersIcon, Lock } from "lucide-react";
-import { createUser, toggleUserActive, deleteUser, updateUserPhone, assignUserSites, getUserSites, getUserPermissions, saveUserPermissions, type UserFormData } from "@/lib/actions/parametres";
+import { Loader2, Plus, Trash2, Power, Phone, Edit3, Check, X, Building2, MapPin, AlertTriangle, Search, Shield, GraduationCap, Briefcase, Users as UsersIcon } from "lucide-react";
+import { createUser, toggleUserActive, deleteUser, updateUserPhone, assignUserSites, getUserSites, type UserFormData } from "@/lib/actions/parametres";
 import { addUserToTenant } from "@/lib/actions/user-tenant";
 import { useTranslations } from "next-intl";
 import type { AvailableTenant } from "@/auth.config";
 import type { Role } from "@prisma/client";
 import { cn } from "@/lib/utils";
-import { PERMISSION_CATALOG, getAllPermissionKeys } from "@/lib/security/permission-catalog";
-import { ROLE_PERMISSIONS } from "@/lib/rbac";
 
 interface UserItem {
   id: string;
@@ -59,7 +57,7 @@ interface SiteItem {
   code: string | null;
 }
 
-export function UsersTab({ users, canManage, availableTenants = [], sites = [] }: { users: UserItem[]; canManage: boolean; availableTenants?: AvailableTenant[]; sites?: SiteItem[] }) {
+export function UsersTab({ users, canManage, sessionRole, availableTenants = [], sites = [] }: { users: UserItem[]; canManage: boolean; sessionRole?: string; availableTenants?: AvailableTenant[]; sites?: SiteItem[] }) {
   const t = useTranslations("parametres");
   const [showForm, setShowForm] = useState(false);
   const [isPending, setIsPending] = useState(false);
@@ -99,16 +97,6 @@ export function UsersTab({ users, canManage, availableTenants = [], sites = [] }
   const [siteModalUserName, setSiteModalUserName] = useState<string>("");
   const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>([]);
   const [siteLoading, setSiteLoading] = useState(false);
-
-  // Permissions: modal de gestion des permissions personnalisées
-  const [showPermsModal, setShowPermsModal] = useState(false);
-  const [permsModalUserId, setPermsModalUserId] = useState<string | null>(null);
-  const [permsModalUserName, setPermsModalUserName] = useState<string>("");
-  const [permsModalUserRole, setPermsModalUserRole] = useState<string>("");
-  const [grantedPerms, setGrantedPerms] = useState<Set<string>>(new Set());
-  const [deniedPerms, setDeniedPerms] = useState<Set<string>>(new Set());
-  const [permsLoading, setPermsLoading] = useState(false);
-  const [permsSaving, setPermsSaving] = useState(false);
 
   async function openSiteModal(userId: string, userName: string) {
     setSiteModalUserId(userId);
@@ -151,85 +139,6 @@ export function UsersTab({ users, canManage, availableTenants = [], sites = [] }
     setSelectedSiteIds((prev) =>
       prev.length === sites.length ? [] : sites.map((s) => s.id)
     );
-  }
-
-  // ── Gestion du modal des permissions personnalisées ────────────────────
-  async function openPermsModal(userId: string, userName: string, userRole: string) {
-    setPermsModalUserId(userId);
-    setPermsModalUserName(userName);
-    setPermsModalUserRole(userRole);
-    setPermsLoading(true);
-    setShowPermsModal(true);
-    setGrantedPerms(new Set());
-    setDeniedPerms(new Set());
-    try {
-      const perms = await getUserPermissions(userId);
-      setGrantedPerms(new Set(perms.filter((p) => p.mode === "grant").map((p) => p.permission)));
-      setDeniedPerms(new Set(perms.filter((p) => p.mode === "deny").map((p) => p.permission)));
-    } catch {
-      toast.error("Impossible de charger les permissions");
-    } finally {
-      setPermsLoading(false);
-    }
-  }
-
-  function toggleGrantPerm(perm: string) {
-    setGrantedPerms((prev) => {
-      const next = new Set(prev);
-      if (next.has(perm)) next.delete(perm);
-      else next.add(perm);
-      return next;
-    });
-    // Retirer du deny si on grant
-    setDeniedPerms((prev) => {
-      const next = new Set(prev);
-      next.delete(perm);
-      return next;
-    });
-  }
-
-  function toggleDenyPerm(perm: string) {
-    setDeniedPerms((prev) => {
-      const next = new Set(prev);
-      if (next.has(perm)) next.delete(perm);
-      else next.add(perm);
-      return next;
-    });
-    // Retirer du grant si on deny
-    setGrantedPerms((prev) => {
-      const next = new Set(prev);
-      next.delete(perm);
-      return next;
-    });
-  }
-
-  async function handleSavePerms() {
-    if (!permsModalUserId) return;
-    setPermsSaving(true);
-    try {
-      await saveUserPermissions(
-        permsModalUserId,
-        Array.from(grantedPerms),
-        Array.from(deniedPerms)
-      );
-      toast.success("Permissions mises à jour");
-      setShowPermsModal(false);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erreur");
-    } finally {
-      setPermsSaving(false);
-    }
-  }
-
-  // Vérifie si une permission est accordée par le rôle de base
-  function isPermInRole(perm: string): boolean {
-    const role = permsModalUserRole as Role;
-    const perms = ROLE_PERMISSIONS[role] ?? [];
-    if (perms.includes("*")) return true;
-    if (perms.includes(perm)) return true;
-    const moduleName = perm.split(":")[0];
-    if (perms.includes(`${moduleName}:*`)) return true;
-    return false;
   }
 
   const [form, setForm] = useState<UserFormData>({
@@ -638,27 +547,16 @@ export function UsersTab({ users, canManage, availableTenants = [], sites = [] }
                         <Badge variant="info">{t(roleKeys[u.role] ?? u.role)}</Badge>
                       </td>
                       <td className="px-4 py-3">
-                        {canManage ? (
-                          <div className="flex gap-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 gap-1.5 text-xs"
-                              onClick={() => openSiteModal(u.id, u.name)}
-                            >
-                              <MapPin className="h-3 w-3" />
-                              Gérer
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 gap-1.5 text-xs"
-                              onClick={() => openPermsModal(u.id, u.name, u.role)}
-                              title="Permissions personnalisées"
-                            >
-                              <Lock className="h-3 w-3" />
-                            </Button>
-                          </div>
+                        {canManage && sessionRole === "TENANT_ADMIN" ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 gap-1.5 text-xs"
+                            onClick={() => openSiteModal(u.id, u.name)}
+                          >
+                            <MapPin className="h-3 w-3" />
+                            Gérer
+                          </Button>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
@@ -841,165 +739,6 @@ export function UsersTab({ users, canManage, availableTenants = [], sites = [] }
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {/* ── Modal: Permissions personnalisées ─────────────────────────────── */}
-      {showPermsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowPermsModal(false)}>
-          <div className="bg-background rounded-xl shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                  <Lock className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold">Permissions — {permsModalUserName}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Rôle de base : <Badge variant="info" className="ml-1">{t(roleKeys[permsModalUserRole] ?? permsModalUserRole)}</Badge>
-                  </p>
-                </div>
-              </div>
-              <Button variant="ghost" size="icon" onClick={() => setShowPermsModal(false)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-
-            {/* Légende */}
-            <div className="px-4 py-2 bg-muted/30 border-b">
-              <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3 h-3 rounded bg-green-500/20 border border-green-500/40" />
-                  Accordé par le rôle (par défaut)
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3 h-3 rounded bg-blue-500/30 border border-blue-500" />
-                  Surchargé : accordé (+)
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3 h-3 rounded bg-red-500/30 border border-red-500" />
-                  Surchargé : retiré (−)
-                </span>
-              </div>
-            </div>
-
-            {/* Corps — checkboxes par module */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {permsLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {PERMISSION_CATALOG.map((mod) => (
-                    <div key={mod.key} className="rounded-lg border p-3">
-                      {/* En-tête du module */}
-                      <div className="flex items-center gap-2 mb-2">
-                        <Shield className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium text-sm">{mod.label}</span>
-                        <span className="text-xs text-muted-foreground">({mod.key})</span>
-                      </div>
-                      {/* Actions du module */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                        {mod.actions.map((action) => {
-                          const permKey = `${mod.key}:${action.key}`;
-                          const inRole = isPermInRole(permKey);
-                          const isGranted = grantedPerms.has(permKey);
-                          const isDenied = deniedPerms.has(permKey);
-                          const effective = isDenied ? false : (isGranted || inRole);
-
-                          return (
-                            <div
-                              key={permKey}
-                              className={cn(
-                                "rounded-md border p-2 transition-colors",
-                                isDenied
-                                  ? "border-red-500/40 bg-red-500/5"
-                                  : isGranted
-                                  ? "border-blue-500/40 bg-blue-500/5"
-                                  : inRole
-                                  ? "border-green-500/20 bg-green-500/5"
-                                  : "border-border"
-                              )}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-sm font-medium">{action.label}</span>
-                                <div className="flex items-center gap-1">
-                                  {/* Bouton Grant (+) */}
-                                  <button
-                                    onClick={() => toggleGrantPerm(permKey)}
-                                    className={cn(
-                                      "flex h-6 w-6 items-center justify-center rounded text-xs font-bold transition-colors",
-                                      isGranted
-                                        ? "bg-blue-500 text-white"
-                                        : "bg-muted hover:bg-blue-500/20 text-muted-foreground"
-                                    )}
-                                    title="Accorder cette permission"
-                                  >
-                                    +
-                                  </button>
-                                  {/* Bouton Deny (−) */}
-                                  <button
-                                    onClick={() => toggleDenyPerm(permKey)}
-                                    className={cn(
-                                      "flex h-6 w-6 items-center justify-center rounded text-xs font-bold transition-colors",
-                                      isDenied
-                                        ? "bg-red-500 text-white"
-                                        : "bg-muted hover:bg-red-500/20 text-muted-foreground"
-                                    )}
-                                    title="Retirer cette permission"
-                                  >
-                                    −
-                                  </button>
-                                </div>
-                              </div>
-                              {/* Indicateur visuel de l'état effectif */}
-                              <div className="mt-1 flex items-center gap-1.5 text-xs">
-                                {isDenied ? (
-                                  <span className="text-red-600 font-medium">● Retiré</span>
-                                ) : isGranted ? (
-                                  <span className="text-blue-600 font-medium">● Accordé (+)</span>
-                                ) : inRole ? (
-                                  <span className="text-green-600 font-medium">● Par rôle</span>
-                                ) : (
-                                  <span className="text-muted-foreground">○ Non accordé</span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Footer — actions */}
-            <div className="flex items-center justify-between p-4 border-t">
-              <div className="text-xs text-muted-foreground">
-                {grantedPerms.size > 0 && (
-                  <span className="mr-3 text-blue-600">{grantedPerms.size} accordée(s)</span>
-                )}
-                {deniedPerms.size > 0 && (
-                  <span className="text-red-600">{deniedPerms.size} retirée(s)</span>
-                )}
-                {grantedPerms.size === 0 && deniedPerms.size === 0 && (
-                  <span>Aucune surcharge — le rôle de base s'applique</span>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setShowPermsModal(false)}>
-                  Annuler
-                </Button>
-                <Button size="sm" onClick={handleSavePerms} disabled={permsSaving || permsLoading}>
-                  {permsSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
-                  Enregistrer
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

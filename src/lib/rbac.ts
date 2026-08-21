@@ -78,10 +78,11 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "analytics:read", "examens:read", "parents:read", "ai:teacher",
   ],
 
-  // Conseiller / CPE — vie scolaire & orientation
+  // Conseiller / CPE — vie scolaire, orientation & modification emploi du temps
   COUNSELOR: [
     "eleves:read", "absences:read", "vie-scolaire:*", "orientation:*",
     "messages:*", "parents:read", "communication:read", "analytics:read",
+    "emploi-du-temps:read", "emploi-du-temps:write",
   ],
 
   // Infirmier(e) — consultation santé/élèves

@@ -101,6 +101,7 @@ interface ParametresTabsProps {
   sites: Awaited<ReturnType<typeof import("@/lib/actions/parametres").getSitesForSettings>>;
   annees: Awaited<ReturnType<typeof import("@/lib/actions/parametres").getAnneesScolaires>>;
   canManage: boolean;
+  sessionRole?: string;
   availableTenants?: AvailableTenant[];
 }
 
@@ -116,6 +117,7 @@ export function ParametresTabs({
   sites,
   annees,
   canManage,
+  sessionRole,
   availableTenants,
 }: ParametresTabsProps) {
   const t = useTranslations("parametres");
@@ -189,7 +191,7 @@ export function ParametresTabs({
       <div>
         {activeTab === "etablissement" && <EtablissementTab etablissement={etablissement} canManage={canManage} />}
         {activeTab === "annees" && <AnneesScolairesTab annees={annees} canManage={canManage} />}
-        {activeTab === "utilisateurs" && <UsersTab users={users} canManage={canManage} availableTenants={availableTenants} sites={sites} />}
+        {activeTab === "utilisateurs" && <UsersTab users={users} canManage={canManage} sessionRole={sessionRole} availableTenants={availableTenants} sites={sites} />}
         {activeTab === "parents" && <ParentsTab parents={parents} eleves={eleves} canManage={canManage} />}
         {activeTab === "classes" && <ClassesTab classes={classes} canManage={canManage} sites={sites} />}
         {activeTab === "matieres" && <MatieresTab matieres={matieres} canManage={canManage} />}
