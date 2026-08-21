@@ -39,6 +39,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "admissions:*", "rh:*", "finance:*", "inventaire:*", "alumni:*",
     "orientation:*", "cours:*", "analytics:*", "rapports:*", "documents:*",
     "ai:*", "audit:read", "parametres:*", "structures:*",
+    "cahier-texte:*",
   ],
 
   // Chef d'établissement — pédagogie & vie scolaire complètes, pas la finance/RH en écriture
@@ -49,6 +50,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "admissions:*", "rh:read", "finance:read", "inventaire:*", "alumni:*",
     "orientation:*", "cours:*", "analytics:*", "rapports:*", "documents:*",
     "ai:*", "parametres:read", "structures:read",
+    "cahier-texte:*",
   ],
 
   // Secrétariat — gestion administrative
@@ -58,6 +60,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "messages:*", "admissions:*", "examens:read", "inventaire:read",
     "documents:*", "alumni:read", "bulletins:read", "rapports:read",
     "parametres:read", "structures:read",
+    "cahier-texte:read",
   ],
 
   // Enseignant — sa pédagogie
@@ -66,6 +69,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "notes:*", "evaluations:*", "absences:read", "absences:write",
     "bulletins:read", "emploi-du-temps:read", "messages:*",
     "cours:*", "analytics:read", "examens:read", "ai:teacher",
+    "cahier-texte:*",
   ],
 
   // Professeur principal — enseignant + bulletins/conseil + vie scolaire
@@ -76,13 +80,15 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "emploi-du-temps:read", "messages:*", "cours:*",
     "vie-scolaire:*", "orientation:read", "orientation:write",
     "analytics:read", "examens:read", "parents:read", "ai:teacher",
+    "cahier-texte:*",
   ],
 
-  // Conseiller / CPE — vie scolaire, orientation & modification emploi du temps
+  // Conseiller / CPE — vie scolaire, orientation, cahier de texte & modification emploi du temps
   COUNSELOR: [
     "eleves:read", "absences:read", "vie-scolaire:*", "orientation:*",
     "messages:*", "parents:read", "communication:read", "analytics:read",
     "emploi-du-temps:read", "emploi-du-temps:write",
+    "cahier-texte:read",
   ],
 
   // Infirmier(e) — consultation santé/élèves

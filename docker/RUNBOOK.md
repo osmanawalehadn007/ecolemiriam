@@ -135,31 +135,52 @@ Remplir avec :
 
 ---
 
-## 6. MIGRATION SUPABASE → VPS
+## 6. MIGRATION SUPABASE → VPS — ✅ TERMINÉE (2026-08-20)
 
-### 6.1 Démarrer Postgres
+### 6.1 État
+La migration est **complète**. Le VPS Postgres contient toutes les données
+(880 élèves, 8 users, 1 tenant, 62 tables). Supabase est conservé en
+read-only comme sauvegarde de secours.
+
+### 6.2 Connexion développement local → VPS
+Le dev local se connecte au VPS via un tunnel SSH. Les ponts Docker
+`pgb-bridge` et `pg-bridge` (conteneurs socat) exposent PgBouncer et
+Postgres sur `127.0.0.1` du VPS.
+
 ```bash
-cd /opt/ecolemiriam/docker
-docker compose up -d postgres pgbouncer
+# Démarrer le tunnel (depuis le poste dev)
+./scripts/start-vps-tunnel.sh          # start
+./scripts/start-vps-tunnel.sh status   # vérifier
+./scripts/start-vps-tunnel.sh stop     # arrêter
 ```
 
-### 6.2 Créer .env.local
+Ports locaux :
+- `16432` → VPS PgBouncer:6432 (DATABASE_URL, app)
+- `15432` → VPS Postgres:5432  (DIRECT_URL, migrations Prisma)
+
+### 6.3 .env local (dev)
+```
+DATABASE_URL="postgresql://ecolemiriam_app:***@127.0.0.1:16432/ecolemiriam?pgbouncer=true&..."
+DIRECT_URL="postgresql://ecolemiriam_owner:***@127.0.0.1:15432/ecolemiriam?..."
+```
+Sauvegarde de l'ancien .env Supabase : `.env.supabase-backup`
+
+### 6.4 Ponts Docker sur le VPS (persistants)
 ```bash
-cat > .env.local <<EOF
-SUPABASE_DB_URL="postgresql://postgres:PASSWORD@db.hyejtirvtdhxseambzyg.supabase.co:5432/postgres"
-VPS_DB_URL="postgresql://ecolemiriam_owner:PASSWORD@localhost:5432/ecolemiriam"
-EOF
+# Sur le VPS — déjà créés et restart=unless-stopped
+docker run -d --name pgb-bridge --network docker_frontend \
+  -p 127.0.0.1:16432:6432 alpine/socat -dd TCP-LISTEN:6432,fork TCP:pgbouncer:6432
+docker network connect docker_backend pgb-bridge
+
+docker run -d --name pg-bridge --network docker_frontend \
+  -p 127.0.0.1:15432:5432 alpine/socat -dd TCP-LISTEN:5432,fork TCP:postgres:5432
+docker network connect docker_backend pg-bridge
 ```
 
-### 6.3 Exécuter
-```bash
-bash docker/scripts/migrate-from-supabase.sh
-```
-
-### 6.4 Démarrer la stack complète
-```bash
-docker compose up -d
-```
+### 6.5 Supabase — figé (read-only)
+Le projet Supabase `hyejtirvtdhxseambzyg` est conservé comme sauvegarde.
+Ne plus y écrire. URL de secours dans `.env.supabase-backup`.
+Suppression définitive à planifier après 30 jours sans incident.
 
 ---
 

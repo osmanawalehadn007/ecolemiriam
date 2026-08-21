@@ -119,6 +119,8 @@ model Tenant {
   exclusionsEleve    ExclusionEleve[]
   enseignantMatieres    EnseignantMatiere[]
   enseignantAffectations EnseignantAffectation[]
+  cahierTextes          CahierTexte[]
+  cahierTexteCommentaires CahierTexteCommentaire[]
 
   @@map("tenants")
 }
@@ -162,6 +164,9 @@ model Site {
 
   // Users multi-sites
   userSites UserSite[]
+
+  // Cahier de texte
+  cahierTextes CahierTexte[]
 
   // Tarifs par niveau
   tarifsNiveau TarifNiveau[]
@@ -388,6 +393,10 @@ model User {
   congesDemandes           CongePersonnel[]   @relation("CongeDemandePar")
   congesApprouves          CongePersonnel[]   @relation("CongeApprouvePar")
 
+  // Cahier de texte saisi par cet utilisateur
+  cahierTextesSaisis CahierTexte[] @relation("CahierTexteSaisiePar")
+  cahierTexteCommentaires CahierTexteCommentaire[] @relation("CahierTexteCommentaireAuteur")
+
   @@index([tenantId])
   @@index([siteId])
   @@map("users")
@@ -544,6 +553,7 @@ model Classe {
   evaluations Evaluation[]
   conversations Conversation[] @relation("ConversationClasse")
   enseignantAffectations EnseignantAffectation[]
+  cahierTextes CahierTexte[]
 
   @@index([tenantId])
   @@index([siteId])
@@ -572,6 +582,7 @@ model Matiere {
   dispenses        DispenseMatiere[]
   enseignantMatieres    EnseignantMatiere[]
   enseignantAffectations EnseignantAffectation[]
+  cahierTextes     CahierTexte[]
 
   @@index([tenantId])
   @@index([siteId])
@@ -752,6 +763,7 @@ model Enseignant {
   conges             CongePersonnel[]
   matieres           EnseignantMatiere[]
   affectations       EnseignantAffectation[]
+  cahierTextes       CahierTexte[]
 
   @@index([tenantId])
   @@index([userId])
@@ -2277,6 +2289,87 @@ model DispenseMatiere {
 enum AuditVerdict {
   ALLOWED
   DENIED
+}
+
+// ============================================================
+// CAHIER DE TEXTE — registre des séances de cours
+// ============================================================
+// L'enseignant y inscrit ce qui a été fait à chaque séance,
+// les devoirs donnés et ce qui est prévu pour le cours suivant.
+// Le conseiller (CPE) et la direction peuvent consulter.
+
+model CahierTexte {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  siteId String? // null = non rattaché à un site spécifique
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  classeId    String
+  classe      Classe      @relation(fields: [classeId], references: [id], onDelete: Cascade)
+  matiereId   String
+  matiere     Matiere     @relation(fields: [matiereId], references: [id])
+  enseignantId String?
+  enseignant   Enseignant? @relation(fields: [enseignantId], references: [id])
+
+  date       DateTime  // date de la séance
+  heureDebut String?   // "08:00"
+  heureFin   String?   // "09:00"
+
+  contenu      String  @db.Text // ce qui a été fait en classe
+  devoirs      String? @db.Text // devoirs / travail à faire à la maison
+  prochainCours String? @db.Text // prévision pour la séance suivante
+  commentaire  String? @db.Text // remarques libres de l'enseignant
+
+  // Fichiers attachés (JSON array: [{nom, type, taille, dataUrl}])
+  // .doc, .docx, .pdf, .odt — stockés en base64 data URL
+  fichiers     Json?
+
+  saisieParId String? // userId de l'enseignant qui a saisi
+  saisiePar   User?   @relation("CahierTexteSaisiePar", fields: [saisieParId], references: [id], onDelete: SetNull)
+
+  // Commentaires (CPE / conseiller / direction)
+  commentaires CahierTexteCommentaire[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([siteId])
+  @@index([classeId])
+  @@index([matiereId])
+  @@index([enseignantId])
+  @@index([tenantId, date])
+  @@map("cahier_textes")
+}
+
+// ============================================================
+// COMMENTAIRES DU CAHIER DE TEXTE
+// ============================================================
+// Le conseiller (CPE), la direction ou tout rôle avec cahier-texte:read
+// peut ajouter des commentaires sur une séance — feedback pédagogique,
+// remarque de conformité, etc.
+
+model CahierTexteCommentaire {
+  id           String @id @default(cuid())
+  tenantId     String
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  cahierTexteId String
+  cahierTexte   CahierTexte @relation(fields: [cahierTexteId], references: [id], onDelete: Cascade)
+
+  auteurId   String
+  auteur     User   @relation("CahierTexteCommentaireAuteur", fields: [auteurId], references: [id], onDelete: Cascade)
+
+  contenu    String  @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([cahierTexteId])
+  @@index([auteurId])
+  @@map("cahier_texte_commentaires")
 }
 
 model AuditLog {

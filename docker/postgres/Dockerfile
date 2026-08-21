@@ -8,13 +8,14 @@
 # - Configuration durcie (scram-sha-256, TLS, RLS)
 # ============================================================
 
-FROM postgres:17-alpine3.22
+FROM postgres:17-bookworm
 
-# Installer pgaudit + pgBackRest depuis les dépôts Alpine
-RUN apk add --no-cache \
-    postgresql17-pgaudit \
+# Installer pgaudit + pgBackRest depuis les dépôts Debian
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-17-pgaudit \
     pgbackrest \
-    curl
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copier la configuration durcie
 COPY postgresql.conf /etc/postgresql/postgresql.conf

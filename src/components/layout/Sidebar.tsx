@@ -63,9 +63,10 @@ const navGroups: NavGroup[] = [
     groupKey: "groupPedagogie",
     items: [
       { labelKey: "eleves", icon: Users, href: "/eleves", color: "text-violet-500" },
-      { labelKey: "notes", icon: BookOpen, href: "/notes", color: "text-green-500" },
-      { labelKey: "examens", icon: GraduationCap, href: "/evaluations", color: "text-yellow-500" },
-      { labelKey: "cours", icon: PlayCircle, href: "/cours", color: "text-indigo-500" },
+      { labelKey: "notes", icon: BookOpen, href: "/notes", color: "text-green-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "TEACHER", "CLASS_TEACHER"] },
+      { labelKey: "examens", icon: GraduationCap, href: "/evaluations", color: "text-yellow-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "TEACHER", "CLASS_TEACHER"] },
+      { labelKey: "cahierTexte", icon: BookOpen, href: "/cahier-de-texte", color: "text-teal-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "TEACHER", "CLASS_TEACHER"] },
+      { labelKey: "cours", icon: PlayCircle, href: "/cours", color: "text-indigo-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "TEACHER", "CLASS_TEACHER"] },
       { labelKey: "emploi", icon: Calendar, href: "/emploi-du-temps", color: "text-cyan-500" },
     ],
   },
@@ -74,7 +75,7 @@ const navGroups: NavGroup[] = [
     items: [
       { labelKey: "absences", icon: ClipboardList, href: "/absences", color: "text-orange-500" },
       { labelKey: "vieScolaire", icon: Shield, href: "/vie-scolaire", color: "text-red-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "CLASS_TEACHER"] },
-      { labelKey: "parents", icon: UserCheck, href: "/parents", color: "text-pink-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "TEACHER", "CLASS_TEACHER"] },
+      { labelKey: "parents", icon: UserCheck, href: "/parents", color: "text-pink-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "TEACHER", "CLASS_TEACHER"] },
     ],
   },
   {
@@ -91,14 +92,14 @@ const navGroups: NavGroup[] = [
     groupKey: "groupCommunication",
     items: [
       { labelKey: "messages", icon: MessageSquare, href: "/messages", color: "text-indigo-500" },
-      { labelKey: "communication", icon: Bell, href: "/communication", color: "text-sky-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY"] },
+      { labelKey: "communication", icon: Bell, href: "/communication", color: "text-sky-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR"] },
     ],
   },
   {
     groupKey: "groupRapports",
     items: [
       { labelKey: "rapports", icon: FileText, href: "/rapports", color: "text-slate-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "ACCOUNTANT"] },
-      { labelKey: "analytics", icon: BarChart3, href: "/analytics", color: "text-red-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT"] },
+      { labelKey: "analytics", icon: BarChart3, href: "/analytics", color: "text-red-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT", "COUNSELOR", "TEACHER", "CLASS_TEACHER"] },
       { labelKey: "orientation", icon: Compass, href: "/orientation", color: "text-lime-600", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "COUNSELOR", "CLASS_TEACHER"] },
       { labelKey: "alumni", icon: Archive, href: "/alumni", color: "text-purple-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY"] },
     ],

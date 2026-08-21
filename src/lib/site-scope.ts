@@ -298,6 +298,7 @@ export const SITE_PATHS: Record<string, SitePath> = {
   // --- colonne siteId directe ---
   alumni: "column",
   candidature: "column",
+  cahierTexte: "column",
   classe: "column",
   cours: "column",
   eleve: "column",
@@ -369,6 +370,7 @@ export const SITE_PATHS: Record<string, SitePath> = {
   bulletinPaie: { one: "ficheRH" },
   enseignantMatiere: { one: "enseignant" },
   enseignantAffectation: { one: "enseignant" },
+  cahierTexteCommentaire: { one: "cahierTexte" },
 
   // --- données de référence, partagées par tous les sites du tenant ---
   periode: "tenant",
@@ -385,6 +387,7 @@ export const SITE_PATHS: Record<string, SitePath> = {
   account: "tenant",
   session: "tenant",
   verificationToken: "tenant",
+  userPermission: "tenant",
 };
 
 /**
