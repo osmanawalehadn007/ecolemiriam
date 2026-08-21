@@ -16,6 +16,8 @@ import { siteFilterForModel } from "@/lib/site-scope";
 import { getSitesForUser } from "@/lib/actions/eleve";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { getSiteColorMap } from "@/lib/site-colors";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 
 /**
@@ -31,7 +33,8 @@ import type { Prisma } from "@prisma/client";
 function baseEleveWhere(
   tenantId: string,
   siteFilter: Record<string, unknown>,
-  userRole?: string
+  userRole?: string,
+  scope?: { classeIds: string[]; isRestricted: boolean }
 ): Prisma.EleveWhereInput {
   return {
     tenantId,
@@ -40,6 +43,12 @@ function baseEleveWhere(
     // Pour les parents : masquer les enfants exclus. Ce filtre doit valoir
     // pour les statistiques comme pour le tableau.
     ...(userRole === "PARENT" && { statut: { not: "EXCLU" } }),
+    // Pour les enseignants : ne montrer que les élèves de leurs classes
+    ...(scope?.isRestricted && scope.classeIds.length > 0
+      ? { classeId: { in: scope.classeIds } }
+      : scope?.isRestricted
+        ? { id: "__none__" } // Aucune classe assignée → aucun élève
+        : {}),
   } as Prisma.EleveWhereInput;
 }
 
@@ -125,10 +134,11 @@ async function getElevesData(
   classeSiteFilter: Record<string, unknown>,
   filters: { q?: string; classeId?: string; statut?: string },
   userRole?: string,
+  scope?: { classeIds: string[]; isRestricted: boolean },
 ) {
   // Périmètre de référence : ce que voit l'utilisateur, filtres d'écran mis à
   // part. Statistiques et effectifs par classe en découlent tous les deux.
-  const base = baseEleveWhere(tenantId, siteFilter, userRole);
+  const base = baseEleveWhere(tenantId, siteFilter, userRole, scope);
 
   // Périmètre du tableau : le périmètre de référence, restreint par les
   // filtres choisis à l'écran.
@@ -198,6 +208,12 @@ export default async function ElevesPage({
   const classeSiteFilter = siteFilterForModel("classe", session.user);
   const currentSiteId = (session.user as { siteId?: string | null }).siteId ?? null;
   const tenantHasSites = (session.user as { tenantHasSites?: boolean }).tenantHasSites ?? false;
+
+  // Filtrer par classes de l'enseignant si applicable
+  const scope = isTeacherRole(session.user.role as Role)
+    ? await getTeacherScope(session.user.tenantId, session.user.id, session.user.role as Role)
+    : undefined;
+
   const [sites, anneeCourante, siteColors, { eleves, total, stats, classeNoms, effectifs }] = await Promise.all([
     getSitesForUser(),
     getAnneeCouranteLibelle(session.user.tenantId),
@@ -206,7 +222,7 @@ export default async function ElevesPage({
       q,
       classeId,
       statut,
-    }, session.user.role),
+    }, session.user.role, scope),
   ]);
 
   const currentSiteName = currentSiteId
@@ -215,6 +231,13 @@ export default async function ElevesPage({
       ? tCommon("allSites")
       : "Aucun site";
   const currentSiteColor = currentSiteId ? siteColors[currentSiteId] : undefined;
+
+  // Filtrer la liste des classes pour les enseignants (ne montrer que leurs classes)
+  const filteredClasseNoms = scope?.isRestricted
+    ? classeNoms.filter((c: { id: string; nom: string; siteNom: string | null }) =>
+        scope.classeIds.includes(c.id)
+      )
+    : classeNoms;
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -248,7 +271,7 @@ export default async function ElevesPage({
           eleves={eleves}
           total={total}
           effectifs={effectifs}
-          classes={classeNoms}
+          classes={filteredClasseNoms}
           siteColors={siteColors}
           initialQuery={q ?? ""}
           initialClasse={classeId ?? ""}

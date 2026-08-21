@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getTranslations } from "next-intl/server";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 
 export const metadata = {
   title: "Liste des examens | École Miriam",
@@ -36,11 +38,29 @@ export default async function EvaluationsPage({
   const classeFilter = siteFilterForModel("classe", session.user);
   const matiereFilter = siteFilterForModel("matiere", session.user);
 
+  // Filtrer par classes de l'enseignant si applicable
+  const scope = isTeacherRole(session.user.role as Role)
+    ? await getTeacherScope(tenantId, session.user.id, session.user.role as Role)
+    : undefined;
+
+  const teacherClasseFilter = scope?.isRestricted && scope.classeIds.length > 0
+    ? { classeId: { in: scope.classeIds } }
+    : scope?.isRestricted
+      ? { id: "__none__" as const }
+      : {};
+
+  const teacherMatiereFilter = scope?.isRestricted && scope.matiereIds.length > 0
+    ? { id: { in: scope.matiereIds } }
+    : scope?.isRestricted
+      ? { id: "__none__" as const }
+      : {};
+
   const [evaluations, classes, matieres, periodes] = await Promise.all([
     prisma.evaluation.findMany({
       where: {
         tenantId,
         ...evalFilter,
+        ...teacherClasseFilter,
         ...(matiereId ? { matiereId } : {}),
       },
       include: {
@@ -51,8 +71,22 @@ export default async function EvaluationsPage({
       },
       orderBy: { date: "desc" }
     }),
-    prisma.classe.findMany({ where: { tenantId, ...classeFilter }, select: { id: true, nom: true } }),
-    prisma.matiere.findMany({ where: { tenantId, ...matiereFilter }, select: { id: true, nom: true } }),
+    prisma.classe.findMany({
+      where: {
+        tenantId,
+        ...classeFilter,
+        ...(scope?.isRestricted && scope.classeIds.length > 0
+          ? { id: { in: scope.classeIds } }
+          : scope?.isRestricted
+            ? { id: "__none__" }
+            : {}),
+      },
+      select: { id: true, nom: true },
+    }),
+    prisma.matiere.findMany({
+      where: { tenantId, ...matiereFilter, ...teacherMatiereFilter },
+      select: { id: true, nom: true },
+    }),
     prisma.periode.findMany({ where: { annee: { tenantId } }, select: { id: true, nom: true } }),
   ]);
 

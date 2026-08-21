@@ -3,6 +3,8 @@ import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 import { Header } from "@/components/layout/Header";
 import { CartesScolairesForm } from "@/components/eleves/CartesScolairesForm";
 
@@ -11,10 +13,22 @@ export default async function CartesScolairesPage() {
   if (!session?.user?.tenantId) redirect("/login");
   guardPage(session, "eleves:read");
 
+  // Filtrer par classes de l'enseignant si applicable
+  const scope = isTeacherRole(session.user.role as Role)
+    ? await getTeacherScope(session.user.tenantId!, session.user.id, session.user.role as Role)
+    : undefined;
 
   const siteFilter = siteFilterForModel("classe", session.user);
   const classes = await prisma.classe.findMany({
-    where: { tenantId: session.user.tenantId, ...siteFilter },
+    where: {
+      tenantId: session.user.tenantId,
+      ...siteFilter,
+      ...(scope?.isRestricted && scope.classeIds.length > 0
+        ? { id: { in: scope.classeIds } }
+        : scope?.isRestricted
+          ? { id: "__none__" }
+          : {}),
+    },
     select: {
       id: true, nom: true, niveau: true,
       eleves: {

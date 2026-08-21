@@ -3,6 +3,8 @@ import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { siteFilterForRelation } from "@/lib/site-filter";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 import Link from "next/link";
 import { ArrowLeft, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,6 +21,20 @@ export default async function SaisieNotesPage({
 
   const { id: evaluationId } = await params;
   const siteFilter = siteFilterForRelation(session.user, "classe");
+
+  // Pour les enseignants : vérifier que l'évaluation porte sur une de leurs classes
+  if (isTeacherRole(session.user.role as Role)) {
+    const scope = await getTeacherScope(session.user.tenantId!, session.user.id, session.user.role as Role);
+    if (scope.isRestricted) {
+      const evalCheck = await prisma.evaluation.findFirst({
+        where: { id: evaluationId, tenantId: session.user.tenantId },
+        select: { classeId: true, matiereId: true },
+      });
+      if (!evalCheck || !scope.classeIds.includes(evalCheck.classeId)) {
+        redirect("/evaluations");
+      }
+    }
+  }
 
   const evaluation = await prisma.evaluation.findFirst({
     where: { id: evaluationId, tenantId: session.user.tenantId, ...siteFilter },

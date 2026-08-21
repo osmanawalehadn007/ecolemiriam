@@ -3,6 +3,8 @@ import { guardPage } from "@/lib/guard-page";
 import { redirect, notFound } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 import { Header } from "@/components/layout/Header";
 import { EleveDetailView } from "@/components/eleves/EleveDetailView";
 import { getSituationFinanciere, checkEleveAccess } from "@/lib/financial-guard";
@@ -92,6 +94,21 @@ export default async function EleveDetailPage({
   const matiereFilter = siteFilterForModel("matiere", session.user);
   const dispenseFilter = siteFilterForModel("dispenseMatiere", session.user);
   const { id } = await params;
+
+  // Pour les enseignants : vérifier que l'élève est dans une de leurs classes
+  if (isTeacherRole(session.user.role as Role)) {
+    const scope = await getTeacherScope(session.user.tenantId!, session.user.id, session.user.role as Role);
+    if (scope.isRestricted) {
+      const eleveCheck = await prisma.eleve.findFirst({
+        where: { id, tenantId: session.user.tenantId, ...eleveFilter },
+        select: { id: true, classeId: true },
+      });
+      if (!eleveCheck || !scope.classeIds.includes(eleveCheck.classeId ?? "")) {
+        notFound();
+      }
+    }
+  }
+
   const eleve = await getEleveDetail(id, session.user.tenantId, eleveFilter);
 
   if (!eleve) notFound();

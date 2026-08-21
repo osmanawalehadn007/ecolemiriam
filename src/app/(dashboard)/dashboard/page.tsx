@@ -11,6 +11,8 @@ import { getTranslations, getLocale } from "next-intl/server";
 import { unstable_cache } from "next/cache";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 
 const getDashboardData = unstable_cache(
@@ -20,13 +22,64 @@ const getDashboardData = unstable_cache(
     classeFilter: Record<string, unknown>,
     absenceFilter: Record<string, unknown>,
     noteFilter: Record<string, unknown>,
-    examenFilter: Record<string, unknown>
+    examenFilter: Record<string, unknown>,
+    scope?: { classeIds: string[]; matiereIds: string[]; isRestricted: boolean }
   ) => {
-    const baseWhere = { tenantId, ...eleveFilter, deletedAt: null } as Prisma.EleveWhereInput;
-    const classeWhere = { tenantId, ...classeFilter } as Prisma.ClasseWhereInput;
-    const absenceWhere = { tenantId, ...absenceFilter } as Prisma.AbsenceWhereInput;
-    const noteWhere = { tenantId, ...noteFilter } as Prisma.NoteWhereInput;
-    const examenWhere = { tenantId, ...examenFilter } as Prisma.ExamenWhereInput;
+    // Pour les enseignants : restreindre aux classes/matières assignées
+    const teacherClasseFilter = scope?.isRestricted && scope.classeIds.length > 0
+      ? { classeId: { in: scope.classeIds } }
+      : scope?.isRestricted
+        ? { id: "__none__" as const }
+        : {};
+
+    const baseWhere = {
+      tenantId,
+      ...eleveFilter,
+      deletedAt: null,
+      ...(scope?.isRestricted && scope.classeIds.length > 0
+        ? { classeId: { in: scope.classeIds } }
+        : scope?.isRestricted
+          ? { id: "__none__" as const }
+          : {}),
+    } as Prisma.EleveWhereInput;
+
+    const classeWhere = {
+      tenantId,
+      ...classeFilter,
+      ...teacherClasseFilter,
+    } as Prisma.ClasseWhereInput;
+
+    const absenceWhere = {
+      tenantId,
+      ...absenceFilter,
+      ...(scope?.isRestricted && scope.classeIds.length > 0
+        ? { eleve: { classeId: { in: scope.classeIds } } }
+        : scope?.isRestricted
+          ? { id: "__none__" as const }
+          : {}),
+    } as Prisma.AbsenceWhereInput;
+
+    const noteWhere = {
+      tenantId,
+      ...noteFilter,
+      ...(scope?.isRestricted && scope.classeIds.length > 0
+        ? { eleve: { classeId: { in: scope.classeIds } } }
+        : scope?.isRestricted
+          ? { id: "__none__" as const }
+          : {}),
+    } as Prisma.NoteWhereInput;
+
+    const examenWhere = {
+      tenantId,
+      ...examenFilter,
+      // Pour les enseignants : filtrer les examens par leurs classes
+      // (SessionExamen a maintenant un classeId)
+      ...(scope?.isRestricted && scope.classeIds.length > 0
+        ? { sessions: { some: { classeId: { in: scope.classeIds } } } }
+        : scope?.isRestricted
+          ? { id: "__none__" as const }
+          : {}),
+    } as Prisma.ExamenWhereInput;
 
     const [
       eleveStats,
@@ -107,8 +160,14 @@ export default async function DashboardPage() {
   const examenFilter = siteFilterForModel("examen", session.user);
 
   const tenantId = session.user.tenantId;
+
+  // Filtrer par classes de l'enseignant si applicable
+  const scope = isTeacherRole(session.user.role as Role)
+    ? await getTeacherScope(tenantId!, session.user.id, session.user.role as Role)
+    : undefined;
+
   const [data, sites, anneeCourante] = await Promise.all([
-    getDashboardData(tenantId, eleveFilter, classeFilter, absenceFilter, noteFilter, examenFilter),
+    getDashboardData(tenantId, eleveFilter, classeFilter, absenceFilter, noteFilter, examenFilter, scope),
     prisma.site.findMany({
       where: { tenantId, actif: true, deletedAt: null },
       select: { id: true, nom: true },

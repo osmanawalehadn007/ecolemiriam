@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 import { revalidateTag } from "next/cache";
 
 const PatchSchema = z.object({
@@ -13,6 +15,24 @@ const PatchSchema = z.object({
   dateDebut: z.string().optional(),
   dateFin: z.string().optional(),
 });
+
+// Vérifie qu'un enseignant a accès à au moins une session de l'examen
+async function checkTeacherExamenAccess(
+  examenId: string,
+  tenantId: string,
+  userId: string,
+  role: Role
+): Promise<boolean> {
+  const scope = await getTeacherScope(tenantId, userId, role);
+  if (!scope.isRestricted) return true;
+  if (scope.classeIds.length === 0) return false;
+  // L'enseignant a accès si au moins une session est liée à une de ses classes
+  const session = await prisma.sessionExamen.findFirst({
+    where: { examId: examenId, classeId: { in: scope.classeIds } },
+    select: { id: true },
+  });
+  return !!session;
+}
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -32,6 +52,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const existing = await prisma.examen.findFirst({ where: { id, tenantId } });
     if (!existing) return NextResponse.json({ error: "Examen introuvable" }, { status: 404 });
+
+    // Pour les enseignants : vérifier l'accès à l'examen via ses classes
+    if (isTeacherRole(session.user.role as Role)) {
+      const hasAccess = await checkTeacherExamenAccess(id, tenantId!, session.user.id, session.user.role as Role);
+      if (!hasAccess) {
+        return NextResponse.json({ error: "Vous n'avez pas accès à cet examen" }, { status: 403 });
+      }
+    }
 
     const { intitule, description, statut, dateDebut, dateFin } = parsed.data;
 
@@ -68,6 +96,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     const existing = await prisma.examen.findFirst({ where: { id, tenantId } });
     if (!existing) return NextResponse.json({ error: "Examen introuvable" }, { status: 404 });
+
+    // Pour les enseignants : vérifier l'accès à l'examen via ses classes
+    if (isTeacherRole(session.user.role as Role)) {
+      const hasAccess = await checkTeacherExamenAccess(id, tenantId!, session.user.id, session.user.role as Role);
+      if (!hasAccess) {
+        return NextResponse.json({ error: "Vous n'avez pas accès à cet examen" }, { status: 403 });
+      }
+    }
 
     await prisma.examen.delete({ where: { id } });
 

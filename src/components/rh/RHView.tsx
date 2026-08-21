@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { cn, getInitials, formatCurrency } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { PersonnelAbsencesConges } from "./PersonnelAbsencesConges";
+import { GererAffectations } from "@/components/enseignants/GererAffectations";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -82,6 +83,13 @@ interface EnseignantRH {
   ficheRH: FicheRH | null;
   emploiTemps: EmploiTempsItem[];
   classesPrincipales: { id: string; nom: string; niveau: string }[];
+  affectations?: {
+    id: string;
+    classeId: string;
+    matiereId: string | null;
+    classe: { id: string; nom: string; niveau: string };
+    matiere: { id: string; nom: string; code: string } | null;
+  }[];
 }
 
 // ─── Calcul heures hebdo ──────────────────────────────────────────────────────
@@ -100,9 +108,15 @@ function calcHeuresHebdo(emploiTemps: EmploiTempsItem[]): number {
 function EnseignantRHCard({
   enseignant,
   onUpdate,
+  classes,
+  matieres,
+  canManageAffectations,
 }: {
   enseignant: EnseignantRH;
   onUpdate: (id: string, ficheRH: FicheRH) => void;
+  classes: { id: string; nom: string; niveau: string; siteId?: string | null }[];
+  matieres: { id: string; nom: string; code: string }[];
+  canManageAffectations: boolean;
 }) {
   const t = useTranslations("rh");
   const tCommon = useTranslations("common");
@@ -273,6 +287,31 @@ function EnseignantRHCard({
                 {t("mainTeacher")} {c.nom}
               </Badge>
             ))}
+          </div>
+        )}
+
+        {/* Affectations (classes + matières) */}
+        {enseignant.affectations && enseignant.affectations.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {enseignant.affectations.map((a) => (
+              <Badge key={a.id} className="text-xs bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-900/20 dark:text-teal-300">
+                {a.classe.nom}
+                {a.matiere && ` — ${a.matiere.nom}`}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        {/* Bouton Gérer les affectations */}
+        {canManageAffectations && classes.length > 0 && (
+          <div className="mt-2">
+            <GererAffectations
+              enseignantId={enseignant.id}
+              enseignantName={enseignant.user.name}
+              classes={classes}
+              matieres={matieres}
+              canManage={canManageAffectations}
+            />
           </div>
         )}
 
@@ -522,9 +561,19 @@ interface RHViewProps {
   enseignants: EnseignantRH[];
   absencesPersonnel?: AbsencePersonnelItem[];
   congesPersonnel?: CongePersonnelItem[];
+  classes?: { id: string; nom: string; niveau: string; siteId?: string | null }[];
+  matieres?: { id: string; nom: string; code: string }[];
+  canManageAffectations?: boolean;
 }
 
-export function RHView({ enseignants: initial, absencesPersonnel, congesPersonnel }: RHViewProps) {
+export function RHView({
+  enseignants: initial,
+  absencesPersonnel,
+  congesPersonnel,
+  classes = [],
+  matieres = [],
+  canManageAffectations = false,
+}: RHViewProps) {
   const t = useTranslations("rh");
   const [enseignants, setEnseignants] = useState<EnseignantRH[]>(initial);
   const [search, setSearch] = useState("");
@@ -729,7 +778,14 @@ export function RHView({ enseignants: initial, absencesPersonnel, congesPersonne
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {filtered.map((e) => (
-                <EnseignantRHCard key={e.id} enseignant={e} onUpdate={handleUpdate} />
+                <EnseignantRHCard
+                  key={e.id}
+                  enseignant={e}
+                  onUpdate={handleUpdate}
+                  classes={classes}
+                  matieres={matieres}
+                  canManageAffectations={canManageAffectations}
+                />
               ))}
             </div>
           )}

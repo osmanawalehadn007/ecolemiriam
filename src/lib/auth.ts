@@ -7,10 +7,12 @@ import type { Role } from "@prisma/client";
 import { authConfig, type AvailableTenant } from "@/auth.config";
 import { deriveClaims, CLAIMS_VERSION } from "@/lib/tenant-claims";
 import { auditFire } from "@/lib/audit";
+import { verifyTOTP } from "@/lib/security/totp";
 
 const LoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
+  totp: z.string().optional(), // code 2FA (6 chiffres) si activé
 });
 
 export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
@@ -83,12 +85,13 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Mot de passe", type: "password" },
+        totp: { label: "Code 2FA", type: "text" },
       },
       async authorize(credentials) {
         const parsed = LoginSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
-        const { email, password } = parsed.data;
+        const { email, password, totp } = parsed.data;
 
         // eslint-disable-next-line ecolemiriam/require-site-filter -- login: no session exists yet, user must be looked up across all sites
         // Recherche insensible à la casse : l'email est stocké avec une
@@ -103,6 +106,8 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
             password: true,
             avatarUrl: true,
             isActive: true,
+            mfaSecret: true,
+            mfaEnabled: true,
           },
         });
 
@@ -135,6 +140,37 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
             metadata: { email },
           });
           return null;
+        }
+
+        // ── Vérification 2FA (TOTP) ──────────────────────────────────────
+        if (user.mfaEnabled && user.mfaSecret) {
+          if (!totp || !/^\d{6}$/.test(totp)) {
+            // 2FA requise mais code non fourni — on renvoie un user "pending"
+            // avec un flag spécial que le client détectera pour afficher
+            // l'écran de saisie du code TOTP.
+            auditFire({
+              userId: user.id,
+              action: "auth:login",
+              verdict: "DENIED",
+              reason: "2FA requise — code TOTP manquant",
+              metadata: { email },
+            });
+            // On lance une erreur avec un code spécial que NextAuth propagera
+            // comme `error=CredentialsSignin` — le client utilisera un flag
+            // séparé pour distinguer "2FA requise" de "mot de passe incorrect".
+            throw new Error("2FA_REQUIRED");
+          }
+
+          if (!verifyTOTP(totp, user.mfaSecret)) {
+            auditFire({
+              userId: user.id,
+              action: "auth:login",
+              verdict: "DENIED",
+              reason: "Code 2FA incorrect",
+              metadata: { email },
+            });
+            return null;
+          }
         }
 
         // Mettre à jour lastLoginAt

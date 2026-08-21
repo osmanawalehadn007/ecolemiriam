@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel, requireSiteIdForCreate } from "@/lib/site-scope";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 import { revalidateTag } from "next/cache";
 
 const CreateSchema = z.object({
@@ -25,8 +27,19 @@ export async function GET(req: NextRequest) {
     const statut = searchParams.get("statut");
     const tenantId = session.user.tenantId;
 
+    // Filtrer par classes de l'enseignant si applicable
+    const scope = isTeacherRole(session.user.role as Role)
+      ? await getTeacherScope(tenantId!, session.user.id, session.user.role as Role)
+      : undefined;
+
+    const teacherFilter = scope?.isRestricted && scope.classeIds.length > 0
+      ? { sessions: { some: { classeId: { in: scope.classeIds } } } }
+      : scope?.isRestricted
+        ? { id: "__none__" as const }
+        : {};
+
     const examens = await prisma.examen.findMany({
-      where: { tenantId, ...siteFilter,
+      where: { tenantId, ...siteFilter, ...teacherFilter,
         ...(statut ? { statut: statut as never } : {}),
       },
       include: { sessions: { orderBy: { date: "asc" } } },
@@ -46,6 +59,14 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.tenantId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     const denied = checkPermission(session.user.role, "examens:write");
     if (denied) return denied;
+
+    // Pour les enseignants : vérifier qu'ils ont au moins une classe assignée
+    if (isTeacherRole(session.user.role as Role)) {
+      const scope = await getTeacherScope(session.user.tenantId!, session.user.id, session.user.role as Role);
+      if (scope.isRestricted && scope.classeIds.length === 0) {
+        return NextResponse.json({ error: "Vous n'avez aucune classe assignée" }, { status: 403 });
+      }
+    }
 
     const siteError = requireSiteIdForCreate(session.user);
     if (siteError) return NextResponse.json({ error: siteError }, { status: 400 });

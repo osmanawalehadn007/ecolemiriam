@@ -3,12 +3,26 @@ import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-scope";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 import { Header } from "@/components/layout/Header";
 import { AppelInterface } from "@/components/absences/AppelInterface";
 
-async function getClasses(tenantId: string, claims: SessionSiteClaims) {
+async function getClasses(
+  tenantId: string,
+  claims: SessionSiteClaims,
+  scope?: { classeIds: string[]; isRestricted: boolean }
+) {
   return prisma.classe.findMany({
-    where: { tenantId, ...siteFilterForModel("classe", claims) },
+    where: {
+      tenantId,
+      ...siteFilterForModel("classe", claims),
+      ...(scope?.isRestricted && scope.classeIds.length > 0
+        ? { id: { in: scope.classeIds } }
+        : scope?.isRestricted
+          ? { id: "__none__" }
+          : {}),
+    },
     include: {
       eleves: {
         where: { statut: "ACTIF", ...siteFilterForModel("eleve", claims) },
@@ -28,7 +42,12 @@ export default async function AppelPage() {
   if (!session?.user?.tenantId) redirect("/login");
   guardPage(session, "absences:write");
 
-  const classes = await getClasses(session.user.tenantId, session.user);
+  // Filtrer par classes de l'enseignant si applicable
+  const scope = isTeacherRole(session.user.role as Role)
+    ? await getTeacherScope(session.user.tenantId!, session.user.id, session.user.role as Role)
+    : undefined;
+
+  const classes = await getClasses(session.user.tenantId, session.user, scope);
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">

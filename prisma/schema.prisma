@@ -318,6 +318,8 @@ model User {
   email         String    @unique
   emailVerified DateTime?
   password      String? // hashé avec bcrypt
+  mfaSecret     String? // secret TOTP chiffré (base32) pour 2FA
+  mfaEnabled    Boolean   @default(false) // 2FA activée ?
   name          String
   firstName     String?
   lastName      String?
@@ -554,6 +556,7 @@ model Classe {
   conversations Conversation[] @relation("ConversationClasse")
   enseignantAffectations EnseignantAffectation[]
   cahierTextes CahierTexte[]
+  sessionsExamen SessionExamen[]
 
   @@index([tenantId])
   @@index([siteId])
@@ -583,6 +586,7 @@ model Matiere {
   enseignantMatieres    EnseignantMatiere[]
   enseignantAffectations EnseignantAffectation[]
   cahierTextes     CahierTexte[]
+  sessionsExamen   SessionExamen[]
 
   @@index([tenantId])
   @@index([siteId])
@@ -1145,7 +1149,15 @@ model SessionExamen {
   surveillants Json? // array of user IDs
   niveau       String?
 
+  // Lien direct classe + matière pour filtrage enseignant
+  classeId String?
+  classe   Classe? @relation(fields: [classeId], references: [id], onDelete: SetNull)
+  matiereId String?
+  matiere   Matiere? @relation(fields: [matiereId], references: [id], onDelete: SetNull)
+
   @@index([examId])
+  @@index([classeId])
+  @@index([matiereId])
   @@map("sessions_examen")
 }
 

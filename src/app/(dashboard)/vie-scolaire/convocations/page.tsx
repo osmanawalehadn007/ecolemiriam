@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { guardPage } from "@/lib/guard-page";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 import { Header } from "@/components/layout/Header";
 import { ConvocationForm } from "@/components/vie-scolaire/ConvocationForm";
 
@@ -12,11 +14,23 @@ export default async function ConvocationsPage() {
 
   guardPage(session, "vie-scolaire:read");
 
+  // Filtrer par classes de l'enseignant si applicable
+  const scope = isTeacherRole(session.user.role as Role)
+    ? await getTeacherScope(session.user.tenantId!, session.user.id, session.user.role as Role)
+    : undefined;
 
   const siteFilter = siteFilterForModel("classe", session.user);
   const [classes, tenant] = await Promise.all([
     prisma.classe.findMany({
-      where: { tenantId: session.user.tenantId, ...siteFilter },
+      where: {
+        tenantId: session.user.tenantId,
+        ...siteFilter,
+        ...(scope?.isRestricted && scope.classeIds.length > 0
+          ? { id: { in: scope.classeIds } }
+          : scope?.isRestricted
+            ? { id: "__none__" }
+            : {}),
+      },
       include: {
         eleves: {
           where: { statut: "ACTIF" },

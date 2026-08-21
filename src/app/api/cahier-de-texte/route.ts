@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel, requireSiteIdForCreate } from "@/lib/site-scope";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 
 // ------------------------------------------------------------
 // GET /api/cahier-de-texte
@@ -27,10 +29,22 @@ export async function GET(req: NextRequest) {
 
     const siteFilter = siteFilterForModel("cahierTexte", session.user);
 
+    // Filtrer par classes de l'enseignant si applicable
+    const scope = isTeacherRole(session.user.role as Role)
+      ? await getTeacherScope(session.user.tenantId, session.user.id, session.user.role as Role)
+      : undefined;
+
+    const teacherClasseFilter = scope?.isRestricted && scope.classeIds.length > 0
+      ? { classeId: { in: scope.classeIds } }
+      : scope?.isRestricted
+        ? { id: "__none__" as const }
+        : {};
+
     const entries = await prisma.cahierTexte.findMany({
       where: {
         tenantId: session.user.tenantId,
         ...siteFilter,
+        ...teacherClasseFilter,
         ...(classeId ? { classeId } : {}),
         ...(matiereId ? { matiereId } : {}),
         ...(enseignantId ? { enseignantId } : {}),

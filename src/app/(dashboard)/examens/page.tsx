@@ -8,30 +8,68 @@ import { SiteTabs } from "@/components/sites/SiteTabs";
 import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-scope";
 import { getSitesForUser } from "@/lib/actions/eleve";
 import { getSiteColorMap } from "@/lib/site-colors";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 import { getTranslations } from "next-intl/server";
 
 // Les fragments d'isolation sont construits ici, au plus près des requêtes :
 // passés en paramètres, ils n'étaient plus rattachables à leur origine, ni par
 // un relecteur ni par l'analyse statique.
-async function getExamensData(tenantId: string, claims: SessionSiteClaims) {
+async function getExamensData(
+  tenantId: string,
+  claims: SessionSiteClaims,
+  scope?: { classeIds: string[]; matiereIds: string[]; isRestricted: boolean }
+) {
+  // Pour les enseignants : filtrer les classes, matières ET examens par classeId
+  const teacherClasseFilter = scope?.isRestricted && scope.classeIds.length > 0
+    ? { id: { in: scope.classeIds } }
+    : scope?.isRestricted
+      ? { id: "__none__" as const }
+      : {};
+
+  // Filtrer les examens : un enseignant ne voit que les examens qui ont
+  // au moins une session liée à une de ses classes
+  const teacherExamenFilter = scope?.isRestricted && scope.classeIds.length > 0
+    ? { sessions: { some: { classeId: { in: scope.classeIds } } } }
+    : scope?.isRestricted
+      ? { id: "__none__" as const }
+      : {};
+
   const [examens, classes, matieres] = await Promise.all([
     prisma.examen.findMany({
-      where: { tenantId, ...siteFilterForModel("examen", claims) },
+      where: { tenantId, ...siteFilterForModel("examen", claims), ...teacherExamenFilter },
       include: {
         sessions: {
-          where: siteFilterForModel("sessionExamen", claims),
+          where: {
+            ...siteFilterForModel("sessionExamen", claims),
+            ...(scope?.isRestricted && scope.classeIds.length > 0
+              ? { OR: [{ classeId: { in: scope.classeIds } }, { classeId: null }] }
+              : {}),
+          },
           orderBy: { date: "asc" },
         },
       },
       orderBy: { dateDebut: "desc" },
     }),
     prisma.classe.findMany({
-      where: { tenantId, ...siteFilterForModel("classe", claims) },
+      where: {
+        tenantId,
+        ...siteFilterForModel("classe", claims),
+        ...teacherClasseFilter,
+      },
       select: { id: true, nom: true, niveau: true, siteId: true, site: { select: { nom: true } } },
       orderBy: { nom: "asc" },
     }),
     prisma.matiere.findMany({
-      where: { tenantId, ...siteFilterForModel("matiere", claims) },
+      where: {
+        tenantId,
+        ...siteFilterForModel("matiere", claims),
+        ...(scope?.isRestricted && scope.matiereIds.length > 0
+          ? { id: { in: scope.matiereIds } }
+          : scope?.isRestricted
+            ? { id: "__none__" }
+            : {}),
+      },
       select: { id: true, nom: true, code: true, coefficient: true },
       orderBy: { nom: "asc" },
     }),
@@ -74,7 +112,12 @@ export default async function ExamensPage({
     tenantHasSites: (session.user as { tenantHasSites?: boolean }).tenantHasSites ?? false,
   };
 
-  const { examens, classes, matieres } = await getExamensData(session.user.tenantId, examenClaims);
+  // Filtrer par classes de l'enseignant si applicable
+  const scope = isTeacherRole(session.user.role as Role)
+    ? await getTeacherScope(session.user.tenantId!, session.user.id, session.user.role as Role)
+    : undefined;
+
+  const { examens, classes, matieres } = await getExamensData(session.user.tenantId, examenClaims, scope);
 
   const currentSiteName = activeSite === "all"
     ? tCommon("allSites")

@@ -7,6 +7,7 @@ import { CahierTextView } from "@/components/cahier-texte/CahierTextView";
 import { getTranslations } from "next-intl/server";
 import { roleHasPermission } from "@/lib/rbac";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import type { Role } from "@prisma/client";
 
 export const metadata = { title: "Cahier de texte — École Miriam" };
@@ -21,9 +22,20 @@ export default async function CahierTextePage() {
     Promise.resolve(siteFilterForModel("cahierTexte", session.user)),
   ]);
 
+  // Filtrer par classes de l'enseignant si applicable
+  const scope = isTeacherRole(role as Role)
+    ? await getTeacherScope(tenantId, session.user.id, role as Role)
+    : undefined;
+
+  const teacherClasseFilter = scope?.isRestricted && scope.classeIds.length > 0
+    ? { classeId: { in: scope.classeIds } }
+    : scope?.isRestricted
+      ? { id: "__none__" as const }
+      : {};
+
   const [entries, classes, matieres, enseignants] = await Promise.all([
     prisma.cahierTexte.findMany({
-      where: { tenantId, ...siteFilter },
+      where: { tenantId, ...siteFilter, ...teacherClasseFilter },
       include: {
         classe: { select: { nom: true, niveau: true } },
         matiere: { select: { nom: true, code: true } },
@@ -40,12 +52,24 @@ export default async function CahierTextePage() {
       take: 100,
     }),
     prisma.classe.findMany({
-      where: { tenantId },
+      where: {
+        tenantId,
+        ...(scope?.isRestricted && scope.classeIds.length > 0
+          ? { id: { in: scope.classeIds } }
+          : scope?.isRestricted
+            ? { id: "__none__" }
+            : {}),
+      },
       select: { id: true, nom: true, niveau: true },
       orderBy: { nom: "asc" },
     }),
     prisma.matiere.findMany({
-      where: { tenantId },
+      where: {
+        tenantId,
+        ...(scope?.isRestricted && scope.matiereIds.length > 0
+          ? { id: { in: scope.matiereIds } }
+          : {}),
+      },
       select: { id: true, nom: true, code: true },
       orderBy: { nom: "asc" },
     }),

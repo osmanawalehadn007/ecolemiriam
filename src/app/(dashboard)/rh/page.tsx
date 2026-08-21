@@ -6,8 +6,14 @@ import { getTranslations } from "next-intl/server";
 import { guardPage } from "@/lib/guard-page";
 import { siteFilterForModel } from "@/lib/site-scope";
 
-async function getEnseignantsRH(tenantId: string, ensFilter: Record<string, unknown>, absFilter: Record<string, unknown>, congeFilter: Record<string, unknown>) {
-  const [enseignants, absencesPersonnel, congesPersonnel] = await Promise.all([
+async function getEnseignantsRH(
+  tenantId: string,
+  ensFilter: Record<string, unknown>,
+  absFilter: Record<string, unknown>,
+  congeFilter: Record<string, unknown>,
+  classeFilter: Record<string, unknown>
+) {
+  const [enseignants, absencesPersonnel, congesPersonnel, classes, matieres] = await Promise.all([
     prisma.enseignant.findMany({
       where: { tenantId, ...ensFilter },
       include: {
@@ -35,6 +41,12 @@ async function getEnseignantsRH(tenantId: string, ensFilter: Record<string, unkn
         classesPrincipales: {
           select: { id: true, nom: true, niveau: true },
         },
+        affectations: {
+          include: {
+            classe: { select: { id: true, nom: true, niveau: true } },
+            matiere: { select: { id: true, nom: true, code: true } },
+          },
+        },
       },
       orderBy: { user: { name: "asc" } },
     }),
@@ -57,9 +69,21 @@ async function getEnseignantsRH(tenantId: string, ensFilter: Record<string, unkn
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
+    // Classes pour le dialog d'affectation
+    prisma.classe.findMany({
+      where: { tenantId, ...classeFilter },
+      select: { id: true, nom: true, niveau: true, siteId: true },
+      orderBy: { nom: "asc" },
+    }),
+    // Matières pour le dialog d'affectation
+    prisma.matiere.findMany({
+      where: { tenantId },
+      select: { id: true, nom: true, code: true },
+      orderBy: { nom: "asc" },
+    }),
   ]);
 
-  return { enseignants, absencesPersonnel, congesPersonnel };
+  return { enseignants, absencesPersonnel, congesPersonnel, classes, matieres };
 }
 
 export default async function RHPage() {
@@ -72,7 +96,8 @@ export default async function RHPage() {
   const ensFilter = siteFilterForModel("enseignant", session!.user);
   const absFilter = siteFilterForModel("absencePersonnel", session!.user);
   const congeFilter = siteFilterForModel("congePersonnel", session!.user);
-  const { enseignants, absencesPersonnel, congesPersonnel } = await getEnseignantsRH(session!.user.tenantId!, ensFilter, absFilter, congeFilter);
+  const classeFilter = siteFilterForModel("classe", session!.user);
+  const { enseignants, absencesPersonnel, congesPersonnel, classes, matieres } = await getEnseignantsRH(session!.user.tenantId!, ensFilter, absFilter, congeFilter, classeFilter);
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -87,6 +112,9 @@ export default async function RHPage() {
           enseignants={enseignants}
           absencesPersonnel={absencesPersonnel}
           congesPersonnel={congesPersonnel}
+          classes={classes}
+          matieres={matieres}
+          canManageAffectations={["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT"].includes(session!.user.role)}
         />
       </div>
     </div>
