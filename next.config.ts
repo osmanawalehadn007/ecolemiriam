@@ -6,6 +6,7 @@ const isProd = process.env.NODE_ENV === "production";
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   poweredByHeader: false,
   eslint: {
     ignoreDuringBuilds: true,
@@ -30,7 +31,7 @@ const nextConfig: NextConfig = {
       { key: "X-Frame-Options", value: "DENY" },
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-      { key: "X-DNS-Prefetch-Control", value: "on" },
+      { key: "X-DNS-Prefetch-Control", value: "off" },
       ...(isProd
         ? [
             {
@@ -43,21 +44,28 @@ const nextConfig: NextConfig = {
         key: "Content-Security-Policy",
         value: [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+          // 'unsafe-eval' retiré : permet l'exécution de code arbitraire.
+          // 'unsafe-inline' conservé temporairement (Next.js en a besoin pour
+          // les styles inline et certains scripts d'hydration). Migration
+          // vers des nonces CSP prévue.
+          "script-src 'self' 'unsafe-inline'",
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: https: blob:",
           "font-src 'self' data:",
-          "connect-src 'self' https://*.ecolemiriam.com https://*.netlify.app https://*.pages.dev https://*.vercel.app https://api.africastalking.com https://api.sandbox.africastalking.com https://api.resend.com https://graph.facebook.com https://api.telegram.org https://api.stripe.com http://localhost:* http://127.0.0.1:*",
+          "connect-src 'self' https://*.ecolemiriam.com https://api.africastalking.com https://api.sandbox.africastalking.com https://api.resend.com https://graph.facebook.com https://api.telegram.org https://api.stripe.com",
           "frame-ancestors 'none'",
           "base-uri 'self'",
           "form-action 'self'",
           "object-src 'none'",
-          ...(isProd ? ["upgrade-insecure-requests"] : []),
+          "frame-src 'none'",
+          "worker-src 'self' blob:",
+          "manifest-src 'self'",
+          ...(isProd ? ["upgrade-insecure-requests", "block-all-mixed-content"] : []),
         ].join("; "),
       },
       {
         key: "Permissions-Policy",
-        value: "camera=(), microphone=(), geolocation=()",
+        value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), interest-cohort=()",
       },
     ];
 
@@ -67,19 +75,23 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         headers: securityHeaders,
       },
-      // --- CORS pour API mobile ---
+      // --- CORS pour API mobile : restreindre aux domaines connus ---
+      // L'API mobile utilise Bearer JWT (pas de cookies), donc CORS n'est
+      // pas une surface CSRF. Mais on évite quand même * pour réduire
+      // l'exposition.
       {
         source: "/api/mobile/:path*",
         headers: [
-          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Origin", value: isProd ? "https://ecolemiriam.com" : "*" },
           { key: "Access-Control-Allow-Methods", value: "GET, POST, PUT, DELETE, OPTIONS" },
           { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization" },
+          { key: "Access-Control-Max-Age", value: "86400" },
         ],
       },
       {
         source: "/api/auth/mobile",
         headers: [
-          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Origin", value: isProd ? "https://ecolemiriam.com" : "*" },
           { key: "Access-Control-Allow-Methods", value: "POST, OPTIONS" },
           { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization" },
         ],
@@ -88,7 +100,7 @@ const nextConfig: NextConfig = {
       {
         source: "/api/stripe/webhook",
         headers: [
-          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Origin", value: "https://*.stripe.com" },
           { key: "Access-Control-Allow-Headers", value: "Content-Type, stripe-signature" },
           { key: "Access-Control-Allow-Methods", value: "POST, OPTIONS" },
         ],

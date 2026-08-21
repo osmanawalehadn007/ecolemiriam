@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyMetaSignature } from "@/lib/webhooks";
 
-const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN ?? "ecolemiriam_whatsapp_token";
+const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 
 /**
  * GET /api/webhooks/whatsapp
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+  if (VERIFY_TOKEN && mode === "subscribe" && token === VERIFY_TOKEN) {
     console.log("[WhatsApp Webhook] Vérification réussie");
     return new NextResponse(challenge, { status: 200 });
   }

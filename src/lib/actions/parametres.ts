@@ -14,6 +14,7 @@ import {
 import { niveauRequiresProfPrincipal, isNiveauPrimaire } from "@/lib/utils-classe";
 import { ELEVE_NON_ARCHIVE } from "@/lib/eleve-filters";
 import { checkPermission } from "@/lib/rbac";
+import { generateSecurePassword } from "@/lib/security/password";
 import type { Role } from "@prisma/client";
 
 // ============================================================
@@ -165,8 +166,10 @@ export async function createUser(data: UserFormData) {
   const existing = await prisma.user.findFirst({ where: { email: { equals: v.email, mode: "insensitive" } } });
   if (existing) throw new Error("Un utilisateur avec cet email existe déjà");
 
-  const password = v.password || "École Miriam2026!";
-  const hashed = await bcrypt.hash(password, 10);
+  // Sécurité : pas de mot de passe par défaut codé en dur. Si aucun mot de
+  // passe n'est fourni, on génère un mot de passe aléatoire fort.
+  const password = v.password || generateSecurePassword();
+  const hashed = await bcrypt.hash(password, 12);
 
   const [firstName, ...restName] = v.name.split(" ");
   const lastName = restName.join(" ") || firstName;

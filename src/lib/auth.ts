@@ -107,12 +107,17 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         });
 
         if (!user || !user.password || !user.isActive) {
+          // Anti-énumération : on effectue quand même un bcrypt.compare
+          // pour égaliser le temps de réponse entre "utilisateur inexistant"
+          // et "mot de passe incorrect". Sans cela, la différence de temps
+          // permet à un attaquant de distinguer les emails valides.
+          await bcrypt.compare(password, "$2a$12$dummyHashToPreventTimingAttackXXXXXXXXXXXXXXXXXXXX");
           auditFire({
             action: "auth:login",
             verdict: "DENIED",
             resource: "user",
             resourceId: user?.id,
-            reason: !user ? "Utilisateur introuvable" : !user.password ? "Compte sans mot de passe" : "Compte désactivé",
+            reason: "Identifiants incorrects",
             metadata: { email },
           });
           return null;
@@ -126,7 +131,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
             verdict: "DENIED",
             resource: "user",
             resourceId: user.id,
-            reason: "Mot de passe incorrect",
+            reason: "Identifiants incorrects",
             metadata: { email },
           });
           return null;

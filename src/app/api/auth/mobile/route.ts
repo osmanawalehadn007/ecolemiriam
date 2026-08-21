@@ -12,9 +12,11 @@ const MobileLoginSchema = z.object({
 });
 
 async function signToken(payload: Record<string, unknown>): Promise<string> {
-  const secret = new TextEncoder().encode(
-    process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? "ecolemiriam-dev-secret"
-  );
+  const rawSecret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+  if (!rawSecret) {
+    throw new Error("AUTH_SECRET/NEXTAUTH_SECRET est requis pour signer les jetons mobiles");
+  }
+  const secret = new TextEncoder().encode(rawSecret);
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -64,6 +66,8 @@ export async function POST(req: Request) {
     });
 
     if (!user || !user.password || !user.isActive) {
+      // Anti-énumération : égaliser le temps de réponse avec un bcrypt factice
+      await bcrypt.compare(password, "$2a$12$dummyHashToPreventTimingAttackXXXXXXXXXXXXXXXXXXXX");
       return NextResponse.json({ error: "Identifiants incorrects" }, { status: 401 });
     }
 

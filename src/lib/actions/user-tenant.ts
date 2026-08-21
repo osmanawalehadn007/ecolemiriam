@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { checkPermission } from "@/lib/rbac";
 import type { Role } from "@prisma/client";
+import { generateSecurePassword } from "@/lib/security/password";
 
 /**
  * Ajoute un utilisateur existant (par email) à un tenant.
@@ -105,8 +106,10 @@ export async function addUserToTenant(params: {
   }
 
   // Créer un nouvel utilisateur avec mot de passe temporaire
-  const tempPassword = params.temporaryPassword || "École Miriam2026!";
-  const hashed = await bcrypt.hash(tempPassword, 10);
+  // Sécurité : pas de mot de passe par défaut codé en dur. Si aucun
+  // temporaryPassword n'est fourni, on génère un mot de passe aléatoire fort.
+  const tempPassword = params.temporaryPassword || generateSecurePassword();
+  const hashed = await bcrypt.hash(tempPassword, 12);
 
   const [firstName, ...restName] = params.email.split("@");
   const name = firstName.charAt(0).toUpperCase() + firstName.slice(1);

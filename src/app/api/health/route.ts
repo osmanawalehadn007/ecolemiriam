@@ -3,12 +3,14 @@ import prisma from "@/lib/prisma";
 
 export async function GET() {
   try {
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- health check système sans session utilisateur
-    const userCount = await prisma.user.count();
-    return NextResponse.json({ ok: true, userCount });
+    // Health check public : on ne divulgue aucune information sur le
+    // contenu de la base (nombre d'utilisateurs, etc.). On se contente
+    // de vérifier que la connexion DB est vivante.
+    await prisma.$queryRaw`SELECT 1`;
+    return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : String(error) },
+      { ok: false },
       { status: 500 }
     );
   }

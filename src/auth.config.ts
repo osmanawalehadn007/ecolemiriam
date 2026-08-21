@@ -11,10 +11,42 @@ export interface AvailableTenant {
 }
 
 export const authConfig: NextAuthConfig = {
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt", maxAge: 8 * 60 * 60 }, // 8 heures — expiration session
   pages: {
     signIn: "/login",
     error: "/login",
+  },
+  cookies: {
+    sessionToken: {
+      name: `__Secure-authjs.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: true,
+        // Pas de domain explicite : le cookie est scoped au domaine exact
+        // (ecolemiriam.com). Partager entre sous-domaines exigerait
+        // domain: ".ecolemiriam.com" mais élargirait la surface d'attaque.
+      },
+    },
+    callbackUrl: {
+      name: `__Secure-authjs.callback-url`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: true,
+      },
+    },
+    csrfToken: {
+      name: `__Host-authjs.csrf-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: true,
+      },
+    },
   },
   callbacks: {
     async jwt({ token, user }) {

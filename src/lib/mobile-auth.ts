@@ -20,12 +20,17 @@ export type MobileScope = MobileUser & SessionSiteClaims;
 function mobileSecret(): Uint8Array {
   const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
   if (!secret) {
-    // Le repli en dur signifiait qu'une plateforme déployée sans AUTH_SECRET
-    // acceptait des jetons forgés par quiconque connaît la valeur par défaut.
+    // En production, AUTH_SECRET est obligatoire : sans lui, n'importe qui
+    // connaissant la valeur par défaut pourrait forger des jetons valides.
+    // En dev, on génère un secret éphémère unique par processus au lieu
+    // d'utiliser une constante codée en dur.
     if (process.env.NODE_ENV === "production") {
       throw new Error("AUTH_SECRET est requis pour vérifier les jetons mobiles");
     }
-    return new TextEncoder().encode("ecolemiriam-dev-secret");
+    // Secret éphémère aléatoire : les jetons ne survivent pas à un restart
+    const crypto = require("crypto");
+    const ephemeral = (process as { __devSecret?: string }).__devSecret ??= crypto.randomBytes(32).toString("hex");
+    return new TextEncoder().encode(ephemeral);
   }
   return new TextEncoder().encode(secret);
 }
