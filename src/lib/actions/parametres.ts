@@ -1597,3 +1597,94 @@ export async function unassignEnseignantClasse(affectationId: string) {
   revalidatePath("/parametres");
   return { success: true };
 }
+
+// ============================================================
+// PERMISSIONS PERSONNALISÉES PAR UTILISATEUR
+// ============================================================
+
+export interface UserPermissionEntry {
+  id: string;
+  permission: string;
+  mode: string; // "grant" ou "deny"
+}
+
+/**
+ * Récupère les permissions personnalisées d'un utilisateur pour le tenant actif.
+ */
+export async function getUserPermissions(userId: string): Promise<UserPermissionEntry[]> {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Privilèges insuffisants");
+
+  return prisma.userPermission.findMany({
+    where: { userId, tenantId: session.user.tenantId },
+    select: { id: true, permission: true, mode: true },
+    orderBy: { permission: "asc" },
+  });
+}
+
+/**
+ * Sauvegarde les permissions personnalisées d'un utilisateur.
+ * - `grants` : permissions à accorder (au-delà du rôle)
+ * - `denies` : permissions à retirer (en moins du rôle)
+ * Les permissions non présentes dans ces listes sont supprimées (retour au rôle).
+ */
+export async function saveUserPermissions(
+  userId: string,
+  grants: string[],
+  denies: string[]
+): Promise<{ success: boolean }> {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Privilèges insuffisants");
+
+  const tenantId = session.user.tenantId;
+
+  // Vérifier que l'utilisateur cible appartient bien à ce tenant
+  const targetUser = await prisma.user.findFirst({
+    where: { id: userId, tenantId },
+    select: { id: true, role: true },
+  });
+  if (!targetUser) throw new Error("Utilisateur introuvable dans cet établissement");
+
+  // SUPER_ADMIN n'est pas surchargeable
+  if (targetUser.role === "SUPER_ADMIN") {
+    throw new Error("Les permissions d'un super-admin ne sont pas modifiables");
+  }
+
+  // Supprimer toutes les permissions existantes pour cet user/tenant
+  await prisma.userPermission.deleteMany({
+    where: { userId, tenantId },
+  });
+
+  // Insérer les nouvelles permissions
+  const allPerms = [
+    ...grants.map((p) => ({ userId, tenantId, permission: p, mode: "grant" as const })),
+    ...denies.map((p) => ({ userId, tenantId, permission: p, mode: "deny" as const })),
+  ];
+
+  if (allPerms.length > 0) {
+    await prisma.userPermission.createMany({ data: allPerms });
+  }
+
+  // Invalider le cache des permissions pour cet utilisateur
+  const { invalidateUserPermsCache } = await import("@/lib/rbac");
+  invalidateUserPermsCache(userId, tenantId);
+
+  // Audit log
+  const { auditFire } = await import("@/lib/audit");
+  auditFire({
+    userId: session.user.id,
+    tenantId,
+    action: "user:permissions:update",
+    verdict: "ALLOWED",
+    resource: "user",
+    resourceId: userId,
+    metadata: { grants, denies },
+  });
+
+  revalidatePath("/parametres");
+  return { success: true };
+}

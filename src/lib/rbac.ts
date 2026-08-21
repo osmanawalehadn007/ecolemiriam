@@ -20,6 +20,7 @@ import { NextResponse } from "next/server";
 import type { Role } from "@prisma/client";
 import type { Session } from "next-auth";
 import { auditFire } from "@/lib/audit";
+import prisma from "@/lib/prisma";
 
 export type Permission = string;
 
@@ -124,6 +125,89 @@ export function roleHasPermission(role: Role, permission: Permission): boolean {
 }
 
 // ------------------------------------------------------------
+// Cache en mémoire des permissions personnalisées par utilisateur
+// (évite une requête DB à chaque check de permission)
+// ------------------------------------------------------------
+interface CachedPerms {
+  grants: Set<string>;
+  denies: Set<string>;
+  expiresAt: number;
+}
+const userPermsCache = new Map<string, CachedPerms>();
+const PERMS_CACHE_TTL = 30_000; // 30 secondes
+
+/**
+ * Récupère les permissions personnalisées d'un utilisateur depuis la base,
+ * avec un cache en mémoire de 30s pour éviter les requêtes répétées.
+ */
+async function getUserCustomPerms(userId: string, tenantId: string): Promise<{ grants: Set<string>; denies: Set<string> }> {
+  const cacheKey = `${userId}:${tenantId}`;
+  const cached = userPermsCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { grants: cached.grants, denies: cached.denies };
+  }
+
+  const rows = await prisma.userPermission.findMany({
+    where: { userId, tenantId },
+    select: { permission: true, mode: true },
+  });
+
+  const grants = new Set<string>();
+  const denies = new Set<string>();
+  for (const r of rows) {
+    if (r.mode === "deny") denies.add(r.permission);
+    else grants.add(r.permission);
+  }
+
+  userPermsCache.set(cacheKey, { grants, denies, expiresAt: Date.now() + PERMS_CACHE_TTL });
+  return { grants, denies };
+}
+
+/**
+ * Invalide le cache des permissions pour un utilisateur (à appeler après modification).
+ */
+export function invalidateUserPermsCache(userId: string, tenantId: string): void {
+  userPermsCache.delete(`${userId}:${tenantId}`);
+}
+
+/**
+ * Vérifie si un utilisateur a une permission, en tenant compte :
+ *   1. Des permissions de son rôle (ROLE_PERMISSIONS)
+ *   2. Des surcharges personnalisées (UserPermission : grant/deny)
+ *
+ * Logique :
+ *   - Si le rôle accorde la permission ET qu'il n'y a pas de deny → OK
+ *   - Si le rôle n'accorde pas la permission mais qu'il y a un grant → OK
+ *   - Si le rôle accorde la permission mais qu'il y a un deny → refusé
+ *   - SUPER_ADMIN : toujours OK (non surchargeable)
+ */
+export async function userHasPermission(
+  userId: string,
+  role: Role,
+  tenantId: string,
+  permission: Permission
+): Promise<boolean> {
+  // SUPER_ADMIN : accès total non surchargeable
+  if (role === "SUPER_ADMIN") return true;
+
+  const roleGrants = roleHasPermission(role, permission);
+  const { grants, denies } = await getUserCustomPerms(userId, tenantId);
+
+  // Un deny explicite l'emporte toujours
+  if (denies.has(permission)) return false;
+  // Un deny sur le module entier (module:*) bloque aussi
+  const moduleName = permission.split(":")[0];
+  if (denies.has(`${moduleName}:*`)) return false;
+
+  // Un grant explicite accorde même si le rôle ne l'a pas
+  if (grants.has(permission)) return true;
+  if (grants.has(`${moduleName}:*`)) return true;
+
+  // Sinon, fallback sur le rôle
+  return roleGrants;
+}
+
+// ------------------------------------------------------------
 // Garde d'autorisation pour les route handlers
 // ------------------------------------------------------------
 type AuthSuccess = {
@@ -188,7 +272,15 @@ export async function authorize(
     const needed = Array.isArray(opts.permission)
       ? opts.permission
       : [opts.permission];
-    const allowed = needed.some((p) => roleHasPermission(role, p));
+    // Utiliser userHasPermission pour tenir compte des surcharges personnalisées
+    const checks = await Promise.all(
+      needed.map((p) =>
+        tenantId
+          ? userHasPermission(session.user.id, role, tenantId, p)
+          : roleHasPermission(role, p)
+      )
+    );
+    const allowed = checks.some(Boolean);
     if (!allowed) {
       auditFire({
         userId: session.user.id,
@@ -224,6 +316,11 @@ export async function authorize(
  *
  *   const denied = checkPermission(session.user.role, "eleves:write");
  *   if (denied) return denied;
+ *
+ * Note : cette fonction est SYNCHRONE et ne vérifie que les permissions du
+ * rôle, sans tenir compte des surcharges personnalisées. Pour une vérification
+ * complète incluant les permissions personnalisées, utiliser
+ * `checkPermissionAsync()`.
  */
 export function checkPermission(
   role: Role,
@@ -231,6 +328,45 @@ export function checkPermission(
 ): NextResponse | null {
   if (!roleHasPermission(role, permission)) {
     auditFire({
+      action: "auth:check",
+      verdict: "DENIED",
+      resource: permission,
+      reason: "Privilèges insuffisants",
+      metadata: { role },
+    });
+    return NextResponse.json(
+      { error: "Accès refusé : privilèges insuffisants" },
+      { status: 403 }
+    );
+  }
+  return null;
+}
+
+/**
+ * Garde ASYNCHRONE qui tient compte des permissions personnalisées.
+ * À utiliser dans les routes qui font déjà `await auth()` :
+ *
+ *   const denied = await checkPermissionAsync(session, "eleves:write");
+ *   if (denied) return denied;
+ */
+export async function checkPermissionAsync(
+  session: Session,
+  permission: Permission
+): Promise<NextResponse | null> {
+  const role = session.user.role as Role;
+  const tenantId = session.user.tenantId ?? "";
+
+  // SUPER_ADMIN : toujours OK
+  if (role === "SUPER_ADMIN") return null;
+
+  const allowed = tenantId
+    ? await userHasPermission(session.user.id, role, tenantId, permission)
+    : roleHasPermission(role, permission);
+
+  if (!allowed) {
+    auditFire({
+      userId: session.user.id,
+      tenantId: tenantId || null,
       action: "auth:check",
       verdict: "DENIED",
       resource: permission,
