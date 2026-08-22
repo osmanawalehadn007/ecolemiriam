@@ -72,6 +72,10 @@ export default auth(async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf).*$).*)",
+    // Exclure /api/auth/* pour éviter un double cookie CSRF :
+    // le middleware auth() génère un __Host-authjs.csrf-token, puis le
+    // route handler NextAuth en génère un second. Le navigateur stocke
+    // les deux et envoie le mauvais au callback → MissingCSRF.
+    "/((?!_next/static|_next/image|favicon.ico|api/auth|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf).*$).*)",
   ],
 };
