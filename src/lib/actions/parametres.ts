@@ -112,6 +112,9 @@ const UserSchema = z.object({
   phone: z.string().optional(),
   password: z.string().min(8, "Min. 8 caractères").optional().or(z.literal("")),
   isActive: z.boolean().default(true),
+  // Champs pour l'affectation immédiate des enseignants (TEACHER / CLASS_TEACHER)
+  matiereIds: z.array(z.string()).optional(),
+  classeIds: z.array(z.string()).optional(),
 });
 
 export type UserFormData = z.infer<typeof UserSchema>;
@@ -199,13 +202,92 @@ export async function createUser(data: UserFormData) {
 
   // Auto-create Enseignant record for teacher roles
   if (v.role === "TEACHER" || v.role === "CLASS_TEACHER") {
-    await prisma.enseignant.create({
+    const enseignant = await prisma.enseignant.create({
       data: {
         tenantId: session.user.tenantId,
         userId: newUser.id,
         dateEntree: new Date(),
       },
     });
+
+    // Affectation immédiate des matières (collège/lycée)
+    if (v.matiereIds && v.matiereIds.length > 0) {
+      // Valider que toutes les matières appartiennent au tenant
+      const validMatieres = await prisma.matiere.findMany({
+        where: {
+          id: { in: v.matiereIds },
+          tenantId: session.user.tenantId,
+          ...siteFilterForModel("matiere", session.user),
+        },
+        select: { id: true },
+      });
+      if (validMatieres.length !== v.matiereIds.length) {
+        throw new Error("Une ou plusieurs matières sont invalides");
+      }
+      await prisma.enseignantMatiere.createMany({
+        data: v.matiereIds.map((matiereId) => ({
+          tenantId: session.user.tenantId!,
+          enseignantId: enseignant.id,
+          matiereId,
+        })),
+      });
+    }
+
+    // Affectation immédiate des classes
+    if (v.classeIds && v.classeIds.length > 0) {
+      // Valider que toutes les classes appartiennent au tenant
+      const validClasses = await prisma.classe.findMany({
+        where: {
+          id: { in: v.classeIds },
+          tenantId: session.user.tenantId,
+          ...siteFilterForModel("classe", session.user),
+        },
+        select: { id: true, niveau: true, siteId: true },
+      });
+      if (validClasses.length !== v.classeIds.length) {
+        throw new Error("Une ou plusieurs classes sont invalides");
+      }
+
+      // Déduire le site de l'enseignant à partir des classes
+      // (toutes les classes doivent appartenir au même site pour un enseignant mono-site)
+      const siteIds = [...new Set(validClasses.map((c) => c.siteId).filter(Boolean))];
+      if (siteIds.length === 1) {
+        // Mettre à jour le user.siteId (le site se gère au niveau User, pas Enseignant)
+        // eslint-disable-next-line ecolemiriam/require-tenant-id -- self-update : newUser.id provient du create
+        await prisma.user.update({
+          where: { id: newUser.id },
+          data: { siteId: siteIds[0] },
+        });
+      }
+
+      // Créer les affectations enseignant ↔ classe
+      for (const classe of validClasses) {
+        const isPrimaire = isNiveauPrimaire(classe.niveau);
+        // Au primaire : 1 classe max, pas de matière
+        // Au collège/lycée : matière obligatoire (on prend la 1ère matière si plusieurs)
+        const matiereId = isPrimaire
+          ? undefined
+          : v.matiereIds && v.matiereIds.length > 0
+            ? v.matiereIds[0]
+            : undefined;
+
+        // Vérifier l'unicité (unique sur [enseignantId, classeId, matiereId])
+        // eslint-disable-next-line ecolemiriam/require-tenant-id -- tenantId fourni par le caller (session.user.tenantId)
+        const existingAffectation = await prisma.enseignantAffectation.findFirst({
+          where: { enseignantId: enseignant.id, classeId: classe.id, matiereId: matiereId ?? null },
+        });
+        if (!existingAffectation) {
+          await prisma.enseignantAffectation.create({
+            data: {
+              tenantId: session.user.tenantId!,
+              enseignantId: enseignant.id,
+              classeId: classe.id,
+              matiereId: matiereId || null,
+            },
+          });
+        }
+      }
+    }
   }
 
   // Auto-create Parent record for parent role
@@ -224,13 +306,17 @@ export async function createUser(data: UserFormData) {
 
   // ── Envoi de l'email de vérification ──────────────────────────────
   // L'utilisateur doit vérifier son email avant de pouvoir se connecter.
+  // Le mot de passe temporaire est inclus dans l'email pour que l'utilisateur
+  // puisse se connecter directement, ou il peut en définir un nouveau via
+  // la page /set-password après vérification.
   // Ne pas bloquer la création si l'envoi échoue.
   try {
     const verifyResult = await sendVerificationEmail(
       v.email,
       v.name,
       undefined,
-      true
+      true,
+      password // mot de passe temporaire en clair dans l'email
     );
     if (!verifyResult.success) {
       console.warn("[createUser] Échec envoi email de vérification:", verifyResult.error);

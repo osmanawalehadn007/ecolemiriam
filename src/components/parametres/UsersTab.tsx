@@ -1,14 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Trash2, Power, Phone, Edit3, Check, X, Building2, MapPin, AlertTriangle, Search, Shield, GraduationCap, Briefcase, Users as UsersIcon } from "lucide-react";
-import { createUser, toggleUserActive, deleteUser, updateUserPhone, assignUserSites, getUserSites, type UserFormData } from "@/lib/actions/parametres";
+import { Loader2, Plus, Trash2, Power, Phone, Edit3, Check, X, Building2, MapPin, AlertTriangle, Search, Shield, GraduationCap, Briefcase, Users as UsersIcon, BookOpen, Users as UsersClass } from "lucide-react";
+import { createUser, toggleUserActive, deleteUser, updateUserPhone, assignUserSites, getUserSites, getMatieresForAffectation, getClassesForAffectation, type UserFormData } from "@/lib/actions/parametres";
 import { addUserToTenant } from "@/lib/actions/user-tenant";
 import { useTranslations } from "next-intl";
 import type { AvailableTenant } from "@/auth.config";
@@ -56,6 +56,23 @@ interface SiteItem {
   nom: string;
   code: string | null;
 }
+
+interface MatiereOption {
+  id: string;
+  nom: string;
+  code: string;
+  couleur?: string | null;
+}
+
+interface ClasseOption {
+  id: string;
+  nom: string;
+  niveau: string;
+  structure?: { id: string; type: string; nom: string } | null;
+  site?: { id: string; nom: string } | null;
+}
+
+const isTeacherRole = (role: string) => role === "TEACHER" || role === "CLASS_TEACHER";
 
 export function UsersTab({ users, canManage, sessionRole, availableTenants = [], sites = [] }: { users: UserItem[]; canManage: boolean; sessionRole?: string; availableTenants?: AvailableTenant[]; sites?: SiteItem[] }) {
   const t = useTranslations("parametres");
@@ -151,6 +168,64 @@ export function UsersTab({ users, canManage, sessionRole, availableTenants = [],
   });
   const [formSiteIds, setFormSiteIds] = useState<string[]>([]);
 
+  // ── Affectation matières + classes pour les enseignants ──
+  const [matieres, setMatieres] = useState<MatiereOption[]>([]);
+  const [classes, setClasses] = useState<ClasseOption[]>([]);
+  const [formMatiereIds, setFormMatiereIds] = useState<string[]>([]);
+  const [formClasseIds, setFormClasseIds] = useState<string[]>([]);
+  const [affectationLoaded, setAffectationLoaded] = useState(false);
+
+  const loadAffectationData = useCallback(async () => {
+    if (affectationLoaded) return;
+    try {
+      const [mat, cls] = await Promise.all([
+        getMatieresForAffectation(),
+        getClassesForAffectation(),
+      ]);
+      setMatieres(mat as MatiereOption[]);
+      setClasses(cls as ClasseOption[]);
+      setAffectationLoaded(true);
+    } catch {
+      // silent
+    }
+  }, [affectationLoaded]);
+
+  // Charger les matières/classes quand l'utilisateur ouvre le formulaire
+  // ou sélectionne un rôle enseignant
+  useEffect(() => {
+    if (showForm && isTeacherRole(form.role)) {
+      loadAffectationData();
+    }
+  }, [showForm, form.role, loadAffectationData]);
+
+  // Déduire le site automatiquement à partir des classes sélectionnées
+  const deducedSite = (() => {
+    if (formClasseIds.length === 0) return null;
+    const selectedClasses = classes.filter((c) => formClasseIds.includes(c.id));
+    const siteIds = [...new Set(selectedClasses.map((c) => c.site?.id).filter(Boolean))];
+    if (siteIds.length === 1) {
+      const site = sites.find((s) => s.id === siteIds[0]);
+      return site ? site.nom : null;
+    }
+    return null; // multi-site ou sans site
+  })();
+
+  function toggleFormMatiere(matiereId: string) {
+    setFormMatiereIds((prev) =>
+      prev.includes(matiereId)
+        ? prev.filter((id) => id !== matiereId)
+        : [...prev, matiereId]
+    );
+  }
+
+  function toggleFormClasse(classeId: string) {
+    setFormClasseIds((prev) =>
+      prev.includes(classeId)
+        ? prev.filter((id) => id !== classeId)
+        : [...prev, classeId]
+    );
+  }
+
   function toggleFormSite(siteId: string) {
     setFormSiteIds((prev) =>
       prev.includes(siteId)
@@ -169,11 +244,17 @@ export function UsersTab({ users, canManage, sessionRole, availableTenants = [],
     e.preventDefault();
     setIsPending(true);
     try {
-      const result = await createUser(form);
+      // Inclure matiereIds et classeIds si le rôle est enseignant
+      const payload: UserFormData = {
+        ...form,
+        ...(isTeacherRole(form.role) ? {
+          matiereIds: formMatiereIds,
+          classeIds: formClasseIds,
+        } : {}),
+      };
+      const result = await createUser(payload);
       // Assigner les sites si des sites sont sélectionnés
       if (formSiteIds.length > 0 && result?.success) {
-        // Récupérer l'ID du nouvel utilisateur via la liste rafraîchie
-        // Pour l'instant, on assigne après création en cherchant par email
         const newUserId = (result as { userId?: string }).userId;
         if (newUserId) {
           await assignUserSites(newUserId, formSiteIds.map((sid) => ({ siteId: sid, role: null })));
@@ -183,6 +264,8 @@ export function UsersTab({ users, canManage, sessionRole, availableTenants = [],
       setShowForm(false);
       setForm({ name: "", email: "", role: "TEACHER", phone: "", password: "", isActive: true });
       setFormSiteIds([]);
+      setFormMatiereIds([]);
+      setFormClasseIds([]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("genericError"));
     } finally {
@@ -387,7 +470,7 @@ export function UsersTab({ users, canManage, sessionRole, availableTenants = [],
               </div>
 
               {/* Sélection des sites */}
-              {sites.length > 0 && (
+              {sites.length > 0 && !isTeacherRole(form.role) && (
                 <div className="md:col-span-2 space-y-2">
                   <Label>Accès aux sites</Label>
                   <label
@@ -428,6 +511,108 @@ export function UsersTab({ users, canManage, sessionRole, availableTenants = [],
                     <p className="text-xs text-muted-foreground italic">
                       Aucun site sélectionné = accès à tous les sites par défaut.
                     </p>
+                  )}
+                </div>
+              )}
+
+              {/* ── Affectation matières + classes pour les enseignants ── */}
+              {isTeacherRole(form.role) && (
+                <div className="md:col-span-2 space-y-4 border-t pt-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                    <GraduationCap className="h-4 w-4" />
+                    Affectation pédagogique
+                  </div>
+
+                  {/* Matières */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <BookOpen className="h-4 w-4" />
+                      Matières enseignées
+                      <span className="text-xs text-muted-foreground font-normal">(collège/lycée — optionnel au primaire)</span>
+                    </Label>
+                    {matieres.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">Chargement des matières…</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {matieres.map((matiere) => (
+                          <button
+                            key={matiere.id}
+                            type="button"
+                            onClick={() => toggleFormMatiere(matiere.id)}
+                            className={cn(
+                              "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                              formMatiereIds.includes(matiere.id)
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background hover:bg-muted border-input"
+                            )}
+                            style={matiere.couleur && formMatiereIds.includes(matiere.id) ? { backgroundColor: matiere.couleur, borderColor: matiere.couleur } : undefined}
+                          >
+                            {matiere.nom}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {formMatiereIds.length === 0 && (
+                      <p className="text-xs text-muted-foreground italic">
+                        Aucune matière sélectionnée. L&apos;enseignant pourra être affecté plus tard.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Classes */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <UsersClass className="h-4 w-4" />
+                      Classes assignées
+                      <span className="text-xs text-muted-foreground font-normal">(déduit le site automatiquement)</span>
+                    </Label>
+                    {classes.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">Chargement des classes…</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {classes.map((classe) => (
+                          <button
+                            key={classe.id}
+                            type="button"
+                            onClick={() => toggleFormClasse(classe.id)}
+                            className={cn(
+                              "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                              formClasseIds.includes(classe.id)
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background hover:bg-muted border-input"
+                            )}
+                          >
+                            {classe.nom}
+                            {classe.structure && (
+                              <span className="ml-1 opacity-60">({classe.structure.type})</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {formClasseIds.length === 0 && (
+                      <p className="text-xs text-muted-foreground italic">
+                        Aucune classe sélectionnée. L&apos;enseignant pourra être affecté plus tard via l&apos;onglet « Affectations ».
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Site déduit */}
+                  {deducedSite && (
+                    <div className="flex items-center gap-2 p-3 rounded-lg border-2 border-green-500/30 bg-green-500/5">
+                      <MapPin className="h-4 w-4 text-green-600" />
+                      <p className="text-sm text-green-700">
+                        Site déduit automatiquement : <strong>{deducedSite}</strong>
+                      </p>
+                    </div>
+                  )}
+                  {formClasseIds.length > 0 && !deducedSite && (
+                    <div className="flex items-center gap-2 p-3 rounded-lg border-2 border-amber-500/30 bg-amber-500/5">
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      <p className="text-sm text-amber-700">
+                        Les classes sélectionnées appartiennent à plusieurs sites. L&apos;enseignant sera multi-site.
+                      </p>
+                    </div>
                   )}
                 </div>
               )}
