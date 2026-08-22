@@ -157,25 +157,36 @@ reverse_proxy $new_service:3000 {
 }
 EOF
 
-  # ── Synchroniser les fichiers dans le conteneur Caddy ───────
-  # cat > crée un nouvel inode, mais les bind mounts Docker pointent
-  # vers l'ancien inode. On copie donc les fichiers dans le conteneur.
-  docker cp "$UPSTREAM_FILE" ecolemiriam-caddy:/etc/caddy/upstream.conf
-  docker cp "$upstream_simple" ecolemiriam-caddy:/etc/caddy/upstream-simple.conf
+  # ── Redémarrer Caddy pour recharger les bind mounts ──────────
+  # Les bind mounts :ro de Docker ne reflètent PAS les changements
+  # écrits par `cat >` sur l'hôte (inodes différents avec overlay2).
+  # docker restart force la relecture des fichiers au démarrage.
+  # Downtime < 1s (Caddy démarre rapidement).
+  info "Redémarrage Caddy pour recharger la config..."
+  docker restart ecolemiriam-caddy 2>/dev/null
 
-  # ── Valider AVANT de reload (sécurité critique) ────────────
-  # Un Caddyfile corrompu = production hors ligne. On valide
-  # systématiquement avant de toucher à la config active.
-  if ! validate_caddy; then
-    err "Refus de recharger Caddy : configuration invalide. Production NON modifiée."
+  # Attendre que Caddy soit prêt
+  local caddy_wait=0
+  while [ "$caddy_wait" -lt 15 ]; do
+    if docker exec ecolemiriam-caddy wget -qO- http://localhost:8080/health 2>/dev/null | grep -q "OK"; then
+      break
+    fi
+    sleep 1
+    caddy_wait=$((caddy_wait + 1))
+  done
+
+  if [ "$caddy_wait" -ge 15 ]; then
+    err "Caddy n'a pas redémarré dans les 15s"
+    err "Logs : docker logs ecolemiriam-caddy --tail 20"
     return 1
   fi
 
-  # Recharger Caddy (zero downtime — Caddy reload est non-bloquant)
-  docker exec ecolemiriam-caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null || {
-    warn "caddy reload a échoué, tentative de restart..."
-    docker restart ecolemiriam-caddy
-  }
+  # Valider la config chargée par Caddy
+  if ! docker exec ecolemiriam-caddy caddy validate --config /etc/caddy/Caddyfile 2>&1 | grep -q "Valid configuration"; then
+    err "Configuration Caddy invalide après redémarrage"
+    err "Logs : docker logs ecolemiriam-caddy --tail 20"
+    return 1
+  fi
 
   # Mettre à jour le state
   echo "$new_color" > "$STATE_FILE"
