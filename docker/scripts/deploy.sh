@@ -47,7 +47,7 @@ if [ "${1:-}" = "--rollback" ]; then
   log "=== ROLLBACK ==="
   if docker image inspect ecolemiriam-app:previous &>/dev/null; then
     docker tag ecolemiriam-app:previous "${GHCR_IMAGE}"
-    docker compose -f "$COMPOSE_FILE" up -d app
+    docker compose -f "$COMPOSE_FILE" up -d --no-deps --pull never app
     log "Rollback terminé. Vérifier : docker exec ecolemiriam-app curl -f http://localhost:3000/api/health"
   else
     err "Aucune image précédente (ecolemiriam-app:previous) trouvée"
@@ -70,7 +70,7 @@ if [ "${1:-}" = "--build" ]; then
   fi
 
   log "3/6 — déploiement..."
-  docker compose -f "$COMPOSE_FILE" up -d app
+  docker compose -f "$COMPOSE_FILE" up -d --no-deps --pull never app
 
   log "4/6 — healthcheck (60s max)..."
   HEALTH_OK=false
@@ -85,7 +85,7 @@ if [ "${1:-}" = "--build" ]; then
   if [ "$HEALTH_OK" = "false" ]; then
     err "Healthcheck échoué — ROLLBACK AUTOMATIQUE"
     docker tag ecolemiriam-app:previous "${GHCR_IMAGE}"
-    docker compose -f "$COMPOSE_FILE" up -d app
+    docker compose -f "$COMPOSE_FILE" up -d --no-deps --pull never app
     warn "Rollback effectué."
     exit 1
   fi
@@ -121,8 +121,10 @@ if docker image inspect "${GHCR_IMAGE}" &>/dev/null; then
 fi
 
 # 5. Déployer
+# --no-deps : ne pas toucher aux dépendances (postgres, pgbouncer déjà en cours)
+# --pull never : l'image a déjà été pull à l'étape 3, ne pas re-télécharger
 log "4/7 — déploiement..."
-docker compose -f "$COMPOSE_FILE" up -d app
+docker compose -f "$COMPOSE_FILE" up -d --no-deps --pull never app
 
 # 6. Healthcheck
 log "5/7 — healthcheck (60s max)..."
@@ -138,7 +140,7 @@ done
 if [ "$HEALTH_OK" = "false" ]; then
   err "Healthcheck échoué — ROLLBACK AUTOMATIQUE"
   docker tag ecolemiriam-app:previous "${GHCR_IMAGE}"
-  docker compose -f "$COMPOSE_FILE" up -d app
+  docker compose -f "$COMPOSE_FILE" up -d --no-deps --pull never app
   warn "Rollback effectué."
   warn "Logs : docker logs ecolemiriam-app --tail 50"
   exit 1
