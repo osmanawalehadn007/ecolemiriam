@@ -143,10 +143,10 @@ services:
   # APP — Next.js (standalone, non-root, read-only rootfs)
   # ============================================================
   app:
-    build:
-      context: ..
-      dockerfile: docker/app/Dockerfile
-    image: ecolemiriam-app:latest
+    # Image construite par GitHub Actions et poussée vers GHCR.
+    # Le VPS pull l'image au lieu de la builder (déploiement ~30s au lieu de ~10min).
+    # Pour build local (développement) : utiliser `make build` qui fait docker build + tag.
+    image: ghcr.io/wilsan007/ecolemiriam-app:latest
     container_name: ecolemiriam-app
     restart: unless-stopped
 

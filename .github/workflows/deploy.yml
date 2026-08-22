@@ -1,0 +1,142 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # Déclenchement manuel possible
+
+# Éviter deux déploiements simultanés sur le VPS
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/ecolemiriam-app
+
+jobs:
+  # ============================================================
+  # JOB 1 : Build de l'image Docker + push vers GHCR
+  # ============================================================
+  # Se fait sur un runner GitHub Actions (4 vCPU, 16 Go RAM) —
+  # bien plus rapide que builder sur le VPS (1-2 vCPU, 2-4 Go RAM).
+  # Cache BuildKit via GHCR : les builds incrémentaux sont ~2-3x plus rapides.
+  # ============================================================
+  build-and-push:
+    name: Build & Push to GHCR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # Permet de push vers GHCR
+
+    outputs:
+      image_digest: ${{ steps.build.outputs.digest }}
+      image_tag: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }} # Token automatique, pas besoin de secret manuel
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-,format=short
+            type=ref,event=branch
+
+      - name: Build & Push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/app/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Cache distant via GHCR : accélère les builds incrémentaux
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:cache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:cache,mode=max
+          provenance: true
+          sbom: true # Software Bill of Materials pour la sécurité
+
+  # ============================================================
+  # JOB 2 : Déploiement sur le VPS
+  # ============================================================
+  # SSH vers le VPS, pull la nouvelle image, restart, healthcheck.
+  # Le VPS ne build plus — il pull une image pré-construite.
+  # Durée : ~30-60s (pull + restart + healthcheck) au lieu de ~10-15min.
+  # ============================================================
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production # Protection rule optionnelle (approval manuelle possible)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          script: |
+            set -euo pipefail
+
+            cd /opt/ecolemiriam
+
+            echo "=== 1/5 — Git pull (docker-compose.yml + scripts) ==="
+            git pull origin main
+
+            echo "=== 2/5 — Login GHCR (si pas déjà connecté) ==="
+            # Le token GHCR est stocké sur le VPS dans ~/.config/ghcr-token
+            # Voir docker/scripts/setup-vps-ghcr.sh pour le setup initial
+            if [ -f ~/.config/ghcr-token ]; then
+              cat ~/.config/ghcr-token | docker login ghcr.io -u wilsan007 --password-stdin
+            else
+              echo "WARN: ~/.config/ghcr-token manquant — le VPS doit être configuré (setup-vps-ghcr.sh)"
+              exit 1
+            fi
+
+            echo "=== 3/5 — Backup pré-déploiement ==="
+            docker exec ecolemiriam-pgbackrest pgbackrest --stanza=ecolemiriam --type=incr backup 2>/dev/null || echo "WARN: Backup a échoué — continuer"
+
+            echo "=== 4/5 — Pull nouvelle image + restart ==="
+            docker compose -f docker/docker-compose.yml pull app
+            docker compose -f docker/docker-compose.yml up -d app
+
+            echo "=== 5/5 — Healthcheck (60s max) ==="
+            HEALTH_OK=false
+            for i in $(seq 1 12); do
+              if docker exec ecolemiriam-app curl -sf http://localhost:3000/api/health 2>/dev/null; then
+                HEALTH_OK=true
+                break
+              fi
+              sleep 5
+            done
+
+            if [ "$HEALTH_OK" = "false" ]; then
+              echo "ERREUR: Healthcheck échoué — ROLLBACK AUTOMATIQUE"
+              # Revenir à l'image précédente (taggé par le script deploy.sh)
+              bash docker/scripts/deploy.sh --rollback
+              exit 1
+            fi
+
+            echo "=== Déploiement terminé ✓ ==="
+            docker image prune -f >/dev/null 2>&1 || true

@@ -1,19 +1,25 @@
+# syntax=docker/dockerfile:1.7
 # ============================================================
 # École Miriam — Dockerfile app (Next.js standalone, non-root, read-only)
 # ============================================================
-# Build multi-étapes :
-#   1. deps    — installe les dépendances (cache Docker)
-#   2. builder — compile Next.js en mode standalone
+# Build multi-étapes avec cache BuildKit :
+#   1. deps    — installe les dépendances (cache npm persistant)
+#   2. builder — compile Next.js en mode standalone (cache .next persistant)
 #   3. runner  — image finale minimale, non-root, read-only rootfs
 #
 # Sécurité :
-# - Image de base pinée par hash (pas :latest, pas tag flottant)
+# - Image de base pinée par tag (pas :latest, pas tag flottant)
 # - Utilisateur non-root (nextjs:nodejs, UID 1001)
 # - Filesystem read-only + tmpfs pour /tmp et /home/nextjs
 # - Aucun secret baked dans l'image
 # - Healthcheck intégré
 # - .dockerignore strict (pas de .env, .git, node_modules dans le contexte)
 # - Prisma client copié séparément
+#
+# Optimisations performance :
+# - npm ci (reproductible + plus rapide que npm install)
+# - Cache BuildKit pour ~/.npm et .next/cache (persistant entre builds)
+# - prisma generate exécuté une seule fois (inclus dans npm run build)
 # ============================================================
 
 # --- Étape 1 : dépendances ---
@@ -28,8 +34,10 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma
 
 # Installer les dépendances (production + dev pour le build)
-# npm install au lieu de npm ci pour tolérer les différences de lock file
-RUN npm install --legacy-peer-deps
+# npm ci = reproductible + plus rapide que npm install
+# --mount=type=cache : cache npm persistant entre builds (BuildKit)
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --legacy-peer-deps
 
 # --- Étape 2 : build ---
 FROM node:22-alpine3.21 AS builder
@@ -48,8 +56,11 @@ ENV NODE_ENV=production
 # (Prisma ne se connecte pas au build — l'URL réelle est injectée au runtime via env_file)
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build?schema=public"
 
-# Générer le client Prisma + build Next.js standalone
-RUN npx prisma generate && npm run build
+# Build Next.js standalone — prisma generate est déjà inclus dans "npm run build"
+# (package.json: "build": "prisma generate && next build")
+# --mount=type=cache : cache .next/cache persistant entre builds (BuildKit)
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 # --- Étape 3 : image finale (minimale, non-root, read-only) ---
 FROM node:22-alpine3.21 AS runner

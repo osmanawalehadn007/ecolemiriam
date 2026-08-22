@@ -7,11 +7,12 @@
 #   make secrets        — Générer les secrets (SOPS + age)
 #   make secrets-edit   — Éditer les secrets chiffrés
 #   make secrets-rotate — Roter tous les secrets
-#   make build          — Builder toutes les images
+#   make build          — Builder toutes les images (local, fallback)
 #   make up             — Démarrer la stack complète
 #   make down           — Arrêter la stack
 #   make restart        — Redémarrer la stack
-#   make deploy         — Déployer une nouvelle version (avec rollback auto)
+#   make deploy         — Pull depuis GHCR + déployer (avec rollback auto)
+#   make deploy-build   — Build local + déployer (fallback lent, sans GHCR)
 #   make rollback       — Revenir à la version précédente
 #   make backup         — Backup manuel pgBackRest
 #   make restore-test   — Test de restauration + Telegram
@@ -30,7 +31,7 @@ DOCKER_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 PROJECT_DIR := $(abspath $(DOCKER_DIR)/..)
 COMPOSE := docker compose -f $(DOCKER_DIR)/docker-compose.yml
 
-.PHONY: setup secrets secrets-edit secrets-rotate build up down restart deploy rollback backup restore-test audit migrate logs logs-db ps health shell shell-db clean cf-setup
+.PHONY: setup secrets secrets-edit secrets-rotate build up down restart deploy deploy-build rollback backup restore-test audit migrate logs logs-db ps health shell shell-db clean cf-setup
 
 # --- Setup ---
 
@@ -52,8 +53,7 @@ secrets-rotate:
 # --- Build & Deploy ---
 
 build:
-	docker build -t ecolemiriam-app:latest $(PROJECT_DIR) -f $(DOCKER_DIR)/app/Dockerfile
-	$(COMPOSE) build
+	DOCKER_BUILDKIT=1 docker build -t ghcr.io/wilsan007/ecolemiriam-app:latest $(PROJECT_DIR) -f $(DOCKER_DIR)/app/Dockerfile
 
 up:
 	$(COMPOSE) up -d
@@ -66,6 +66,9 @@ restart:
 
 deploy:
 	bash $(DOCKER_DIR)/scripts/deploy.sh
+
+deploy-build:
+	bash $(DOCKER_DIR)/scripts/deploy.sh --build
 
 rollback:
 	bash $(DOCKER_DIR)/scripts/deploy.sh --rollback
