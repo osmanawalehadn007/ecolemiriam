@@ -96,47 +96,8 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           port: ${{ secrets.VPS_SSH_PORT || 22 }}
-          script: |
-            set -euo pipefail
-
-            cd /opt/ecolemiriam
-
-            echo "=== 1/5 — Git pull (docker-compose.yml + scripts) ==="
-            git pull origin main
-
-            echo "=== 2/5 — Login GHCR (si pas déjà connecté) ==="
-            # Le token GHCR est stocké sur le VPS dans ~/.config/ghcr-token
-            # Voir docker/scripts/setup-vps-ghcr.sh pour le setup initial
-            if [ -f ~/.config/ghcr-token ]; then
-              cat ~/.config/ghcr-token | docker login ghcr.io -u wilsan007 --password-stdin
-            else
-              echo "WARN: ~/.config/ghcr-token manquant — le VPS doit être configuré (setup-vps-ghcr.sh)"
-              exit 1
-            fi
-
-            echo "=== 3/5 — Backup pré-déploiement ==="
-            docker exec ecolemiriam-pgbackrest pgbackrest --stanza=ecolemiriam --type=incr backup 2>/dev/null || echo "WARN: Backup a échoué — continuer"
-
-            echo "=== 4/5 — Pull nouvelle image + restart ==="
-            docker compose -f docker/docker-compose.yml pull app
-            docker compose -f docker/docker-compose.yml up -d app
-
-            echo "=== 5/5 — Healthcheck (60s max) ==="
-            HEALTH_OK=false
-            for i in $(seq 1 12); do
-              if docker exec ecolemiriam-app curl -sf http://localhost:3000/api/health 2>/dev/null; then
-                HEALTH_OK=true
-                break
-              fi
-              sleep 5
-            done
-
-            if [ "$HEALTH_OK" = "false" ]; then
-              echo "ERREUR: Healthcheck échoué — ROLLBACK AUTOMATIQUE"
-              # Revenir à l'image précédente (taggé par le script deploy.sh)
-              bash docker/scripts/deploy.sh --rollback
-              exit 1
-            fi
-
-            echo "=== Déploiement terminé ✓ ==="
-            docker image prune -f >/dev/null 2>&1 || true
+          # La clé SSH est restreinte (authorized_keys) à ci-deploy.sh qui fait :
+          #   1. git pull (récupère docker-compose.yml + scripts à jour)
+          #   2. docker login GHCR
+          #   3. deploy.sh (backup + pull image + restart + healthcheck + rollback auto)
+          script: /opt/ecolemiriam/docker/scripts/ci-deploy.sh
