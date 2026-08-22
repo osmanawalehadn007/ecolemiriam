@@ -187,10 +187,12 @@ EOF
     return 1
   fi
 
-  # Valider la config chargée par Caddy
-  if ! docker exec ecolemiriam-caddy caddy validate --config /etc/caddy/Caddyfile 2>&1 | grep -q "Valid configuration"; then
-    err "Configuration Caddy invalide après redémarrage"
-    err "Logs : docker logs ecolemiriam-caddy --tail 20"
+  # Vérifier que Caddy sert correctement la nouvelle config
+  # (le health check ci-dessus prouve déjà que Caddy répond, on vérifie
+  # juste que l'upstream pointe vers le bon slot)
+  if ! docker exec ecolemiriam-caddy grep -q "$new_service" /etc/caddy/upstream.conf 2>/dev/null; then
+    err "Caddy ne pointe pas vers $new_service après redémarrage"
+    err "Config : docker exec ecolemiriam-caddy cat /etc/caddy/upstream.conf"
     return 1
   fi
 
