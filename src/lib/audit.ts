@@ -5,7 +5,7 @@
  * Ne lève JAMAIS d'exception — l'audit ne doit pas casser le flux métier.
  */
 
-import prisma from "@/lib/prisma";
+import prismaBase from "@/lib/prisma-base";
 import type { AuditVerdict, Prisma } from "@prisma/client";
 
 export interface AuditParams {
@@ -28,7 +28,7 @@ export interface AuditParams {
  */
 export async function audit(params: AuditParams): Promise<void> {
   try {
-    await prisma.auditLog.create({
+    await prismaBase.auditLog.create({
       data: {
         tenantId: params.tenantId ?? null,
         userId: params.userId ?? null,

@@ -2,12 +2,13 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import prisma from "@/lib/prisma";
+import prismaBase from "@/lib/prisma-base";
 import type { Role } from "@prisma/client";
 import { authConfig, type AvailableTenant } from "@/auth.config";
 import { deriveClaims, CLAIMS_VERSION } from "@/lib/tenant-claims";
 import { auditFire } from "@/lib/audit";
 import { verifyTOTP } from "@/lib/security/totp";
+import { registerAuthFetcher } from "@/lib/prisma-rls";
 
 const LoginSchema = z.object({
   email: z.string().email(),
@@ -97,7 +98,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         // Recherche insensible à la casse : l'email est stocké avec une
         // casse arbitraire (ex. "Mohamed…") mais l'utilisateur peut taper
         // "mohamed…" — PostgreSQL + Prisma findUnique est sensible à la casse.
-        const user = await prisma.user.findFirst({
+        const user = await prismaBase.user.findFirst({
           where: { email: { equals: email, mode: "insensitive" } },
           select: {
             id: true,
@@ -108,6 +109,8 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
             isActive: true,
             mfaSecret: true,
             mfaEnabled: true,
+            emailVerified: true,
+            role: true,
           },
         });
 
@@ -137,6 +140,25 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
             resource: "user",
             resourceId: user.id,
             reason: "Identifiants incorrects",
+            metadata: { email },
+          });
+          return null;
+        }
+
+        // ── Vérification de l'email (defense-in-depth) ────────────────
+        // Le frontend vérifie déjà via /api/auth/2fa/check-required avant
+        // d'appeler signIn(). Ce bloc est une sécurité de fond : si quelqu'un
+        // contourne le frontend (appel direct à signIn), la connexion est
+        // quand même bloquée. On return null (pas throw) car NextAuth v5
+        // masque le message d'erreur de toute façon.
+        if (!user.emailVerified && user.role !== "SUPER_ADMIN") {
+          auditFire({
+            userId: user.id,
+            action: "auth:login",
+            verdict: "DENIED",
+            resource: "user",
+            resourceId: user.id,
+            reason: "Email non vérifié",
             metadata: { email },
           });
           return null;
@@ -174,7 +196,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         }
 
         // Mettre à jour lastLoginAt
-        await prisma.user.update({
+        await prismaBase.user.update({
           where: { id: user.id },
           data: { lastLoginAt: new Date() },
         });
@@ -235,3 +257,14 @@ declare module "next-auth" {
     };
   }
 }
+
+// Enregistrer le fetcher de session pour l'extension RLS Prisma.
+// Permet à prisma-rls.ts de récupérer automatiquement le contexte
+// tenant/site depuis la session NextAuth sans import circulaire.
+registerAuthFetcher(async () => {
+  try {
+    return await auth();
+  } catch {
+    return null;
+  }
+});

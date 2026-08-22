@@ -23,11 +23,17 @@ const BATCH = 50; // limite Resend par appel
 /**
  * Envoie un email à une liste de destinataires (un email par destinataire,
  * en BCC implicite via envois individuels groupés par lots).
+ *
+ * @param to    — liste des adresses destinataires
+ * @param subject — sujet de l'email
+ * @param html    — contenu HTML
+ * @param text    — contenu plain text (optionnel mais recommandé pour la délivrabilité)
  */
 export async function sendEmail(
   to: string[],
   subject: string,
-  html: string
+  html: string,
+  text?: string
 ): Promise<EmailResult> {
   const recipients = [...new Set(to.filter(Boolean))];
   if (recipients.length === 0) return { success: true, sent: 0 };
@@ -50,6 +56,7 @@ export async function sendEmail(
         to: [email],
         subject,
         html,
+        ...(text ? { text } : {}),
       }));
       const { error } = await resend.batch.send(payload);
       if (error) {

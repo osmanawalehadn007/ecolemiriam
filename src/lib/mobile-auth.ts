@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { deriveClaims } from "@/lib/tenant-claims";
 import type { SessionSiteClaims } from "@/lib/site-filter";
+import { runWithTenant } from "@/lib/prisma-rls";
 
 export interface MobileUser {
   id: string;
@@ -81,4 +82,38 @@ export async function verifyMobileScope(req: NextRequest): Promise<MobileScope |
 
 export function mobileUnauthorized() {
   return NextResponse.json({ error: "Token invalide ou expiré" }, { status: 401 });
+}
+
+/**
+ * Périmètre mobile garanti avec tenantId non-null (après vérification).
+ */
+export type AuthenticatedMobileScope = Omit<MobileScope, "tenantId"> & {
+  tenantId: string;
+};
+
+/**
+ * Wrapper pour les routes mobiles : vérifie le token, récupère le
+ * périmètre, ET positionne le contexte RLS (runWithTenant) pour que
+ * toutes les requêtes Prisma dans le handler soient automatiquement
+ * filtrées par tenant au niveau base de données.
+ *
+ * Usage :
+ *   export async function GET(req: NextRequest) {
+ *     return withMobileScope(req, async (user) => {
+ *       const eleves = await prisma.eleve.findMany({...});
+ *       return NextResponse.json({ eleves });
+ *     });
+ *   }
+ */
+export async function withMobileScope<T>(
+  req: NextRequest,
+  handler: (user: AuthenticatedMobileScope) => Promise<T>
+): Promise<T | NextResponse> {
+  const user = await verifyMobileScope(req);
+  if (!user) return mobileUnauthorized();
+  if (!user.tenantId) {
+    return NextResponse.json({ error: "Aucun établissement associé" }, { status: 403 });
+  }
+  const authenticatedUser = user as AuthenticatedMobileScope;
+  return runWithTenant(user.tenantId, user.siteId ?? null, () => handler(authenticatedUser));
 }

@@ -28,7 +28,8 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma
 
 # Installer les dépendances (production + dev pour le build)
-RUN npm ci
+# npm install au lieu de npm ci pour tolérer les différences de lock file
+RUN npm install --legacy-peer-deps
 
 # --- Étape 2 : build ---
 FROM node:22-alpine3.21 AS builder

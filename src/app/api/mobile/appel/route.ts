@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
+import { withMobileScope } from "@/lib/mobile-auth";
 import prisma from "@/lib/prisma";
 import { sendAbsenceAlert } from "@/lib/sms/africasTalking";
 import { sendEmail, renderNotificationEmail } from "@/lib/notifications/email";
@@ -8,12 +8,7 @@ import { siteFilterForModel } from "@/lib/site-scope";
 import { revalidateTag } from "next/cache";
 
 export async function POST(req: NextRequest) {
-  const user = await verifyMobileScope(req);
-  if (!user) return mobileUnauthorized();
-  if (!user.tenantId) {
-    return NextResponse.json({ error: "Aucun établissement associé" }, { status: 403 });
-  }
-
+  return withMobileScope(req, async (user) => {
   if (user.role !== "TEACHER" && user.role !== "CLASS_TEACHER" && user.role !== "PRINCIPAL" && user.role !== "TENANT_ADMIN" && user.role !== "SUPER_ADMIN") {
     return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
   }
@@ -173,5 +168,6 @@ export async function POST(req: NextRequest) {
     success: true,
     absencesCreees: created,
     notificationsEnvoyees: notifSent,
+  });
   });
 }

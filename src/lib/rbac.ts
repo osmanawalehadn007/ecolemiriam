@@ -39,7 +39,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "admissions:*", "rh:*", "finance:*", "inventaire:*", "alumni:*",
     "orientation:*", "cours:*", "analytics:*", "rapports:*", "documents:*",
     "ai:*", "audit:read", "parametres:*", "structures:*",
-    "cahier-texte:*",
+    "cahier-texte:*", "export:full",
   ],
 
   // Chef d'établissement — pédagogie & vie scolaire complètes, pas la finance/RH en écriture

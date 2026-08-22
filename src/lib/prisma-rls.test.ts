@@ -20,7 +20,7 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import { PrismaClient } from "@prisma/client";
-import { runWithTenant, prismaWithRls, assertTenantContext } from "@/lib/prisma-rls";
+import { runWithTenant, prismaWithRls } from "@/lib/prisma-rls";
 
 const RLS_ACTIVE = process.env.RLS_ACTIVE === "true";
 
@@ -213,11 +213,12 @@ describe.skipIf(!RLS_ACTIVE)("RLS — isolation inter-tenant", () => {
     expect(tenants[0].id).toBe(tenantA.id);
   });
 
-  it("assertTenantContext retourne le contexte actif", async () => {
+  it("getCurrentRlsContext retourne le contexte actif", async () => {
+    const { getCurrentRlsContext } = await import("@/lib/prisma-rls");
     await runWithTenant(tenantA.id, siteA1.id, async () => {
-      const ctx = assertTenantContext();
-      expect(ctx.tenantId).toBe(tenantA.id);
-      expect(ctx.siteId).toBe(siteA1.id);
+      const ctx = getCurrentRlsContext();
+      expect(ctx?.tenantId).toBe(tenantA.id);
+      expect(ctx?.siteId).toBe(siteA1.id);
     });
   });
 

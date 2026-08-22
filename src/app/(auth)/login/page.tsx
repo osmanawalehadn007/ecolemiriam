@@ -7,7 +7,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Shield, MailWarning } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 const LoginSchema = z.object({
@@ -24,8 +24,15 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [totp, setTotp] = useState("");
+  const [need2FA, setNeed2FA] = useState(false);
+  const [checking2FA, setChecking2FA] = useState(false);
+  const [emailNotVerified, setEmailNotVerified] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
   const t = useTranslations("login");
 
+  // Vérifier si l'utilisateur a 2FA activée (après saisie email + password)
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrors({});
@@ -40,21 +47,86 @@ function LoginForm() {
       return;
     }
 
+    // Si on n'a pas encore demandé le code 2FA, vérifier si l'utilisateur
+    // a besoin de 2FA ou si son email n'est pas vérifié.
+    // Cette vérification se fait AVANT signIn() car NextAuth v5 ne propage
+    // pas le message d'erreur de authorize() au client.
+    if (!need2FA) {
+      setChecking2FA(true);
+      try {
+        const res = await fetch("/api/auth/2fa/check-required", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: form.email, password: form.password }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // 1. Vérifier si l'email est vérifié (avant tout)
+          if (data.emailVerified === false) {
+            setEmailNotVerified(true);
+            setChecking2FA(false);
+            return;
+          }
+          // 2. Vérifier si la 2FA est requise
+          if (data.requires2FA) {
+            setNeed2FA(true);
+            setChecking2FA(false);
+            return;
+          }
+        }
+      } catch {
+        // si la vérification échoue, on continue normalement
+      }
+      setChecking2FA(false);
+    }
+
     startTransition(async () => {
       const result = await signIn("credentials", {
         email: form.email,
         password: form.password,
+        totp: need2FA ? totp : undefined,
         redirect: false,
       });
 
       if (result?.error) {
         toast.error(t("title") === "Sign In" ? "Invalid email or password" : "Email ou mot de passe incorrect");
+        // Réinitialiser le code 2FA en cas d'erreur
+        setTotp("");
       } else {
         toast.success(t("title") === "Sign In" ? "Signed in!" : "Connexion réussie !");
-        router.push("/select-tenant");
-        router.refresh();
+        window.location.href = "/select-tenant";
       }
     });
+  }
+
+  // Renvoyer l'email de vérification
+  async function handleResendVerification() {
+    if (!form.email) return;
+    setResending(true);
+    setResent(false);
+    try {
+      const res = await fetch("/api/auth/send-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.email }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (data.alreadyVerified) {
+          toast.success(t("title") === "Sign In" ? "Your email is already verified. You can sign in." : "Votre email est déjà vérifié. Vous pouvez vous connecter.");
+          setEmailNotVerified(false);
+        } else {
+          setResent(true);
+          toast.success(t("title") === "Sign In" ? "Verification email sent" : "Email de vérification renvoyé");
+        }
+      } else {
+        toast.error(data.error ?? "Échec de l'envoi");
+      }
+    } catch {
+      toast.error("Erreur réseau");
+    } finally {
+      setResending(false);
+    }
   }
 
   return (
@@ -79,7 +151,7 @@ function LoginForm() {
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
             className={errors.email ? "border-destructive" : ""}
-            disabled={isPending}
+            disabled={isPending || checking2FA}
             autoComplete="email"
           />
           {errors.email && (
@@ -102,7 +174,7 @@ function LoginForm() {
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
               className={errors.password ? "border-destructive pr-10" : "pr-10"}
-              disabled={isPending}
+              disabled={isPending || checking2FA}
               autoComplete="current-password"
             />
             <button
@@ -118,16 +190,84 @@ function LoginForm() {
           )}
         </div>
 
+        {/* Champ 2FA (affiché si besoin) */}
+        {need2FA && (
+          <div className="space-y-1.5 rounded-lg border-2 border-primary/30 bg-primary/5 p-4">
+            <label className="text-sm font-medium flex items-center gap-2" htmlFor="totp">
+              <Shield className="h-4 w-4 text-primary" />
+              Code de vérification (2FA)
+            </label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Saisissez le code à 6 chiffres de votre application d&rsquo;authentification
+            </p>
+            <Input
+              id="totp"
+              value={totp}
+              onChange={(e) => setTotp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="123456"
+              className="text-center text-2xl tracking-widest font-mono"
+              inputMode="numeric"
+              maxLength={6}
+              disabled={isPending}
+              autoFocus
+            />
+          </div>
+        )}
+
+        {/* Bannière : email non vérifié */}
+        {emailNotVerified && (
+          <div className="space-y-3 rounded-lg border-2 border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950 p-4">
+            <div className="flex items-start gap-2">
+              <MailWarning className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                  {t("title") === "Sign In" ? "Email not verified" : "Email non vérifié"}
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  {t("title") === "Sign In"
+                    ? "Check your inbox (and spam) for the verification link, or resend it below."
+                    : "Vérifiez votre boîte de réception (et vos spams) pour le lien de vérification, ou renvoyez-le ci-dessous."}
+                </p>
+              </div>
+            </div>
+            {resent ? (
+              <p className="text-xs text-green-700 dark:text-green-400 font-medium pl-7">
+                {t("title") === "Sign In" ? "Verification email sent! Check your inbox." : "Email de vérification envoyé ! Vérifiez votre boîte de réception."}
+              </p>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full border-amber-400 text-amber-700 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-300"
+                onClick={handleResendVerification}
+                disabled={resending}
+              >
+                {resending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    {t("title") === "Sign In" ? "Sending..." : "Envoi..."}
+                  </>
+                ) : (
+                  t("title") === "Sign In" ? "Resend verification email" : "Renvoyer l'email de vérification"
+                )}
+              </Button>
+            )}
+          </div>
+        )}
+
         <Button
           type="submit"
           className="w-full h-11 font-semibold"
-          disabled={isPending}
+          disabled={isPending || checking2FA || (need2FA && totp.length !== 6)}
         >
-          {isPending ? (
+          {isPending || checking2FA ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              {t("signingIn")}
+              {checking2FA ? "Vérification..." : t("signingIn")}
             </>
+          ) : need2FA ? (
+            t("title") === "Sign In" ? "Verify & Sign In" : "Vérifier et se connecter"
           ) : (
             t("signIn")
           )}

@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import { sendVerificationEmail } from "@/lib/security/email-verification";
+import { auditFire } from "@/lib/audit";
 
 const RegisterSchema = z.object({
   // Établissement
@@ -85,6 +87,7 @@ export async function registerTenant(data: RegisterFormData) {
       phone: values.adminPhone || null,
       role: "TENANT_ADMIN",
       isActive: true,
+      // emailVerified est null à la création — l'utilisateur doit vérifier son email
       // Créer l'entrée UserTenant pour le multi-tenant
       userTenants: {
         create: {
@@ -96,6 +99,33 @@ export async function registerTenant(data: RegisterFormData) {
       },
     },
   });
+
+  // ── Envoi de l'email de vérification ──────────────────────────────
+  // Ne pas bloquer l'inscription si l'envoi échoue : l'utilisateur peut
+  // redemander l'email depuis la page de connexion.
+  try {
+    const verifyResult = await sendVerificationEmail(
+      values.adminEmail,
+      `${values.adminFirstName} ${values.adminLastName}`,
+      values.schoolName
+    );
+    if (!verifyResult.success) {
+      console.warn("[registerTenant] Échec envoi email de vérification:", verifyResult.error);
+    }
+    auditFire({
+      userId: newUser.id,
+      action: "auth:register",
+      verdict: "ALLOWED",
+      resource: "user",
+      resourceId: newUser.id,
+      reason: verifyResult.success
+        ? "Inscription + email de vérification envoyé"
+        : "Inscription OK mais échec envoi email vérification",
+      metadata: { email: values.adminEmail, tenantSlug: slug },
+    });
+  } catch (err) {
+    console.warn("[registerTenant] Erreur envoi email de vérification:", err);
+  }
 
   revalidatePath("/");
   return { success: true, slug: tenant.slug };

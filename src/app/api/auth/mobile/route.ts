@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import prismaBase from "@/lib/prisma-base";
 import bcrypt from "bcryptjs";
 import { SignJWT } from "jose";
 import { z } from "zod";
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
 
     // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- endpoint d'authentification mobile : lookup par email/password, pas de session utilisateur disponible
     // Recherche insensible à la casse (voir auth.ts pour le même correctif).
-    const user = await prisma.user.findFirst({
+    const user = await prismaBase.user.findFirst({
       where: { email: { equals: email, mode: "insensitive" } },
       select: {
         id: true,
@@ -59,6 +59,7 @@ export async function POST(req: Request) {
         tenantId: true,
         avatarUrl: true,
         isActive: true,
+        emailVerified: true,
         tenant: {
           select: { id: true, name: true, slug: true, currentYear: true, notationMax: true },
         },
@@ -76,13 +77,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Identifiants incorrects" }, { status: 401 });
     }
 
+    // ── Vérification de l'email ───────────────────────────────────────
+    // Bloquer la connexion si l'email n'a pas été vérifié.
+    // Exception : SUPER_ADMIN peut toujours se connecter.
+    if (!user.emailVerified && user.role !== "SUPER_ADMIN") {
+      return NextResponse.json(
+        { error: "EMAIL_NOT_VERIFIED", message: "Veuillez vérifier votre email avant de vous connecter." },
+        { status: 403 }
+      );
+    }
+
     const tenant = user.tenant;
     if (tenantSlug && tenant?.slug !== tenantSlug) {
       return NextResponse.json({ error: "Cet compte n'appartient pas à cet établissement" }, { status: 403 });
     }
 
     // eslint-disable-next-line ecolemiriam/require-tenant-id -- self-update après authentification réussie : user.id provient du findUnique ci-dessus, pas d'entrée utilisateur
-    await prisma.user.update({
+    await prismaBase.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });

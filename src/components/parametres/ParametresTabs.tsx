@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   Settings, Users, GraduationCap, BookOpen, UserCog, Settings2, Calendar, Stamp, Building2,
   School, UsersRound, BookOpenCheck, ChevronDown, DollarSign, CopyCheck, ClipboardList, DoorOpen,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EtablissementTab } from "./EtablissementTab";
@@ -18,6 +19,7 @@ import { SignatureCachetManager } from "./SignatureCachetManager";
 import { SitesTab } from "./SitesTab";
 import { TarifsTab } from "./TarifsTab";
 import { DoublonsTab } from "./DoublonsTab";
+import { Security2FA } from "./Security2FA";
 import { AnneesScolairesTab } from "./AnneesScolairesTab";
 import { EnseignantsAffectationTab } from "./EnseignantsAffectationTab";
 import { SallesTab } from "./SallesTab";
@@ -38,7 +40,8 @@ type Tab =
   | "signature"
   | "sites"
   | "tarifs"
-  | "doublons";
+  | "doublons"
+  | "securite";
 
 type TabDef = { id: Tab; labelKey: string; icon: typeof Settings };
 
@@ -85,6 +88,13 @@ const tabGroups: TabGroup[] = [
     icon: DollarSign,
     tabs: [
       { id: "tarifs", labelKey: "tarifs", icon: DollarSign },
+    ],
+  },
+  {
+    groupKey: "groupSecurite",
+    icon: Shield,
+    tabs: [
+      { id: "securite", labelKey: "securite", icon: Shield },
     ],
   },
 ];
@@ -226,6 +236,7 @@ export function ParametresTabs({
         {activeTab === "sites" && <SitesTab sites={sites} canManage={canManage} />}
         {activeTab === "tarifs" && <TarifsTab />}
         {activeTab === "doublons" && <DoublonsTab />}
+        {activeTab === "securite" && <Security2FA />}
       </div>
     </div>
   );

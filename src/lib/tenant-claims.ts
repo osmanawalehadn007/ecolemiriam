@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import prismaBase from "@/lib/prisma-base";
 import type { Role } from "@prisma/client";
 import type { AvailableTenant } from "@/auth.config";
 
@@ -48,7 +48,7 @@ export async function deriveClaims(
   preferredTenantId?: string | null
 ): Promise<TenantSiteClaims | null> {
   // eslint-disable-next-line ecolemiriam/require-site-filter -- claims derivation: computing site claims themselves, filtering would be circular
-  const user = await prisma.user.findUnique({
+  const user = await prismaBase.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
@@ -119,18 +119,18 @@ export async function deriveClaims(
   // rattachement d'un autre établissement ne peut franchir la frontière.
   /* eslint-disable ecolemiriam/require-site-filter -- claims derivation: resolving site assignments, filtering would be circular */
   const [userSites, enseignantSites, tenantSites] = await Promise.all([
-    prisma.userSite.findMany({
+    prismaBase.userSite.findMany({
       where: { userId, site: { tenantId: activeTenantId } },
       select: { siteId: true, role: true },
     }),
-    prisma.enseignantSite.findMany({
+    prismaBase.enseignantSite.findMany({
       where: {
         site: { tenantId: activeTenantId },
         enseignant: { userId, tenantId: activeTenantId },
       },
       select: { siteId: true },
     }),
-    prisma.site.findMany({
+    prismaBase.site.findMany({
       where: { tenantId: activeTenantId },
       select: { id: true },
     }),
@@ -196,20 +196,20 @@ export async function resolveSiteAccess(
   siteId: string
 ): Promise<{ role: Role } | null> {
   // 1. Le site doit exister DANS ce tenant et être actif.
-  const site = await prisma.site.findFirst({
+  const site = await prismaBase.site.findFirst({
     where: { id: siteId, tenantId, actif: true },
     select: { id: true },
   });
   if (!site) return null;
 
   // eslint-disable-next-line ecolemiriam/require-site-filter -- site access resolution, filtering would be circular
-  const user = await prisma.user.findUnique({
+  const user = await prismaBase.user.findUnique({
     where: { id: userId },
     select: { role: true, tenantId: true },
   });
   if (!user) return null;
 
-  const membership = await prisma.userTenant.findFirst({
+  const membership = await prismaBase.userTenant.findFirst({
     where: { userId, tenantId, isActive: true },
     select: { role: true },
   });
@@ -220,7 +220,7 @@ export async function resolveSiteAccess(
   // 2. Rattachement explicite : le rôle du site fait foi s'il est défini.
   //    Si role = NULL, on hérite du rôle global (tenantRole).
   // eslint-disable-next-line ecolemiriam/require-site-filter -- site access resolution, filtering would be circular
-  const userSite = await prisma.userSite.findFirst({
+  const userSite = await prismaBase.userSite.findFirst({
     where: { userId, siteId },
     select: { role: true },
   });
@@ -228,7 +228,7 @@ export async function resolveSiteAccess(
 
   // 3. Enseignant affecté à ce site, dans ce tenant.
   // eslint-disable-next-line ecolemiriam/require-site-filter -- site access resolution, filtering would be circular
-  const enseignantSite = await prisma.enseignantSite.findFirst({
+  const enseignantSite = await prismaBase.enseignantSite.findFirst({
     where: { siteId, enseignant: { userId, tenantId } },
     select: { id: true },
   });

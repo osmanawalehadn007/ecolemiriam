@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
+import { withMobileScope } from "@/lib/mobile-auth";
 import { siteFilterForModel, personalScopeFilter, mergeFilters } from "@/lib/site-scope";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await verifyMobileScope(req);
-  if (!user) return mobileUnauthorized();
-  if (!user.tenantId) {
-    return NextResponse.json({ error: "Aucun établissement associé" }, { status: 403 });
-  }
-
+  return withMobileScope(req, async (user) => {
   const { id } = await params;
 
   // Le filtrage par site est indispensable ici : la route expose le dossier
@@ -107,5 +102,6 @@ export async function GET(
       absences,
       incidents,
     },
+  });
   });
 }

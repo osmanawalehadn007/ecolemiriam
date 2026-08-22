@@ -1,20 +1,18 @@
-import { PrismaClient } from "@prisma/client";
+/**
+ * École Miriam — Client Prisma par défaut (AVEC RLS)
+ * ====================================================
+ *
+ * Tous les fichiers qui importent `prisma` depuis @/lib/prisma
+ * obtiennent automatiquement le client RLS. Chaque opération Prisma
+ * est interceptée par l'extension qui :
+ *   1. Récupère le contexte tenant/site depuis la session NextAuth
+ *   2. Enroule la requête dans une transaction avec SET LOCAL
+ *   3. Les policies RLS de PostgreSQL filtrent automatiquement
+ *
+ * Pour les opérations cross-tenant (auth, deriveClaims, audit),
+ * utiliser @/lib/prisma-base (client sans RLS).
+ */
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: ["error"],
-    datasources: {
-      db: {
-        url: process.env.DATABASE_URL,
-      },
-    },
-  });
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
-
-export default prisma;
+export { prismaWithRls as default } from "./prisma-rls";
+export { prismaWithRls as prisma } from "./prisma-rls";
+export { runWithTenant, getCurrentRlsContext, registerAuthFetcher } from "./prisma-rls";

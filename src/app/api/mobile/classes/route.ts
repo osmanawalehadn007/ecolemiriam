@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
+import { withMobileScope } from "@/lib/mobile-auth";
 import prisma from "@/lib/prisma";
 import { eleveScopeFilter, siteFilterForModel } from "@/lib/site-scope";
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await verifyMobileScope(req);
-    if (!user) return mobileUnauthorized();
-    if (!user.tenantId) {
-      return NextResponse.json({ error: "Aucun établissement associé" }, { status: 403 });
-    }
+    return await withMobileScope(req, async (user) => {
     const eleveFilter = eleveScopeFilter(user, null);
     const classeFilter = siteFilterForModel("classe", user);
 
@@ -36,6 +32,7 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json({ classes });
+    });
   } catch (error) {
     console.error("[API/mobile/classes]", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });

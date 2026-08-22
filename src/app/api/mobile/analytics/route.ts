@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
+import { withMobileScope } from "@/lib/mobile-auth";
 import { siteFilterForModel, siteFilterForRelation } from "@/lib/site-scope";
 
 export async function GET(req: NextRequest) {
-  const user = await verifyMobileScope(req);
-  if (!user) return mobileUnauthorized();
-  if (!user.tenantId) {
-    return NextResponse.json({ error: "Aucun établissement associé" }, { status: 403 });
-  }
-
+  return withMobileScope(req, async (user) => {
   // Les statistiques agrégées ne doivent pas trahir les volumes des sites
   // auxquels l'utilisateur n'a pas accès.
   if (user.role === "PARENT" || user.role === "STUDENT") {
@@ -96,5 +91,6 @@ export async function GET(req: NextRequest) {
     notesParMatiere,
     moyennesParClasse,
     absencesParMois: totalAbsences,
+  });
   });
 }

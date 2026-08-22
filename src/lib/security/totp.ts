@@ -5,20 +5,14 @@
  * compatibles Google Authenticator, Authy, Microsoft Authenticator, etc.
  */
 
-import { authenticator, Secret } from "otplib";
+import { generateSecret, generateURI, generateSync, verifySync } from "otplib";
 import QRCode from "qrcode";
-
-// Configurer otplib : 6 chiffres, fenêtre de 30s, 1 pas de tolérance
-authenticator.options = {
-  steps: 30,
-  window: 1, // tolère 1 pas avant/après (30s de dérive max)
-};
 
 /**
  * Génère un secret TOTP aléatoire (base32).
  */
-export function generateSecret(): string {
-  return authenticator.generateSecret();
+export function generateTOTPSecret(): string {
+  return generateSecret();
 }
 
 /**
@@ -29,7 +23,7 @@ export function generateOTPAuthURI(
   email: string,
   issuer = "École Miriam"
 ): string {
-  return authenticator.keyuri(email, issuer, secret);
+  return generateURI({ issuer, label: email, secret });
 }
 
 /**
@@ -49,7 +43,8 @@ export async function generateQRCodeDataURL(otpauthURI: string): Promise<string>
  */
 export function verifyTOTP(token: string, secret: string): boolean {
   try {
-    return authenticator.verify({ token, secret });
+    const result = verifySync({ token, secret, epochTolerance: 30 });
+    return result.valid;
   } catch {
     return false;
   }
@@ -59,5 +54,5 @@ export function verifyTOTP(token: string, secret: string): boolean {
  * Génère le code TOTP actuel pour un secret (utile pour les tests).
  */
 export function generateCurrentToken(secret: string): string {
-  return authenticator.generate(secret);
+  return generateSync({ secret });
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
+import { withMobileScope } from "@/lib/mobile-auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 
@@ -20,12 +20,7 @@ const PLATFORM_MAP = {
  * Appelé automatiquement par la coque native après acceptation des notifications.
  */
 export async function POST(req: NextRequest) {
-  const user = await verifyMobileScope(req);
-  if (!user) return mobileUnauthorized();
-  if (!user.id) {
-    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
-  }
-
+  return withMobileScope(req, async (user) => {
   const parsed = RegisterSchema.safeParse(await req.json());
   if (!parsed.success) {
     return NextResponse.json({ error: "Données invalides" }, { status: 400 });
@@ -50,4 +45,5 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ success: true, deviceId: device.id });
+  });
 }

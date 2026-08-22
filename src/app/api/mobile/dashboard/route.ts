@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
+import { withMobileScope } from "@/lib/mobile-auth";
 import { eleveScopeFilter, siteFilterForModel, siteFilterForRelation } from "@/lib/site-scope";
 
 export async function GET(req: NextRequest) {
-  const user = await verifyMobileScope(req);
-  if (!user) return mobileUnauthorized();
-  if (!user.tenantId) {
-    return NextResponse.json({ error: "Aucun établissement associé" }, { status: 403 });
-  }
-
+  return withMobileScope(req, async (user) => {
   const tenantId = user.tenantId;
 
   // Les compteurs eux-mêmes fuitaient : ils révélaient les volumes de
@@ -84,5 +79,6 @@ export async function GET(req: NextRequest) {
     absencesRecentes,
     notesRecentes,
     prochainsExamens,
+  });
   });
 }

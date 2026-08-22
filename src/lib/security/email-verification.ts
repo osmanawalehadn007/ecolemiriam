@@ -1,0 +1,256 @@
+/**
+ * École Miriam — Vérification d'email
+ * ============================================================
+ * Génération de tokens de vérification, envoi de l'email et validation.
+ *
+ * Le token est stocké dans la table `verification_tokens` (schéma Prisma)
+ * avec une expiration de 24h. L'email contient un lien vers /verify-email
+ * qui appelle l'API pour valider le token et marquer `emailVerified`.
+ */
+
+import { randomBytes } from "crypto";
+import prismaBase from "@/lib/prisma-base";
+import { sendEmail } from "@/lib/notifications/email";
+
+const TOKEN_EXPIRY_HOURS = 24;
+const TOKEN_BYTES = 32;
+
+/**
+ * Génère un token cryptographiquement sûr (64 caractères hex).
+ */
+function generateToken(): string {
+  return randomBytes(TOKEN_BYTES).toString("hex");
+}
+
+/**
+ * Construit l'URL de vérification à partir du token.
+ * Priorité : AUTH_URL (NextAuth v5) > NEXTAUTH_URL (v4 legacy) > NEXT_PUBLIC_APP_URL > localhost
+ */
+function buildVerifyUrl(token: string): string {
+  const baseUrl =
+    process.env.AUTH_URL ??
+    process.env.NEXTAUTH_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    "http://localhost:3000";
+  return `${baseUrl}/verify-email?token=${token}`;
+}
+
+/**
+ * Gabarit HTML de l'email de vérification.
+ */
+function renderVerificationEmailHtml(
+  userName: string,
+  verifyUrl: string,
+  ecoleNom = "École Miriam"
+): string {
+  return `<!DOCTYPE html>
+<html lang="fr"><body style="margin:0;background:#f4f4f7;font-family:-apple-system,Segoe UI,Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+        <tr><td style="background:#4f46e5;padding:20px 28px;color:#fff;font-size:18px;font-weight:700;">${escapeHtml(ecoleNom)}</td></tr>
+        <tr><td style="padding:28px;">
+          <h1 style="margin:0 0 12px;font-size:20px;color:#111;">Vérifiez votre adresse email</h1>
+          <p style="font-size:15px;line-height:1.6;color:#374151;margin:0 0 16px;">
+            Bonjour <strong>${escapeHtml(userName)}</strong>,
+          </p>
+          <p style="font-size:15px;line-height:1.6;color:#374151;margin:0 0 24px;">
+            Vous venez de créer un compte sur École Miriam. Pour activer votre espace et garantir
+            la sécurité de votre établissement, veuillez confirmer votre adresse email en cliquant
+            sur le bouton ci-dessous.
+          </p>
+          <p style="text-align:center;margin:0 0 24px;">
+            <a href="${verifyUrl}" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 32px;border-radius:8px;">
+              Vérifier mon adresse email
+            </a>
+          </p>
+          <p style="font-size:13px;line-height:1.6;color:#6b7280;margin:0 0 8px;">
+            Ou copiez ce lien dans votre navigateur :
+          </p>
+          <p style="font-size:13px;line-height:1.6;color:#6b7280;margin:0 0 24px;word-break:break-all;">
+            ${verifyUrl}
+          </p>
+          <p style="font-size:13px;line-height:1.6;color:#6b7280;margin:0;">
+            Ce lien expire dans 24 heures. Si vous n'avez pas créé de compte,
+            vous pouvez ignorer cet email.
+          </p>
+        </td></tr>
+        <tr><td style="padding:16px 28px;border-top:1px solid #eee;font-size:12px;color:#9ca3af;">
+          Envoyé via École Miriam — merci de ne pas répondre à cet email.
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
+/**
+ * Version plain text de l'email de vérification (pour la délivrabilité).
+ */
+function renderVerificationEmailText(
+  userName: string,
+  verifyUrl: string,
+  ecoleNom = "École Miriam"
+): string {
+  return `${ecoleNom}
+================================
+
+Vérifiez votre adresse email
+
+Bonjour ${userName},
+
+Vous venez de créer un compte sur École Miriam. Pour activer votre
+espace et garantir la sécurité de votre établissement, veuillez
+confirmer votre adresse email en cliquant sur le lien ci-dessous :
+
+${verifyUrl}
+
+Ce lien expire dans 24 heures. Si vous n'avez pas créé de compte,
+vous pouvez ignorer cet email.
+
+---
+Envoyé via École Miriam — merci de ne pas répondre à cet email.`;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+export interface SendVerificationResult {
+  success: boolean;
+  token?: string;
+  error?: string;
+}
+
+/**
+ * Génère un token de vérification, le persiste en base et envoie l'email.
+ *
+ * @param userEmail  — email de l'utilisateur (identifiant unique)
+ * @param userName   — nom affiché dans l'email
+ * @param ecoleNom   — nom de l'établissement (pour le branding)
+ * @param force      — si true, supprime les tokens précédents avant d'en créer un nouveau
+ */
+export async function sendVerificationEmail(
+  userEmail: string,
+  userName: string,
+  ecoleNom?: string,
+  force = false
+): Promise<SendVerificationResult> {
+  // Nettoyer les tokens expirés ou existants pour cet email
+  if (force) {
+    await prismaBase.verificationToken.deleteMany({
+      where: { identifier: userEmail },
+    });
+  } else {
+    await prismaBase.verificationToken.deleteMany({
+      where: { identifier: userEmail, expires: { lt: new Date() } },
+    });
+  }
+
+  const token = generateToken();
+  const expires = new Date();
+  expires.setHours(expires.getHours() + TOKEN_EXPIRY_HOURS);
+
+  await prismaBase.verificationToken.create({
+    data: {
+      identifier: userEmail,
+      token,
+      expires,
+    },
+  });
+
+  const verifyUrl = buildVerifyUrl(token);
+  const html = renderVerificationEmailHtml(userName, verifyUrl, ecoleNom);
+  const text = renderVerificationEmailText(userName, verifyUrl, ecoleNom);
+
+  const result = await sendEmail(
+    [userEmail],
+    "Vérifiez votre adresse email — École Miriam",
+    html,
+    text
+  );
+
+  if (!result.success) {
+    return { success: false, error: result.error ?? "Échec d'envoi de l'email" };
+  }
+
+  return { success: true, token };
+}
+
+export interface VerifyTokenResult {
+  success: boolean;
+  email?: string;
+  error?: string;
+}
+
+/**
+ * Valide un token de vérification et marque l'email comme vérifié.
+ * - Le token doit exister, ne pas avoir expiré, et correspondre à un user actif.
+ * - Marque `User.emailVerified = now()` et supprime le token consommé.
+ */
+export async function verifyEmailToken(
+  token: string
+): Promise<VerifyTokenResult> {
+  if (!token || token.length !== TOKEN_BYTES * 2) {
+    return { success: false, error: "Token invalide" };
+  }
+
+  const record = await prismaBase.verificationToken.findUnique({
+    where: { token },
+  });
+
+  if (!record) {
+    return { success: false, error: "Token introuvable ou déjà utilisé" };
+  }
+
+  if (record.expires < new Date()) {
+    // Nettoyer le token expiré
+    await prismaBase.verificationToken.delete({ where: { token } });
+    return { success: false, error: "Ce lien a expiré. Veuillez en demander un nouveau." };
+  }
+
+  // Marquer l'email comme vérifié
+  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- vérification email : lookup par email, pas de session
+  const user = await prismaBase.user.findFirst({
+    where: { email: { equals: record.identifier, mode: "insensitive" } },
+    select: { id: true, isActive: true },
+  });
+
+  if (!user) {
+    await prismaBase.verificationToken.delete({ where: { token } });
+    return { success: false, error: "Aucun compte associé à ce lien" };
+  }
+
+  if (!user.isActive) {
+    return { success: false, error: "Ce compte est désactivé. Contactez votre administrateur." };
+  }
+
+  // eslint-disable-next-line ecolemiriam/require-tenant-id -- self-update après vérification : user.id provient du lookup ci-dessus
+  await prismaBase.user.update({
+    where: { id: user.id },
+    data: { emailVerified: new Date() },
+  });
+
+  // Supprimer le token consommé + tous les tokens expirés de cet email
+  await prismaBase.verificationToken.deleteMany({
+    where: { identifier: record.identifier },
+  });
+
+  return { success: true, email: record.identifier };
+}
+
+/**
+ * Vérifie si un utilisateur a confirmé son email.
+ * Retourne true si emailVerified est non null.
+ */
+export async function isEmailVerified(userEmail: string): Promise<boolean> {
+  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- vérification pré-login : lookup par email
+  const user = await prismaBase.user.findFirst({
+    where: { email: { equals: userEmail, mode: "insensitive" } },
+    select: { emailVerified: true },
+  });
+  return !!user?.emailVerified;
+}

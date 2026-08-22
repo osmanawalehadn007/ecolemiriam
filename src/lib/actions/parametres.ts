@@ -15,6 +15,7 @@ import { niveauRequiresProfPrincipal, isNiveauPrimaire } from "@/lib/utils-class
 import { ELEVE_NON_ARCHIVE } from "@/lib/eleve-filters";
 import { checkPermission } from "@/lib/rbac";
 import { generateSecurePassword } from "@/lib/security/password";
+import { sendVerificationEmail } from "@/lib/security/email-verification";
 import type { Role } from "@prisma/client";
 
 // ============================================================
@@ -219,6 +220,23 @@ export async function createUser(data: UserFormData) {
         phone: v.phone || "",
       },
     });
+  }
+
+  // ── Envoi de l'email de vérification ──────────────────────────────
+  // L'utilisateur doit vérifier son email avant de pouvoir se connecter.
+  // Ne pas bloquer la création si l'envoi échoue.
+  try {
+    const verifyResult = await sendVerificationEmail(
+      v.email,
+      v.name,
+      undefined,
+      true
+    );
+    if (!verifyResult.success) {
+      console.warn("[createUser] Échec envoi email de vérification:", verifyResult.error);
+    }
+  } catch (err) {
+    console.warn("[createUser] Erreur envoi email de vérification:", err);
   }
 
   revalidatePath("/parametres");
