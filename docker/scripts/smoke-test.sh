@@ -75,24 +75,26 @@ check "GET / → 200 ou 307 (redirect vers login)" \
 
 # --- 3. API endpoints critiques (sans auth = 401/403, pas 500) ---
 echo "[3/6] API — réponses attendues (401/403 = normal sans auth)"
+# Note : curl -s SANS -f pour accepter les codes non-2xx (401/403/405)
 check "GET /api/auth/2fa/check-required → pas 500" \
-  "docker exec $CONTAINER curl -sf -o /dev/null -w '%{http_code}' http://localhost:3000/api/auth/2fa/check-required | grep -qvE '500|502|503'"
+  "docker exec $CONTAINER curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/auth/2fa/check-required | grep -qvE '500|502|503'"
 
 check "GET /api/eleves → 401/403 (protégé, pas 500)" \
-  "docker exec $CONTAINER curl -sf -o /dev/null -w '%{http_code}' http://localhost:3000/api/eleves | grep -qE '401|403'"
+  "docker exec $CONTAINER curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/eleves | grep -qE '401|403'"
 
 check "GET /api/parametres → 401/403 (protégé, pas 500)" \
-  "docker exec $CONTAINER curl -sf -o /dev/null -w '%{http_code}' http://localhost:3000/api/parametres | grep -qE '401|403'"
+  "docker exec $CONTAINER curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/parametres | grep -qE '401|403'"
 
 # --- 4. Assets statiques (Next.js) ---
 echo "[4/6] Assets statiques"
 check "GET /_next/static → 200 (assets Next.js)" \
-  "docker exec $CONTAINER curl -sf -o /dev/null -w '%{http_code}' http://localhost:3000/_next/static/ | grep -qE '200|404'"
+  "docker exec $CONTAINER curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/_next/static/ | grep -qE '200|404'"
 
 # --- 5. Headers de sécurité ---
 echo "[5/6] Headers de sécurité (via Caddy)"
+# Le conteneur app applique les headers via le middleware Next.js
 check "X-Frame-Options présent" \
-  "docker exec ecolemiriam-caddy curl -sfI http://app:3000/api/health 2>/dev/null | grep -qi 'X-Frame-Options'" 2>/dev/null || true
+  "docker exec $CONTAINER curl -sI http://localhost:3000/api/health 2>/dev/null | grep -qi 'X-Frame-Options'" 2>/dev/null || true
 
 # --- 6. Process & mémoire ---
 echo "[6/6] Process & ressources"
