@@ -175,8 +175,8 @@ services:
       - ../.env.production
 
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_APP_USER:-ecolemiriam_app}@pgbouncer:6432/${POSTGRES_DB:-ecolemiriam}?pgbouncer=true&connect_timeout=10&pool_timeout=30
-      DIRECT_URL: postgresql://${POSTGRES_OWNER_USER:-ecolemiriam_owner}@postgres:5432/${POSTGRES_DB:-ecolemiriam}?connect_timeout=15
+      # DATABASE_URL et DIRECT_URL sont fournis par .env.production (avec mots de passe)
+      # Ne pas les surcharger ici — sinon le mot de passe est perdu.
       NODE_ENV: production
       RLS_ACTIVE: "true"
 
