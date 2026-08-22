@@ -94,9 +94,11 @@ check "GET /_next/static → pas 500 (assets Next.js)" \
 
 # --- 5. Headers de sécurité ---
 echo "[5/6] Headers de sécurité (via Caddy)"
-# Le conteneur app applique les headers via le middleware Next.js
+# Les headers de sécurité sont appliqués par Caddy en production (et par le
+# middleware Next.js). Sur le conteneur directement, /api/health peut ne pas
+# passer par le middleware. On teste via Caddy si disponible, sinon on skip.
 check "X-Frame-Options présent" \
-  "docker exec $CONTAINER curl -sI http://localhost:3000/api/health 2>/dev/null | grep -qi 'X-Frame-Options'" 2>/dev/null || true
+  "docker exec ecolemiriam-caddy wget -qS -O /dev/null http://localhost:8080/api/health 2>&1 | grep -qi 'X-Frame-Options'" 2>/dev/null || true
 
 # --- 6. Process & mémoire ---
 echo "[6/6] Process & ressources"
