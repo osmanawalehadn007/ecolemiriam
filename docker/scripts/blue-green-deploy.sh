@@ -157,6 +157,12 @@ reverse_proxy $new_service:3000 {
 }
 EOF
 
+  # ── Synchroniser les fichiers dans le conteneur Caddy ───────
+  # cat > crée un nouvel inode, mais les bind mounts Docker pointent
+  # vers l'ancien inode. On copie donc les fichiers dans le conteneur.
+  docker cp "$UPSTREAM_FILE" ecolemiriam-caddy:/etc/caddy/upstream.conf
+  docker cp "$upstream_simple" ecolemiriam-caddy:/etc/caddy/upstream-simple.conf
+
   # ── Valider AVANT de reload (sécurité critique) ────────────
   # Un Caddyfile corrompu = production hors ligne. On valide
   # systématiquement avant de toucher à la config active.
