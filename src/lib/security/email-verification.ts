@@ -41,8 +41,25 @@ function buildVerifyUrl(token: string): string {
 function renderVerificationEmailHtml(
   userName: string,
   verifyUrl: string,
-  ecoleNom = "École Miriam"
+  ecoleNom = "École Miriam",
+  temporaryPassword?: string
 ): string {
+  const passwordBlock = temporaryPassword
+    ? `
+          <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px;margin:0 0 24px;">
+            <p style="font-size:14px;line-height:1.6;color:#374151;margin:0 0 8px;">
+              <strong>Votre mot de passe temporaire :</strong>
+            </p>
+            <p style="font-size:18px;font-family:monospace;font-weight:700;color:#1e40af;margin:0 0 8px;letter-spacing:1px;">
+              ${escapeHtml(temporaryPassword)}
+            </p>
+            <p style="font-size:13px;line-height:1.5;color:#6b7280;margin:0;">
+              Après avoir vérifié votre email, vous pourrez définir votre propre mot de passe.
+              Vous pouvez aussi utiliser ce mot de passe temporaire pour vous connecter directement.
+            </p>
+          </div>`
+    : "";
+
   return `<!DOCTYPE html>
 <html lang="fr"><body style="margin:0;background:#f4f4f7;font-family:-apple-system,Segoe UI,Roboto,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;">
@@ -59,6 +76,7 @@ function renderVerificationEmailHtml(
             la sécurité de votre établissement, veuillez confirmer votre adresse email en cliquant
             sur le bouton ci-dessous.
           </p>
+          ${passwordBlock}
           <p style="text-align:center;margin:0 0 24px;">
             <a href="${verifyUrl}" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 32px;border-radius:8px;">
               Vérifier mon adresse email
@@ -71,7 +89,7 @@ function renderVerificationEmailHtml(
             ${verifyUrl}
           </p>
           <p style="font-size:13px;line-height:1.6;color:#6b7280;margin:0;">
-            Ce lien expire dans 24 heures. Si vous n'avez pas créé de compte,
+            Ce lien expire dans 24 heures. Si vous n&rsquo;avez pas créé de compte,
             vous pouvez ignorer cet email.
           </p>
         </td></tr>
@@ -90,8 +108,13 @@ function renderVerificationEmailHtml(
 function renderVerificationEmailText(
   userName: string,
   verifyUrl: string,
-  ecoleNom = "École Miriam"
+  ecoleNom = "École Miriam",
+  temporaryPassword?: string
 ): string {
+  const pwdLine = temporaryPassword
+    ? `\nVotre mot de passe temporaire : ${temporaryPassword}\nAprès vérification, vous pourrez définir votre propre mot de passe.\n`
+    : "";
+
   return `${ecoleNom}
 ================================
 
@@ -102,7 +125,7 @@ Bonjour ${userName},
 Vous venez de créer un compte sur École Miriam. Pour activer votre
 espace et garantir la sécurité de votre établissement, veuillez
 confirmer votre adresse email en cliquant sur le lien ci-dessous :
-
+${pwdLine}
 ${verifyUrl}
 
 Ce lien expire dans 24 heures. Si vous n'avez pas créé de compte,
@@ -128,16 +151,18 @@ export interface SendVerificationResult {
 /**
  * Génère un token de vérification, le persiste en base et envoie l'email.
  *
- * @param userEmail  — email de l'utilisateur (identifiant unique)
- * @param userName   — nom affiché dans l'email
- * @param ecoleNom   — nom de l'établissement (pour le branding)
- * @param force      — si true, supprime les tokens précédents avant d'en créer un nouveau
+ * @param userEmail         — email de l'utilisateur (identifiant unique)
+ * @param userName          — nom affiché dans l'email
+ * @param ecoleNom          — nom de l'établissement (pour le branding)
+ * @param force             — si true, supprime les tokens précédents avant d'en créer un nouveau
+ * @param temporaryPassword — mot de passe temporaire à inclure dans l'email (optionnel)
  */
 export async function sendVerificationEmail(
   userEmail: string,
   userName: string,
   ecoleNom?: string,
-  force = false
+  force = false,
+  temporaryPassword?: string
 ): Promise<SendVerificationResult> {
   // Nettoyer les tokens expirés ou existants pour cet email
   if (force) {
@@ -163,8 +188,8 @@ export async function sendVerificationEmail(
   });
 
   const verifyUrl = buildVerifyUrl(token);
-  const html = renderVerificationEmailHtml(userName, verifyUrl, ecoleNom);
-  const text = renderVerificationEmailText(userName, verifyUrl, ecoleNom);
+  const html = renderVerificationEmailHtml(userName, verifyUrl, ecoleNom, temporaryPassword);
+  const text = renderVerificationEmailText(userName, verifyUrl, ecoleNom, temporaryPassword);
 
   const result = await sendEmail(
     [userEmail],
