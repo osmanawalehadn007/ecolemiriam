@@ -125,6 +125,7 @@ export async function POST(req: NextRequest) {
     const data = parsed.data;
 
     // Récupérer le siteId depuis la classe
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
     const classe = await prisma.classe.findFirst({
       where: { id: data.classeId, tenantId: session.user.tenantId },
       select: { siteId: true },

@@ -15,6 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params;
     const tenantId = session.user.tenantId;
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
     const examen = await prisma.examen.findFirst({ where: { id, tenantId } });
     if (!examen) return NextResponse.json({ error: "Examen introuvable" }, { status: 404 });
 

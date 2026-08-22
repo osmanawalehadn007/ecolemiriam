@@ -122,6 +122,9 @@ model Tenant {
   cahierTextes          CahierTexte[]
   cahierTexteCommentaires CahierTexteCommentaire[]
 
+  // Fournitures scolaires
+  fournitureListes FournitureListe[]
+
   @@map("tenants")
 }
 
@@ -173,6 +176,9 @@ model Site {
   depenses     Depense[]
   budgets      Budget[]
   remisesCaisse RemiseCaisse[]
+
+  // Fournitures scolaires
+  fournitureListes FournitureListe[]
 
   // Soft-delete / purge planifiée (Option B — industry standard)
   deletedAt        DateTime?
@@ -399,6 +405,9 @@ model User {
   cahierTextesSaisis CahierTexte[] @relation("CahierTexteSaisiePar")
   cahierTexteCommentaires CahierTexteCommentaire[] @relation("CahierTexteCommentaireAuteur")
 
+  // Fournitures validées par cet utilisateur (secrétariat)
+  fournitureValideePar FournitureListe[] @relation("FournitureValideePar")
+
   @@index([tenantId])
   @@index([siteId])
   @@map("users")
@@ -588,6 +597,9 @@ model Matiere {
   cahierTextes     CahierTexte[]
   sessionsExamen   SessionExamen[]
 
+  // Fournitures scolaires
+  fournitureListes FournitureListe[]
+
   @@index([tenantId])
   @@index([siteId])
   @@map("matieres")
@@ -768,6 +780,9 @@ model Enseignant {
   matieres           EnseignantMatiere[]
   affectations       EnseignantAffectation[]
   cahierTextes       CahierTexte[]
+
+  // Fournitures scolaires
+  fournitureListes FournitureListe[]
 
   @@index([tenantId])
   @@index([userId])
@@ -2406,4 +2421,89 @@ model AuditLog {
   @@index([verdict])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ============================================================
+// FOURNITURES SCOLAIRES
+// ============================================================
+// Flux : enseignant → secrétariat → publication → parents/élèves
+// L'enseignant saisit par niveau (ex: "6ème") pour sa matière.
+// Le secrétariat compile, complète et valide avant publication.
+
+enum FournitureType {
+  LIVRE
+  CAHIER
+  INSTRUMENT
+  AUTRE
+}
+
+enum FournitureStatut {
+  BROUILLON  // Saisie en cours par l'enseignant
+  SOUMISE    // Soumise au secrétariat pour validation
+  VALIDEE    // Validée par le secrétariat
+  PUBLIEE    // Publiée — visible par les parents/élèves
+  REJETEE    // Rejetée par le secrétariat
+}
+
+model FournitureListe {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  siteId String? // null = tous les sites
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  niveau    String  // "6ème", "CM2" — correspond à Classe.niveau
+  annee     String  // "2025-2026"
+  matiereId String? // null = fournitures générales (ajoutées par le secrétariat)
+  matiere   Matiere? @relation(fields: [matiereId], references: [id], onDelete: SetNull)
+
+  statut FournitureStatut @default(BROUILLON)
+
+  // Enseignant qui a créé/soumis cette liste
+  enseignantId String?
+  enseignant   Enseignant? @relation(fields: [enseignantId], references: [id], onDelete: SetNull)
+
+  // Validation par le secrétariat
+  valideeParId String?
+  valideePar   User? @relation("FournitureValideePar", fields: [valideeParId], references: [id], onDelete: SetNull)
+  valideeAt    DateTime?
+  publieeAt    DateTime?
+
+  commentaireEnseignant  String? // Notes de l'enseignant
+  commentaireSecretariat String? // Notes du secrétariat
+
+  items FournitureItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, niveau, annee, matiereId]) // Une seule liste par niveau/année/matière
+  @@index([tenantId])
+  @@index([siteId])
+  @@index([matiereId])
+  @@index([enseignantId])
+  @@index([statut])
+  @@map("fourniture_listes")
+}
+
+model FournitureItem {
+  id      String @id @default(cuid())
+  listeId String
+  liste   FournitureListe @relation(fields: [listeId], references: [id], onDelete: Cascade)
+
+  nom         String        // "Cahier 200 pages"
+  type        FournitureType
+  quantite    Int           @default(1)
+  format      String?       // "A4", "17x22", "192 pages"
+  description String?
+  marque      String?       // Pour les livres : éditeur/auteur
+
+  ordre Int @default(0) // Ordre d'affichage
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([listeId])
+  @@map("fourniture_items")
 }

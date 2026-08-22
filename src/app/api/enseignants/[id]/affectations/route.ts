@@ -138,6 +138,7 @@ export async function PUT(
     if (affectations.length > 0) {
       // Récupérer les classes pour vérifier les niveaux
       const classeIds = [...new Set(affectations.map((a) => a.classeId))];
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
       const classes = await prisma.classe.findMany({
         where: { id: { in: classeIds }, tenantId: session.user.tenantId },
         select: { id: true, niveau: true },
@@ -157,6 +158,7 @@ export async function PUT(
         // Au primaire, plusieurs classes → vérifier que c'est un prof de langue
         const matiereIds = [...new Set(affectations.map((a) => a.matiereId).filter(Boolean) as string[])];
         if (matiereIds.length > 0) {
+          // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
           const matieresDb = await prisma.matiere.findMany({
             where: { id: { in: matiereIds }, tenantId: session.user.tenantId },
             select: { id: true, nom: true },

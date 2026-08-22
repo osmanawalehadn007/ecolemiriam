@@ -85,9 +85,11 @@ export async function GET(req: NextRequest) {
   const budgetFilter = siteFilterForModel("budget", financeClaims);
 
   const [totalEncaisse, totalFactures, totalDepenses, paiements, depenses, budgets] = await Promise.all([
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
     prisma.paiement.aggregate({ _sum: { montant: true }, where: { date: { gte: start, lte: end }, facture: { tenantId: session.user.tenantId, ...factureFilter } } }),
     prisma.facture.aggregate({ _sum: { montant: true }, where: { tenantId: session.user.tenantId, ...factureFilter } }),
     prisma.depense.aggregate({ _sum: { montant: true }, where: { tenantId: session.user.tenantId, ...depenseFilter, date: { gte: start, lte: end } } }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
     prisma.paiement.findMany({
       where: { date: { gte: start, lte: end }, facture: { tenantId: session.user.tenantId, ...factureFilter } },
       include: { facture: { select: { numero: true, eleve: { select: { nom: true, prenom: true } } } } },

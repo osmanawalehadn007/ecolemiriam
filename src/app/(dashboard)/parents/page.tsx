@@ -8,10 +8,12 @@ import { getTranslations } from "next-intl/server";
 import { siteFilterForModel } from "@/lib/site-filter";
 
 async function getParentsData(tenantId: string, siteFilter: Record<string, unknown>) {
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
   const parents = await prisma.parent.findMany({
     where: { tenantId, enfants: { some: { eleve: { ...siteFilter } } } },
     include: {
       user: { select: { id: true, name: true, email: true, avatarUrl: true, lastLoginAt: true } },
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
       enfants: {
         include: {
           eleve: {

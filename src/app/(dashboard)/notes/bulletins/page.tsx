@@ -26,9 +26,11 @@ async function getBulletinsData(
   };
 
   const [classes, periodes] = await Promise.all([
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.classe.findMany({
       where: classeWhere,
       include: {
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
         eleves: { where: { statut: "ACTIF" }, select: { id: true, nom: true, prenom: true, matricule: true }, orderBy: { prenom: "asc" } },
         profPrincipal: { include: { user: { select: { name: true } } } },
       },

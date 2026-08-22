@@ -46,6 +46,7 @@ export async function PATCH(
   });
 
   if (statut === "INJUSTIFIEE" || statut === "JUSTIFIEE") {
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
     const count = await prisma.absencePersonnel.count({
       where: {
         enseignantId: absence.enseignantId,
@@ -53,6 +54,7 @@ export async function PATCH(
         statut: "INJUSTIFIEE",
       },
     });
+    // eslint-disable-next-line ecolemiriam/require-tenant-id -- ID vérifié par findFirst avec tenantId au-dessus
     await prisma.ficheRH.update({
       where: { enseignantId: absence.enseignantId },
       data: { absencesCount: count },

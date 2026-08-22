@@ -31,6 +31,7 @@ export default async function AttestationsPage() {
             : {}),
       },
       include: {
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
         eleves: {
           where: { statut: "ACTIF" },
           select: { id: true, nom: true, prenom: true, matricule: true, sexe: true, dateNaissance: true },

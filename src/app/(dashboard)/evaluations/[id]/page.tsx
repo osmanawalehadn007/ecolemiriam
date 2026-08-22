@@ -26,6 +26,7 @@ export default async function SaisieNotesPage({
   if (isTeacherRole(session.user.role as Role)) {
     const scope = await getTeacherScope(session.user.tenantId!, session.user.id, session.user.role as Role);
     if (scope.isRestricted) {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
       const evalCheck = await prisma.evaluation.findFirst({
         where: { id: evaluationId, tenantId: session.user.tenantId },
         select: { classeId: true, matiereId: true },
@@ -39,6 +40,7 @@ export default async function SaisieNotesPage({
   const evaluation = await prisma.evaluation.findFirst({
     where: { id: evaluationId, tenantId: session.user.tenantId, ...siteFilter },
     include: {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
       classe: { include: { eleves: { orderBy: { nom: 'asc' } } } },
       matiere: true,
       notes: true,

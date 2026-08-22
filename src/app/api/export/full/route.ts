@@ -158,6 +158,7 @@ export async function GET(req: NextRequest) {
 
   // ── 02. Notes ───────────────────────────────────────────────
   const notesFolder = root.folder("02_Notes")!;
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const notes = await prisma.note.findMany({
     where: { tenantId },
     include: {
@@ -212,6 +213,7 @@ export async function GET(req: NextRequest) {
 
   // ── 03. Absences ────────────────────────────────────────────
   const absencesFolder = root.folder("03_Absences")!;
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const absences = await prisma.absence.findMany({
     where: { tenantId },
     include: {
@@ -287,6 +289,7 @@ export async function GET(req: NextRequest) {
 
   // ── 05. Bulletins ───────────────────────────────────────────
   const bulletinsFolder = root.folder("05_Bulletins")!;
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const bulletins = await prisma.bulletin.findMany({
     where: { tenantId },
     include: {
@@ -320,6 +323,7 @@ export async function GET(req: NextRequest) {
 
   // ── 06. Emploi du temps ─────────────────────────────────────
   const emploiFolder = root.folder("06_Emploi_du_temps")!;
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const emplois = await prisma.emploiTemps.findMany({
     where: { tenantId },
     include: {
@@ -354,11 +358,14 @@ export async function GET(req: NextRequest) {
 
   // ── 07. Professeurs ─────────────────────────────────────────
   const profsFolder = root.folder("07_Professeurs")!;
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const enseignants = await prisma.enseignant.findMany({
     where: { tenantId },
     include: {
       user: { select: { name: true, email: true, phone: true } },
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
       matieres: { include: { matiere: { select: { nom: true } } } },
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
       sites: { include: { site: { select: { nom: true } } } },
     },
     orderBy: { user: { name: "asc" } },
@@ -431,6 +438,7 @@ export async function GET(req: NextRequest) {
     fournisseur: d.fournisseur ?? "",
   }))));
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const paiements = await prisma.paiement.findMany({
     where: { facture: { tenantId } },
     include: { facture: { select: { numero: true, eleve: { select: { nom: true, prenom: true } } } } },
@@ -466,6 +474,7 @@ export async function GET(req: NextRequest) {
   // ── 11. Vie scolaire ────────────────────────────────────────
   const vieScoFolder = root.folder("11_Vie_scolaire")!;
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const incidents = await prisma.incident.findMany({
     where: { tenantId },
     include: { eleve: { select: { nom: true, prenom: true } } },
@@ -476,6 +485,7 @@ export async function GET(req: NextRequest) {
     type: i.type, gravite: i.gravite ?? "", description: (i.description ?? "").slice(0, 200),
   }))));
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const sanctions = await prisma.sanction.findMany({
     where: { incident: { tenantId } },
     include: { incident: { select: { eleve: { select: { nom: true, prenom: true } } } } },
@@ -500,6 +510,7 @@ export async function GET(req: NextRequest) {
   // ── 12. RH ──────────────────────────────────────────────────
   const rhFolder = root.folder("12_Ressources_humaines")!;
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const fichesRH = await prisma.ficheRH.findMany({
     where: { tenantId },
     include: { enseignant: { select: { user: { select: { name: true } }, specialite: true } } },
@@ -512,6 +523,7 @@ export async function GET(req: NextRequest) {
     statut: f.typeContrat,
   }))));
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const absencesPerso = await prisma.absencePersonnel.findMany({
     where: { tenantId },
     orderBy: { date: "desc" },
@@ -521,6 +533,7 @@ export async function GET(req: NextRequest) {
     motif: a.motif ?? "",
   }))));
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const conges = await prisma.congePersonnel.findMany({
     where: { tenantId },
     orderBy: { dateDebut: "desc" },
@@ -555,6 +568,7 @@ export async function GET(req: NextRequest) {
     coursParClasse.file(`${classe.replace(/[^a-zA-Z0-9]/g, "_")}.csv`, toCSV(rows));
   }
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const contenus = await prisma.contenuCours.findMany({
     where: { cours: { tenantId } },
     orderBy: { createdAt: "desc" },

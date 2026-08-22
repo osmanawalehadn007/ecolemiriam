@@ -194,6 +194,7 @@ export async function POST(req: NextRequest) {
     const classeFilter = targetSiteId
       ? { AND: [{ siteId: targetSiteId }] }
       : siteFilterForModel("classe", session.user);
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
     const existingClasses = await prisma.classe.findMany({
       where: mergeFilters({ tenantId }, classeFilter),
       select: { id: true, nom: true, siteId: true },

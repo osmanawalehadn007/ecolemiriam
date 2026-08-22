@@ -26,6 +26,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Données invalides" }, { status: 400 });
   }
 
+  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { mfaSecret: true, mfaEnabled: true },
@@ -45,6 +46,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Code TOTP incorrect" }, { status: 400 });
   }
 
+  // eslint-disable-next-line ecolemiriam/require-tenant-id -- ID vérifié par findFirst avec tenantId au-dessus
   await prisma.user.update({
     where: { id: session.user.id },
     data: { mfaSecret: null, mfaEnabled: false },

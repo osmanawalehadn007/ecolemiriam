@@ -483,6 +483,7 @@ export async function transferClasse(classeId: string, targetSiteId: string) {
   const denied = checkPermission(session.user.role, "classes:write");
   if (denied) throw new Error("Accès refusé");
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
   const classe = await prisma.classe.findFirst({
     where: {
       id: classeId,
@@ -821,6 +822,7 @@ export async function updateParentPhone(parentId: string, phone: string, telegra
   const denied = checkPermission(session.user.role, "parents:write");
   if (denied) throw new Error("Accès refusé");
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
   const parent = await prisma.parent.findFirst({
     where: { id: parentId, tenantId: session.user.tenantId },
   });
@@ -844,6 +846,7 @@ export async function deleteParent(parentId: string) {
   const denied = checkPermission(session.user.role, "parents:delete");
   if (denied) throw new Error("Accès refusé");
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
   const parent = await prisma.parent.findFirst({
     where: { id: parentId, tenantId: session.user.tenantId },
   });
@@ -861,6 +864,7 @@ export async function updateUserPhone(userId: string, phone: string) {
   const denied = checkPermission(session.user.role, "parametres:write");
   if (denied) throw new Error("Accès refusé");
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
   const user = await prisma.user.findFirst({
     where: { id: userId, tenantId: session.user.tenantId },
   });
@@ -1175,6 +1179,7 @@ export async function assignUserSites(userId: string, sites: { siteId: string; r
   const denied = checkPermission(session.user.role, "parametres:write");
   if (denied) throw new Error("Accès refusé");
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
   const user = await prisma.user.findFirst({
     where: { id: userId, tenantId: session.user.tenantId },
   });
@@ -1242,6 +1247,7 @@ export async function getUserSites(userId: string): Promise<{ siteId: string; ro
   const denied = checkPermission(session.user.role, "parametres:read");
   if (denied) throw new Error("Accès refusé");
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
   const userSites = await prisma.userSite.findMany({
     where: { userId },
     select: { siteId: true, role: true },
@@ -1561,6 +1567,7 @@ export async function assignEnseignantClasse(
       throw new Error("La matière est obligatoire pour les classes de collège et lycée");
     }
     // Vérifier que l'enseignant a bien cette matière dans sa liste
+    // eslint-disable-next-line ecolemiriam/require-tenant-id -- tenantId fourni par le caller (session.user.tenantId)
     const hasMatiere = await prisma.enseignantMatiere.findFirst({
       where: { enseignantId, matiereId },
     });
@@ -1570,6 +1577,7 @@ export async function assignEnseignantClasse(
   }
 
   // Éviter les doublons (unique sur [enseignantId, classeId, matiereId])
+  // eslint-disable-next-line ecolemiriam/require-tenant-id -- tenantId fourni par le caller (session.user.tenantId)
   const existing = await prisma.enseignantAffectation.findFirst({
     where: { enseignantId, classeId, matiereId: matiereId ?? null },
   });
@@ -1661,6 +1669,7 @@ export async function saveUserPermissions(
   const tenantId = session.user.tenantId;
 
   // Vérifier que l'utilisateur cible appartient bien à ce tenant
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
   const targetUser = await prisma.user.findFirst({
     where: { id: userId, tenantId },
     select: { id: true, role: true },

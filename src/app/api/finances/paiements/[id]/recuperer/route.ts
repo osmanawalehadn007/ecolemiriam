@@ -14,6 +14,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json().catch(() => ({}));
 
   const siteFilter = siteFilterForModel("facture", session.user);
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const paiement = await prisma.paiement.findFirst({
     where: {
       id,

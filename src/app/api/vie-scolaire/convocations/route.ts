@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
     where: { id: eleveId, tenantId: session.user.tenantId, ...siteFilter },
     include: {
       classe: true,
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
       parents: { include: { parent: true } },
     },
   });

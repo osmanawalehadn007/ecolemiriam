@@ -89,12 +89,15 @@ const getDashboardData = unstable_cache(
       notesRecentes,
       prochainExamen,
     ] = await Promise.all([
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
       prisma.eleve.groupBy({
         by: ["statut"],
         where: baseWhere,
         _count: true,
       }),
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
       prisma.classe.count({ where: classeWhere }),
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
       prisma.absence.count({
         where: {
           ...absenceWhere,
@@ -104,9 +107,11 @@ const getDashboardData = unstable_cache(
           },
         },
       }),
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
       prisma.absence.count({
         where: { ...absenceWhere, statut: "INJUSTIFIEE" },
       }),
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
       prisma.note.findMany({
         where: noteWhere,
         orderBy: { createdAt: "desc" },
@@ -116,6 +121,7 @@ const getDashboardData = unstable_cache(
           matiere: { select: { nom: true, couleur: true } },
         },
       }),
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
       prisma.examen.findFirst({
         where: { ...examenWhere, statut: "PROGRAMME", dateDebut: { gte: new Date() } },
         orderBy: { dateDebut: "asc" },

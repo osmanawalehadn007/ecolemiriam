@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
     },
     include: {
       eleve: { select: { id: true, nom: true, prenom: true, matricule: true } },
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
       matieres: { include: { matiere: { select: { id: true, nom: true, code: true } } } },
     },
   });

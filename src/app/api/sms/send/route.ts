@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
       const eleves = await prisma.eleve.findMany({
         where: { tenantId, ...siteFilter, classeId: data.classeId },
         include: {
+          // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
           parents: {
             include: { parent: { select: { phone: true } } },
           },
@@ -50,9 +51,11 @@ export async function POST(request: NextRequest) {
         .flatMap((e) => e.parents.map((ep) => ep.parent.phone))
         .filter(Boolean);
     } else if (data.destinataires === "eleve" && data.eleveId) {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
       const eleve = await prisma.eleve.findUnique({
         where: { id: data.eleveId, tenantId },
         include: {
+          // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
           parents: {
             include: { parent: { select: { phone: true } } },
           },

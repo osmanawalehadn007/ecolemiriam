@@ -32,6 +32,7 @@ import {
   Crown,
   PlayCircle,
   Banknote,
+  Backpack,
   type LucideIcon,
 } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
@@ -67,6 +68,7 @@ const navGroups: NavGroup[] = [
       { labelKey: "examens", icon: GraduationCap, href: "/evaluations", color: "text-yellow-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "TEACHER", "CLASS_TEACHER"] },
       { labelKey: "cahierTexte", icon: BookOpen, href: "/cahier-de-texte", color: "text-teal-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "TEACHER", "CLASS_TEACHER"] },
       { labelKey: "cours", icon: PlayCircle, href: "/cours", color: "text-indigo-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "TEACHER", "CLASS_TEACHER"] },
+      { labelKey: "fournitures", icon: Backpack, href: "/fournitures", color: "text-rose-500" },
       { labelKey: "emploi", icon: Calendar, href: "/emploi-du-temps", color: "text-cyan-500" },
     ],
   },

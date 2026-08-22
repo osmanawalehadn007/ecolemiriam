@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
   const depenseFilter = { tenantId, ...siteFilterForModel("depense", session.user) };
 
   // 1. Recettes (paiements)
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const paiements = await prisma.paiement.findMany({
     where: {
       ...paiementFilter,
@@ -113,6 +114,7 @@ export async function GET(req: NextRequest) {
   for (let i = 5; i >= 0; i--) {
     const mStart = startOfMonth(subMonths(now, i));
     const mEnd = endOfMonth(subMonths(now, i));
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
     const mPaiements = await prisma.paiement.aggregate({
       where: { ...paiementFilter, date: { gte: mStart, lte: mEnd } },
       _sum: { montant: true },

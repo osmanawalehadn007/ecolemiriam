@@ -34,6 +34,7 @@ export async function getFacturesForTenant(filters?: { statut?: string; eleveId?
   const denied = checkPermission(session.user.role, "finance:read");
   if (denied) return [];
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
   return prisma.facture.findMany({
     where: {
       tenantId: session.user.tenantId,
@@ -42,6 +43,7 @@ export async function getFacturesForTenant(filters?: { statut?: string; eleveId?
     },
     include: {
       eleve: { select: { id: true, nom: true, prenom: true, matricule: true, classeId: true, classe: { select: { nom: true } } } },
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur facture)
       paiements: { include: { enregistrePar: { select: { id: true, name: true } } } },
       createdBy: { select: { id: true, name: true } },
     },
@@ -56,6 +58,7 @@ export async function getFactureForDetail(id: string) {
   const denied = checkPermission(session.user.role, "finance:read");
   if (denied) return null;
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
   const facture = await prisma.facture.findFirst({
     where: { id, tenantId: session.user.tenantId },
     include: {
@@ -69,6 +72,7 @@ export async function getFactureForDetail(id: string) {
           parents: { include: { parent: true }, where: { isGardien: true }, take: 1 },
         },
       },
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur facture)
       paiements: { orderBy: { date: "desc" }, include: { enregistrePar: { select: { id: true, name: true } } } },
       createdBy: { select: { id: true, name: true } },
     },
@@ -91,6 +95,7 @@ export async function createFacture(data: FactureFormData) {
   }
 
   const values = parsed.data;
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
   const count = await prisma.facture.count({ where: { tenantId } });
   const numero = `FAC-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
 
@@ -131,6 +136,7 @@ export async function getFactureByNumero(numero: string) {
 
   if (!numero || numero.trim().length === 0) return null;
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
   return prisma.facture.findFirst({
     where: {
       numero: numero.trim(),
@@ -174,6 +180,7 @@ export async function enregistrerPaiement(factureId: string, data: PaiementFormD
   }
 
   const values = parsed.data;
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
   const facture = await prisma.facture.findFirst({
     where: { id: factureId, tenantId: session.user.tenantId },
     include: { paiements: true },
@@ -233,6 +240,7 @@ export async function annulerFacture(factureId: string) {
   const denied = checkPermission(session.user.role, "finance:write");
   if (denied) throw new Error("Accès refusé");
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
   const facture = await prisma.facture.findFirst({
     where: { id: factureId, tenantId: session.user.tenantId },
   });

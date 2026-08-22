@@ -63,6 +63,7 @@ async function getFinanceData(tenantId: string, claims: SessionSiteClaims, perio
     budgets,
     remisesCaisse,
   ] = await Promise.all([
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.paiement.aggregate({
       _sum: { montant: true },
       where: {
@@ -70,6 +71,7 @@ async function getFinanceData(tenantId: string, claims: SessionSiteClaims, perio
         facture: { tenantId, ...siteFilter },
       },
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.paiement.findMany({
       where: {
         date: { gte: start, lte: end },
@@ -92,6 +94,7 @@ async function getFinanceData(tenantId: string, claims: SessionSiteClaims, perio
       _sum: { montant: true },
       where: { tenantId, ...siteFilter },
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.paiement.aggregate({
       _sum: { montant: true },
       where: {
@@ -101,6 +104,7 @@ async function getFinanceData(tenantId: string, claims: SessionSiteClaims, perio
         facture: { tenantId, ...siteFilter },
       },
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.paiement.findMany({
       where: {
         methode: "espèces",

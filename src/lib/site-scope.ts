@@ -326,6 +326,8 @@ export const SITE_PATHS: Record<string, SitePath> = {
   depense: "column",
   budget: "column",
   remiseCaisse: "column",
+  // Liste de fournitures : `null` = partagée entre tous les sites.
+  fournitureListe: "column",
 
   // --- rattachement via l'élève ---
   absence: { one: "eleve" },
@@ -409,6 +411,8 @@ const SHARED_NULL_MODELS = new Set([
   // qui ne relève d'aucun site (message direct). L'exclure du filtre ferait
   // disparaître les conversations personnelles de tout compte site-scopé.
   "conversation",
+  // Fournitures scolaires : `null` = liste commune à tous les sites.
+  "fournitureListe",
 ]);
 
 /**

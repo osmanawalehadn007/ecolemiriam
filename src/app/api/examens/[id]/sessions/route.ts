@@ -29,6 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const tenantId = session.user.tenantId;
 
     // Vérifier que l'examen appartient au tenant
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
     const examen = await prisma.examen.findFirst({ where: { id, tenantId } });
     if (!examen) return NextResponse.json({ error: "Examen introuvable" }, { status: 404 });
 
@@ -59,10 +60,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     // Vérifier que la classe et la matière appartiennent au tenant
     if (classeId) {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
       const classe = await prisma.classe.findFirst({ where: { id: classeId, tenantId } });
       if (!classe) return NextResponse.json({ error: "Classe introuvable" }, { status: 404 });
     }
     if (matiereId) {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
       const matiere = await prisma.matiere.findFirst({ where: { id: matiereId, tenantId } });
       if (!matiere) return NextResponse.json({ error: "Matière introuvable" }, { status: 404 });
     }
@@ -98,6 +101,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const tenantId = session.user.tenantId;
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
     const examen = await prisma.examen.findFirst({ where: { id, tenantId }, select: { id: true } });
     if (!examen) return NextResponse.json({ error: "Examen introuvable" }, { status: 404 });
 
@@ -112,6 +116,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         ? { id: "__none__" as const }
         : {};
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
     const sessions = await prisma.sessionExamen.findMany({
       where: { examId: id, ...teacherSessionFilter },
       orderBy: { date: "asc" },

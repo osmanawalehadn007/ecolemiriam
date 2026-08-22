@@ -173,7 +173,7 @@ export function EnseignantsAffectationTab({ canManage }: { canManage: boolean })
       <Card>
         <CardContent className="py-12 text-center text-muted-foreground">
           <GraduationCap className="h-10 w-10 mx-auto mb-3 opacity-40" />
-          Aucun enseignant trouvé. Créez d'abord des utilisateurs avec le rôle enseignant.
+          Aucun enseignant trouvé. Créez d&apos;abord des utilisateurs avec le rôle enseignant.
         </CardContent>
       </Card>
     );
@@ -183,7 +183,7 @@ export function EnseignantsAffectationTab({ canManage }: { canManage: boolean })
     <div className="space-y-3">
       <div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800">
         <strong>Affectation des enseignants</strong> — Primaire : 1 classe unique (toutes matières).
-        Collège/Lycée : l'enseignant doit d'abord être lié à une ou plusieurs matières, puis affecté
+        Collège/Lycée : l&apos;enseignant doit d&apos;abord être lié à une ou plusieurs matières, puis affecté
         à plusieurs classes par matière.
       </div>
 
@@ -418,8 +418,8 @@ export function EnseignantsAffectationTab({ canManage }: { canManage: boolean })
                             </select>
                             {ens.matieres.length === 0 && (
                               <p className="text-xs text-amber-600">
-                                Cet enseignant n'a pas encore de matière assignée.
-                                Assignez-lui des matières d'abord.
+                                Cet enseignant n&apos;a pas encore de matière assignée.
+                                Assignez-lui des matières d&apos;abord.
                               </p>
                             )}
                           </div>
@@ -429,7 +429,7 @@ export function EnseignantsAffectationTab({ canManage }: { canManage: boolean })
                           classes.find((c) => c.id === assignClasseId)?.niveau ?? ""
                         ) && (
                           <p className="text-xs text-muted-foreground">
-                            Au primaire, l'enseignant enseigne toutes les matières de cette classe.
+                            Au primaire, l&apos;enseignant enseigne toutes les matières de cette classe.
                           </p>
                         )}
                       <div className="flex gap-2">

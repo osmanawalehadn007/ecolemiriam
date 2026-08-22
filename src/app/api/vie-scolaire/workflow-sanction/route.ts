@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Compter les incidents précédents de l'élève
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const incidentsCount = await prisma.incident.count({
     where: {
       tenantId,

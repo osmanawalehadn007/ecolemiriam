@@ -15,6 +15,7 @@ export async function GET() {
   }
 
   // Si 2FA déjà activée, on refuse le re-setup (passer par disable d'abord)
+  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { mfaEnabled: true },

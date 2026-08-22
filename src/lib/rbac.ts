@@ -40,6 +40,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "orientation:*", "cours:*", "analytics:*", "rapports:*", "documents:*",
     "ai:*", "audit:read", "parametres:*", "structures:*",
     "cahier-texte:*", "export:full",
+    "fournitures:*",
   ],
 
   // Chef d'établissement — pédagogie & vie scolaire complètes, pas la finance/RH en écriture
@@ -51,6 +52,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "orientation:*", "cours:*", "analytics:*", "rapports:*", "documents:*",
     "ai:*", "parametres:read", "structures:read",
     "cahier-texte:*",
+    "fournitures:*",
   ],
 
   // Secrétariat — gestion administrative
@@ -61,6 +63,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "documents:*", "alumni:read", "bulletins:read", "rapports:read",
     "parametres:read", "structures:read",
     "cahier-texte:read",
+    "fournitures:read", "fournitures:write", "fournitures:validate", "fournitures:publish",
   ],
 
   // Enseignant — sa pédagogie
@@ -70,6 +73,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "bulletins:read", "emploi-du-temps:read", "messages:*",
     "cours:*", "analytics:read", "examens:read", "ai:teacher",
     "cahier-texte:*",
+    "fournitures:read", "fournitures:write",
   ],
 
   // Professeur principal — enseignant + bulletins/conseil + vie scolaire
@@ -81,6 +85,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "vie-scolaire:*", "orientation:read", "orientation:write",
     "analytics:read", "examens:read", "parents:read", "ai:teacher",
     "cahier-texte:*",
+    "fournitures:read", "fournitures:write",
   ],
 
   // Conseiller / CPE — vie scolaire, orientation, cahier de texte & modification emploi du temps
@@ -107,6 +112,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "bulletins:read", "absences:read", "notes:read", "messages:*",
     "communication:read", "cours:read", "orientation:read",
     "emploi-du-temps:read", "ai:parent",
+    "fournitures:read",
   ],
 
   // Élève — consultation de son périmètre (lecture seule + messagerie limitée)
@@ -116,6 +122,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "bulletins:read", "absences:read", "notes:read",
     "messages:read", "messages:reply",
     "communication:read", "cours:*", "emploi-du-temps:read",
+    "fournitures:read",
   ],
 };
 

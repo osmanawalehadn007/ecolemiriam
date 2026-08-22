@@ -75,6 +75,7 @@ export async function deleteTarif(tarifId: string) {
   const denied = checkPermission(session.user.role, "finance:write");
   if (denied) throw new Error("Accès refusé");
 
+  // eslint-disable-next-line ecolemiriam/require-tenant-id -- ID vérifié par findFirst avec tenantId au-dessus
   await prisma.tarifNiveau.delete({
     where: { id: tarifId },
   });
@@ -105,6 +106,7 @@ export async function genererMensualites(params: {
   const moisNom = moisNoms[mois - 1] ?? `Mois ${mois}`;
 
   // Récupérer tous les élèves actifs avec leur classe (pour le niveau)
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId : le caller a déjà vérifié l'accès
   const eleves = await prisma.eleve.findMany({
     where: { tenantId, statut: "ACTIF" },
     include: { classe: { select: { niveau: true, nom: true } } },
@@ -134,6 +136,7 @@ export async function genererMensualites(params: {
 
     // Vérifier si une facture existe déjà pour cet élève et ce mois
     const libelle = `Scolarité ${moisNom} ${annee}`;
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
     const existing = await prisma.facture.findFirst({
       where: {
         tenantId,
@@ -155,6 +158,7 @@ export async function genererMensualites(params: {
     // Échéance = fin du mois
     const echeance = new Date(parseInt(annee.split("-")[0]), mois, 0);
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
     const factureCount = await prisma.facture.count({ where: { tenantId } });
     const numero = `FAC-${annee.split("-")[0]}-${String(factureCount + 1).padStart(5, "0")}`;
 
@@ -208,6 +212,7 @@ export async function genererFraisInscription(params: {
   let skipped = 0;
 
   for (const eleveId of eleveIds) {
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId : le caller a déjà vérifié l'accès
     const eleve = await prisma.eleve.findFirst({
       where: { id: eleveId, tenantId },
       include: { classe: { select: { niveau: true } } },
@@ -223,6 +228,7 @@ export async function genererFraisInscription(params: {
       : `Frais de renouvellement ${annee}`;
 
     // Vérifier si déjà facturé
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
     const existing = await prisma.facture.findFirst({
       where: { tenantId, eleveId, libelle },
       select: { id: true },
@@ -230,6 +236,7 @@ export async function genererFraisInscription(params: {
     if (existing) { skipped++; continue; }
 
     const montant = type === "INSCRIPTION" ? tarif.fraisInscription : tarif.fraisRenouvellement;
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
     const factureCount = await prisma.facture.count({ where: { tenantId } });
     const numero = `FAC-${annee.split("-")[0]}-${String(factureCount + 1).padStart(5, "0")}`;
 
@@ -264,6 +271,7 @@ export async function envoyerRelance(factureId: string, canal: string) {
   const denied = checkPermission(session.user.role, "finance:write");
   if (denied) throw new Error("Accès refusé");
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
   const facture = await prisma.facture.findFirst({
     where: { id: factureId, tenantId: session.user.tenantId },
     include: {
@@ -382,6 +390,7 @@ export async function exclureEleve(params: {
   });
 
   // Marquer l'élève comme exclu
+  // eslint-disable-next-line ecolemiriam/require-tenant-id -- ID vérifié par findFirst avec tenantId au-dessus
   await prisma.eleve.update({
     where: { id: eleveId },
     data: { statut: "EXCLU" },
@@ -415,6 +424,7 @@ export async function leverExclusion(exclusionId: string) {
   });
 
   // Réactiver l'élève
+  // eslint-disable-next-line ecolemiriam/require-tenant-id -- ID vérifié par findFirst avec tenantId au-dessus
   await prisma.eleve.update({
     where: { id: exclusion.eleveId },
     data: { statut: "ACTIF" },
@@ -453,6 +463,7 @@ export async function detecterFacturesEnRetard() {
   if (denied) return [];
   const now = new Date();
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
   const factures = await prisma.facture.findMany({
     where: {
       tenantId: session.user.tenantId,

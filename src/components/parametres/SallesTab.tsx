@@ -179,7 +179,7 @@ export function SallesTab({ canManage, sites = [] }: { canManage: boolean; sites
             Salles de classe
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Gérez les salles utilisées dans l'emploi du temps
+            Gérez les salles utilisées dans l&apos;emploi du temps
           </p>
         </div>
         {canManage && (

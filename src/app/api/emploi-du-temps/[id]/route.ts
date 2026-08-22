@@ -15,6 +15,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
     const tenantId = session.user.tenantId;
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
     const existing = await prisma.emploiTemps.findFirst({ where: { id, tenantId } });
     if (!existing) return NextResponse.json({ error: "Créneau introuvable" }, { status: 404 });
 
@@ -39,6 +40,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const tenantId = session.user.tenantId;
     const body = await req.json();
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
     const existing = await prisma.emploiTemps.findFirst({ where: { id, tenantId } });
     if (!existing) return NextResponse.json({ error: "Créneau introuvable" }, { status: 404 });
 
@@ -51,6 +53,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Check class overlap (excluding self)
     // Two creneaux with different groups (e.g. "Salle 101 (Groupe A)" vs "Salle 102 (Groupe B)")
     // can share the same time slot — only same-group or no-group overlaps are conflicts.
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
     const classOverlaps = await prisma.emploiTemps.findMany({
       where: {
         id: { not: id },
@@ -86,6 +89,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     // Check teacher conflict (if teacher assigned)
     if (newEnseignantId) {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
       const teacherConflict = await prisma.emploiTemps.findFirst({
         where: {
           id: { not: id },
@@ -106,6 +110,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     // Check room conflict (if room assigned)
     if (newSalle) {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
       const roomConflict = await prisma.emploiTemps.findFirst({
         where: {
           id: { not: id },

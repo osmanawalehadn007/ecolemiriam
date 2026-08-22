@@ -32,6 +32,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const parsed = PatchSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Données invalides" }, { status: 400 });
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
     const existing = await prisma.incident.findFirst({ where: { id, tenantId } });
     if (!existing) return NextResponse.json({ error: "Incident introuvable" }, { status: 404 });
 
@@ -70,6 +71,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const parsed = SanctionSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Données invalides" }, { status: 400 });
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
     const existing = await prisma.incident.findFirst({ where: { id, tenantId } });
     if (!existing) return NextResponse.json({ error: "Incident introuvable" }, { status: 404 });
 

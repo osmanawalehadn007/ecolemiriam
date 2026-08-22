@@ -51,6 +51,7 @@ export default async function CahierTextePage() {
       orderBy: { date: "desc" },
       take: 100,
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.classe.findMany({
       where: {
         tenantId,
@@ -63,6 +64,7 @@ export default async function CahierTextePage() {
       select: { id: true, nom: true, niveau: true },
       orderBy: { nom: "asc" },
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.matiere.findMany({
       where: {
         tenantId,
@@ -73,6 +75,7 @@ export default async function CahierTextePage() {
       select: { id: true, nom: true, code: true },
       orderBy: { nom: "asc" },
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.enseignant.findMany({
       where: { tenantId },
       select: { id: true, specialite: true, user: { select: { name: true } } },

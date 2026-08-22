@@ -14,6 +14,7 @@ async function getEnseignantsRH(
   classeFilter: Record<string, unknown>
 ) {
   const [enseignants, absencesPersonnel, congesPersonnel, classes, matieres] = await Promise.all([
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.enseignant.findMany({
       where: { tenantId, ...ensFilter },
       include: {
@@ -25,12 +26,14 @@ async function getEnseignantsRH(
         },
         ficheRH: {
           include: {
+            // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
             bulletinsPaie: {
               orderBy: [{ annee: "desc" }, { mois: "desc" }],
               take: 3,
             },
           },
         },
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
         emploiTemps: {
           select: {
             jour: true, heureDebut: true, heureFin: true,
@@ -38,6 +41,7 @@ async function getEnseignantsRH(
             classe: { select: { nom: true } },
           },
         },
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
         classesPrincipales: {
           select: { id: true, nom: true, niveau: true },
         },
@@ -50,6 +54,7 @@ async function getEnseignantsRH(
       },
       orderBy: { user: { name: "asc" } },
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.absencePersonnel.findMany({
       where: { tenantId, ...absFilter },
       include: {
@@ -59,6 +64,7 @@ async function getEnseignantsRH(
       orderBy: { date: "desc" },
       take: 50,
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.congePersonnel.findMany({
       where: { tenantId, ...congeFilter },
       include: {
@@ -70,12 +76,14 @@ async function getEnseignantsRH(
       take: 50,
     }),
     // Classes pour le dialog d'affectation
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.classe.findMany({
       where: { tenantId, ...classeFilter },
       select: { id: true, nom: true, niveau: true, siteId: true },
       orderBy: { nom: "asc" },
     }),
     // Matières pour le dialog d'affectation
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.matiere.findMany({
       where: { tenantId },
       select: { id: true, nom: true, code: true },

@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
     const { classeId, creneaux } = parsed.data;
     const tenantId = session.user.tenantId;
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
     const classe = await prisma.classe.findFirst({ where: { id: classeId, tenantId }, select: { id: true, nom: true } });
     if (!classe) return NextResponse.json({ error: "Classe introuvable" }, { status: 404 });
 

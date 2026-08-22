@@ -62,6 +62,7 @@ export async function addUserToTenant(params: {
   }
 
   // Chercher l'utilisateur par email (insensible à la casse)
+  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- recherche globale par email : l'utilisateur peut appartenir à plusieurs tenants
   const existingUser = await prisma.user.findFirst({
     where: { email: { equals: params.email, mode: "insensitive" } },
     select: { id: true, name: true, password: true },
@@ -207,6 +208,7 @@ export async function getUserTenants(userId: string) {
     throw new Error("Permissions insuffisantes");
   }
 
+  // eslint-disable-next-line ecolemiriam/require-tenant-id -- récupération des tenants d'un user : cross-tenant par design
   return prisma.userTenant.findMany({
     where: { userId, isActive: true },
     include: {

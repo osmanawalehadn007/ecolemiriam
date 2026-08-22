@@ -32,6 +32,7 @@ export default async function ConvocationsPage() {
             : {}),
       },
       include: {
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
         eleves: {
           where: { statut: "ACTIF" },
           select: {

@@ -99,13 +99,16 @@ export async function POST(req: NextRequest) {
     // Fetch all data needed
     const [classe, allMatieres, enseignants, allSalles, existingCreneaux, disponibilites] = await Promise.all([
       prisma.classe.findFirst({ where: { id: classeId, tenantId, ...classeFilter }, select: { id: true, nom: true, siteId: true } }),
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
       prisma.matiere.findMany({ where: { tenantId }, orderBy: { coefficient: "desc" } }),
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
       prisma.enseignant.findMany({
         where: { tenantId },
         include: { user: { select: { name: true } } },
       }),
       prisma.salle.findMany({ where: { tenantId, ...salleFilter } }),
       prisma.emploiTemps.findMany({ where: { tenantId, ...emploiFilter, annee } }),
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
       prisma.disponibiliteEnseignant.findMany({ where: { tenantId } }),
     ]);
 

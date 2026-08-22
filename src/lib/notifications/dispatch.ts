@@ -165,6 +165,7 @@ export async function dispatchNotification(
       break;
     }
     case "PUSH": {
+      // eslint-disable-next-line ecolemiriam/require-tenant-id -- userIds déjà résolus dans le scope du tenant (resolveRecipients filtre par tenantId)
       const devices = await prisma.deviceToken.findMany({
         where: { userId: { in: userIds }, isActive: true },
         select: { token: true },
@@ -180,6 +181,7 @@ export async function dispatchNotification(
       success = r.success;
       // Purge des tokens invalides
       if (r.invalidTokens.length > 0) {
+        // eslint-disable-next-line ecolemiriam/require-tenant-id -- purge technique de tokens invalides : les tokens sont uniques, pas de risque de fuite inter-tenant
         await prisma.deviceToken.updateMany({
           where: { token: { in: r.invalidTokens } },
           data: { isActive: false },

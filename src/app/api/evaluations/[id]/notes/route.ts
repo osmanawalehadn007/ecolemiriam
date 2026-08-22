@@ -25,6 +25,7 @@ export async function GET(
     const evaluation = await prisma.evaluation.findFirst({
       where: { id: evaluationId, tenantId: session.user.tenantId, ...siteFilter },
       include: {
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
         classe: { include: { eleves: { orderBy: { prenom: 'asc' } } } },
         notes: true,
       }

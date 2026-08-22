@@ -22,6 +22,7 @@ async function getVieScolaireData(
       : {};
 
   const [incidents, eleves, classes] = await Promise.all([
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.incident.findMany({
       where: {
         tenantId, ...incFilter,
@@ -39,6 +40,7 @@ async function getVieScolaireData(
       orderBy: { date: "desc" },
       take: 100,
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.eleve.findMany({
       where: {
         tenantId, statut: "ACTIF", ...eleveFilter,
@@ -51,6 +53,7 @@ async function getVieScolaireData(
       select: { id: true, nom: true, prenom: true, matricule: true, classe: { select: { nom: true } } },
       orderBy: [{ nom: "asc" }, { prenom: "asc" }],
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.classe.findMany({
       where: { tenantId, ...classeFilter, ...teacherClasseFilter },
       select: { id: true, nom: true },

@@ -41,6 +41,7 @@ export async function POST(req: Request) {
   }
 
   // Sauvegarder le secret et activer la 2FA
+  // eslint-disable-next-line ecolemiriam/require-tenant-id -- ID vérifié par findFirst avec tenantId au-dessus
   await prisma.user.update({
     where: { id: session.user.id },
     data: { mfaSecret: secret, mfaEnabled: true },

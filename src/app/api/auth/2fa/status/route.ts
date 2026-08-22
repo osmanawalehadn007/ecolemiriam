@@ -12,6 +12,7 @@ export async function GET() {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
   }
 
+  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { mfaEnabled: true },

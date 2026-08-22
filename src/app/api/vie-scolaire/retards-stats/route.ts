@@ -96,6 +96,7 @@ export async function GET(req: NextRequest) {
   if (autoCreate && elevesEnSeuil.length > 0) {
     for (const eleve of elevesEnSeuil) {
       // Vérifier s'il y a déjà un incident de retard récent
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
       const existingIncident = await prisma.incident.findFirst({
         where: {
           tenantId,

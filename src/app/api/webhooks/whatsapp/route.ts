@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
             // est inter-tenants par nécessité.
             // Limite connue : si deux établissements enregistrent le même
             // numéro, le message est rattaché au premier trouvé.
-            // eslint-disable-next-line ecolemiriam/require-tenant-id
+            // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- webhook entrant : aucune session, le tenant est déterminé par le numéro de téléphone
             const parent = await prisma.parent.findFirst({
               where: {
                 OR: [

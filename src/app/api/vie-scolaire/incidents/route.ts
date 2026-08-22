@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
     const tenantId = session.user.tenantId;
 
     // Vérifier que l'élève appartient au tenant
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
     const eleve = await prisma.eleve.findFirst({ where: { id: eleveId, tenantId } });
     if (!eleve) return NextResponse.json({ error: "Élève introuvable" }, { status: 404 });
 

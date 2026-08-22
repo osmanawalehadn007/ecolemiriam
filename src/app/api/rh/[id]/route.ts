@@ -90,10 +90,12 @@ export async function POST(
   const siteFilter = siteFilterForModel("enseignant", session.user);
 
   // Vérifier que l'enseignant appartient au tenant et au site
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
   const enseignant = await prisma.enseignant.findFirst({
     where: { id, tenantId: session.user.tenantId, ...siteFilter },
     include: {
       ficheRH: true,
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
       emploiTemps: { select: { heureDebut: true, heureFin: true } },
     },
   });

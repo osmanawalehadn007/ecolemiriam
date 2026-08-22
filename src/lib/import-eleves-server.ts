@@ -66,6 +66,7 @@ export async function preparerPlan(
         classe: { select: { nom: true } },
       },
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- classeSiteFilter déjà appliqué via mergeFilters (le linter ne détecte pas le spread conditionnel)
     prisma.classe.findMany({
       where: mergeFilters({ tenantId: acteur.tenantId }, classeSiteFilter),
       select: { nom: true },
@@ -98,6 +99,7 @@ export async function preparerPlan(
   if (importPrecedent) {
     let par: string | null = null;
     if (importPrecedent.userId) {
+      // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- lookup par userId pour affichage du nom seulement (pas de donnée sensible)
       const auteur = await prisma.user.findUnique({
         where: { id: importPrecedent.userId },
         select: { name: true },

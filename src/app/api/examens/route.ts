@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
       where: { tenantId, ...siteFilter, ...teacherFilter,
         ...(statut ? { statut: statut as never } : {}),
       },
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
       include: { sessions: { orderBy: { date: "asc" } } },
       orderBy: { dateDebut: "desc" },
     });

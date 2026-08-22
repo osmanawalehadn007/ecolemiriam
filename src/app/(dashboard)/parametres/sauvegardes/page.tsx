@@ -78,7 +78,7 @@ export default function SauvegardesPage() {
         <div className="border rounded-lg p-6 bg-white shadow-sm">
           <h2 className="text-lg font-semibold mb-2">Export des données (ZIP organisé)</h2>
           <p className="text-gray-600 text-sm mb-4">
-            Télécharge toutes les données de l'établissement dans un ZIP structuré par classe,
+            Télécharge toutes les données de l&apos;établissement dans un ZIP structuré par classe,
             type et thème. Format CSV (compatible Excel).
           </p>
           <div className="text-xs text-gray-500 mb-4 space-y-1">
@@ -117,13 +117,13 @@ export default function SauvegardesPage() {
             <p className="font-semibold mb-2">Installation sur le PC :</p>
             <ol className="list-decimal list-inside space-y-1">
               <li>Téléchargez le programme ci-dessous</li>
-              <li>Connectez-vous à École Miriam sur le PC (gardez l'onglet ouvert)</li>
+              <li>Connectez-vous à École Miriam sur le PC (gardez l&apos;onglet ouvert)</li>
               <li>Ouvrez un terminal et exécutez :
                 <code className="block bg-gray-200 px-2 py-1 rounded mt-1 text-xs">
                   python ecolemiriam-backup.py --setup --url https://ecolemiriam.com --token VOTRE_TOKEN
                 </code>
               </li>
-              <li>Le programme s'installe et tourne ensuite tout seul</li>
+              <li>Le programme s&apos;installe et tourne ensuite tout seul</li>
             </ol>
           </div>
           <button

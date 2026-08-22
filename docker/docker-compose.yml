@@ -142,12 +142,20 @@ services:
   # ============================================================
   # APP — Next.js (standalone, non-root, read-only rootfs)
   # ============================================================
-  app:
-    # Image construite par GitHub Actions et poussée vers GHCR.
-    # Le VPS pull l'image au lieu de la builder (déploiement ~30s au lieu de ~10min).
-    # Pour build local (développement) : utiliser `make build` qui fait docker build + tag.
+  # Architecture Blue-Green : deux conteneurs (app-blue, app-green),
+  # un seul actif à la fois. Caddy bascule entre les deux via
+  # caddy/upstream.conf (géré par blue-green-deploy.sh).
+  #
+  # Le slot inactif sert de STAGING : on y déploie la nouvelle image,
+  # on exécute les smoke tests, puis on bascule Caddy.
+  #
+  # Resource-efficient : en fonctionnement normal, seul le slot actif
+  # tourne. Le slot inactif est démarré uniquement pendant le déploiement.
+  # ============================================================
+
+  # Ancre YAML : config commune aux deux slots (évite la duplication)
+  x-app-base: &app-base
     image: ghcr.io/wilsan007/ecolemiriam-app:latest
-    container_name: ecolemiriam-app
     restart: unless-stopped
 
     # Sécurité conteneur
@@ -196,6 +204,16 @@ services:
         max-size: "20m"
         max-file: "5"
 
+  # --- Slot BLUE (actif par défaut au premier déploiement) ---
+  app-blue:
+    <<: *app-base
+    container_name: ecolemiriam-app-blue
+
+  # --- Slot GREEN (inactif = staging au premier déploiement) ---
+  app-green:
+    <<: *app-base
+    container_name: ecolemiriam-app-green
+
   # ============================================================
   # CADDY — Reverse proxy (TLS interne, security headers, rate limit)
   # ============================================================
@@ -220,11 +238,16 @@ services:
       - frontend
 
     depends_on:
-      app:
+      # Caddy dépend du slot BLUE (actif par défaut au premier démarrage).
+      # En blue-green, le slot inactif peut être arrêté — Caddy ne doit pas
+      # dépendre des deux slots. Le script blue-green-deploy.sh gère le basculement.
+      app-blue:
         condition: service_healthy
 
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/upstream.conf:/etc/caddy/upstream.conf:ro
+      - ./caddy/upstream-simple.conf:/etc/caddy/upstream-simple.conf:ro
       - caddy-data:/data
       - caddy-config:/config
 
@@ -350,7 +373,7 @@ services:
       - frontend
 
     depends_on:
-      app:
+      app-blue:
         condition: service_healthy
       docker-socket-proxy:
         condition: service_started

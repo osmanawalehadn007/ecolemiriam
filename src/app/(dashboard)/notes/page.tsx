@@ -138,9 +138,11 @@ export default async function NotesPage({
   let evaluation: any = null;
   let grille: any[] = [];
   if (classeId && matiereId && evaluationId) {
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     evaluation = await prisma.evaluation.findUnique({
       where: { id: evaluationId, tenantId },
       include: {
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
         classe: { include: { eleves: { orderBy: { prenom: 'asc' } } } },
         matiere: true,
         notes: true,

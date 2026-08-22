@@ -48,6 +48,7 @@ export async function PATCH(
   });
 
   if (action === "APPROUVE" && conge.type === "ANNUEL") {
+    // eslint-disable-next-line ecolemiriam/require-tenant-id -- ID vérifié par findFirst avec tenantId au-dessus
     await prisma.ficheRH.update({
       where: { enseignantId: conge.enseignantId },
       data: { congesPris: { increment: conge.nbJours } },

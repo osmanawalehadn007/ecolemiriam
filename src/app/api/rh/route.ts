@@ -26,12 +26,14 @@ export async function GET(req: NextRequest) {
       },
       ficheRH: {
         include: {
+          // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
           bulletinsPaie: {
             orderBy: [{ annee: "desc" }, { mois: "desc" }],
             take: 3,
           },
         },
       },
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
       emploiTemps: {
         select: {
           jour: true, heureDebut: true, heureFin: true,
@@ -39,6 +41,7 @@ export async function GET(req: NextRequest) {
           classe: { select: { nom: true } },
         },
       },
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
       classesPrincipales: {
         select: { id: true, nom: true, niveau: true },
       },

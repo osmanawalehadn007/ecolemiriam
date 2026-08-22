@@ -42,6 +42,7 @@ export async function getAttestationData(
 ): Promise<AttestationData | null> {
   const { default: prisma } = await import("@/lib/prisma");
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId : le caller (server action) a déjà vérifié l'accès
   const eleve = await prisma.eleve.findFirst({
     where: { id: eleveId, tenantId },
     include: { classe: true },
