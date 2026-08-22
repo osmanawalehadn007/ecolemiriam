@@ -168,7 +168,7 @@ EOF
   # Attendre que Caddy soit prêt
   local caddy_wait=0
   while [ "$caddy_wait" -lt 15 ]; do
-    if docker exec ecolemiriam-caddy wget -qO- http://localhost:8080/health 2>/dev/null | grep -q "OK"; then
+    if docker exec ecolemiriam-caddy wget -qO- --no-check-certificate https://localhost:8080/health 2>/dev/null | grep -q "OK"; then
       break
     fi
     sleep 1

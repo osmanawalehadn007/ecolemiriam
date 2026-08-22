@@ -1,8 +1,9 @@
 # ============================================================
-# École Miriam — Caddyfile (reverse proxy + TLS interne + sécurité)
+# École Miriam — Caddyfile (reverse proxy + sécurité)
 # ============================================================
-# Caddy reçoit le trafic depuis cloudflared (port 8080 interne).
-# TLS interne (self-signed), Cloudflare termine le TLS externe.
+# Caddy reçoit le trafic depuis cloudflared (port 8080 interne, en HTTP).
+# Cloudflare termine le TLS externe (edge), cloudflared fait le pont en
+# HTTP vers Caddy. PAS de `tls internal` ici — cela casserait la chaîne.
 # Headers de sécurité, rate limiting, proxy vers l'app.
 #
 # Blue-Green : l'upstream est défini dans upstream.conf (import).
@@ -20,10 +21,10 @@
 # Proxy principal : app.ecolemiriam.com
 # ============================================================
 :8080 {
-	# TLS interne (certificat self-signed, Cloudflare termine le TLS externe)
-	tls internal {
-		protocols tls1.3
-	}
+	# Pas de TLS ici — cloudflared se connecte en HTTP (service: http://caddy:8080).
+	# Cloudflare termine le TLS externe (edge), cloudflared fait le pont en HTTP
+	# vers Caddy. Ajouter `tls internal` ici casserait la chaîne (erreur 400 :
+	# "Client sent an HTTP request to an HTTPS server").
 
 	# --- Headers de sécurité ---
 	header {
@@ -114,8 +115,6 @@
 # Monitoring : status.ecolemiriam.com (Uptime Kuma)
 # ============================================================
 :8081 {
-	tls internal {
-		protocols tls1.3
-	}
+	# Pas de TLS — cloudflared se connecte en HTTP (même raison que :8080).
 	reverse_proxy monitoring:3001
 }
