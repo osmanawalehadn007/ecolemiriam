@@ -72,11 +72,24 @@ interface ClasseOption {
   site?: { id: string; nom: string } | null;
 }
 
-const isTeacherRole = (role: string) => role === "TEACHER" || role === "CLASS_TEACHER";
+const isTeacherRole = (role: string) => role === "TEACHER";
 
-export function UsersTab({ users, canManage, sessionRole, availableTenants = [], sites = [] }: { users: UserItem[]; canManage: boolean; sessionRole?: string; availableTenants?: AvailableTenant[]; sites?: SiteItem[] }) {
+// Rôles proposés à l'étape 1 du wizard (CLASS_TEACHER exclu — défini au niveau de la classe)
+const roleCards: { role: string; labelKey: string; icon: typeof Shield; color: string }[] = [
+  { role: "TEACHER", labelKey: "roleTeacher", icon: GraduationCap, color: "text-violet-500" },
+  { role: "SECRETARY", labelKey: "roleSecretary", icon: Briefcase, color: "text-blue-500" },
+  { role: "COUNSELOR", labelKey: "roleCounselor", icon: Shield, color: "text-teal-500" },
+  { role: "NURSE", labelKey: "roleNurse", icon: Shield, color: "text-pink-500" },
+  { role: "ACCOUNTANT", labelKey: "roleAccountant", icon: Briefcase, color: "text-green-500" },
+  { role: "PRINCIPAL", labelKey: "rolePrincipal", icon: Shield, color: "text-amber-500" },
+  { role: "TENANT_ADMIN", labelKey: "roleTenantAdmin", icon: Shield, color: "text-red-500" },
+  { role: "PARENT", labelKey: "roleParent", icon: UsersIcon, color: "text-indigo-500" },
+];
+
+export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availableTenants = [], sites = [] }: { users: UserItem[]; canManage: boolean; sessionRole?: string; sessionSiteId?: string; availableTenants?: AvailableTenant[]; sites?: SiteItem[] }) {
   const t = useTranslations("parametres");
   const [showForm, setShowForm] = useState(false);
+  const [formStep, setFormStep] = useState<1 | 2>(1); // 1 = choix du rôle, 2 = formulaire
   const [isPending, setIsPending] = useState(false);
   const [editingPhoneId, setEditingPhoneId] = useState<string | null>(null);
   const [phoneValue, setPhoneValue] = useState("");
@@ -240,6 +253,22 @@ export function UsersTab({ users, canManage, sessionRole, availableTenants = [],
     );
   }
 
+  // Ouvrir le wizard : étape 1 (choix du rôle)
+  function openWizard() {
+    setFormStep(1);
+    setShowForm(true);
+  }
+
+  // Choisir un rôle et passer à l'étape 2
+  function selectRole(role: string) {
+    setForm({ ...form, role: role as UserFormData["role"] });
+    setFormStep(2);
+    // Auto-sélectionner le site si l'utilisateur connecté a déjà un site
+    if (sessionSiteId && !formSiteIds.includes(sessionSiteId)) {
+      setFormSiteIds([sessionSiteId]);
+    }
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setIsPending(true);
@@ -262,6 +291,7 @@ export function UsersTab({ users, canManage, sessionRole, availableTenants = [],
       }
       toast.success(t("userCreated"));
       setShowForm(false);
+      setFormStep(1);
       setForm({ name: "", email: "", role: "TEACHER", phone: "", password: "", isActive: true });
       setFormSiteIds([]);
       setFormMatiereIds([]);
@@ -358,7 +388,7 @@ export function UsersTab({ users, canManage, sessionRole, availableTenants = [],
               {t("addToTenant")}
             </Button>
           )}
-          <Button size="sm" className="gap-2" onClick={() => setShowForm(!showForm)}>
+          <Button size="sm" className="gap-2" onClick={() => showForm ? setShowForm(false) : openWizard()}>
             <Plus className="h-4 w-4" />
             {t("addUser")}
           </Button>
@@ -435,10 +465,45 @@ export function UsersTab({ users, canManage, sessionRole, availableTenants = [],
         </Card>
       )}
 
-      {showForm && canManage && (
+      {showForm && canManage && formStep === 1 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">{t("newUser")}</CardTitle>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              {t("addUser")} — {t("role")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              Choisissez le rôle de l&apos;utilisateur à ajouter :
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {roleCards.map(({ role, labelKey, icon: Icon, color }) => (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => selectRole(role)}
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all group"
+                >
+                  <Icon className={cn("h-8 w-8", color)} />
+                  <span className="text-sm font-medium text-center">{t(labelKey)}</span>
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowForm(false)}>{t("cancel")}</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {showForm && canManage && formStep === 2 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <GraduationCap className="h-4 w-4" />
+              {t("newUser")} — {t(roleKeys[form.role] ?? "roleTeacher")}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -451,42 +516,41 @@ export function UsersTab({ users, canManage, sessionRole, availableTenants = [],
                 <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="role">{t("role")}</Label>
-                <select id="role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as UserFormData["role"] })}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-                  {Object.entries(roleKeys).filter(([k]) => k !== "STUDENT" && !hiddenRoles.includes(k)).map(([key, labelKey]) => (
-                    <option key={key} value={key}>{t(labelKey)}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
                 <Label htmlFor="phone">{t("phone")}</Label>
                 <Input id="phone" value={form.phone ?? ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
               </div>
-              <div className="space-y-1.5 md:col-span-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="password">{t("password")}</Label>
                 <Input id="password" type="password" placeholder={t("passwordPlaceholder")} value={form.password ?? ""}
                   onChange={(e) => setForm({ ...form, password: e.target.value })} />
               </div>
 
-              {/* Sélection des sites */}
+              {/* ── Site : auto-sélectionné ou manuel ── */}
               {sites.length > 0 && !isTeacherRole(form.role) && (
                 <div className="md:col-span-2 space-y-2">
-                  <Label>Accès aux sites</Label>
-                  <label
-                    className="flex items-center gap-3 p-3 rounded-lg border-2 border-primary/30 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formSiteIds.length === sites.length}
-                      onChange={toggleAllFormSites}
-                      className="h-4 w-4 rounded border-gray-300"
-                    />
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-primary" />
-                      <p className="text-sm font-semibold">Accès à tous les sites</p>
-                    </div>
-                  </label>
+                  <Label className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Site
+                    {sessionSiteId && formSiteIds.includes(sessionSiteId) && (
+                      <span className="text-xs text-green-600 font-normal">(sélectionné automatiquement depuis votre session)</span>
+                    )}
+                  </Label>
+                  {sessionSiteId && sites.length > 1 && (
+                    <label
+                      className="flex items-center gap-3 p-3 rounded-lg border-2 border-primary/30 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={formSiteIds.length === sites.length}
+                        onChange={toggleAllFormSites}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-primary" />
+                        <p className="text-sm font-semibold">Accès à tous les sites</p>
+                      </div>
+                    </label>
+                  )}
                   {sites.map((site) => (
                     <label
                       key={site.id}
@@ -606,7 +670,7 @@ export function UsersTab({ users, canManage, sessionRole, availableTenants = [],
                       </p>
                     </div>
                   )}
-                  {formClasseIds.length > 0 && !deducedSite && (
+                  {formClasseIds.length > 0 && !deducedSite && sites.length > 1 && (
                     <div className="flex items-center gap-2 p-3 rounded-lg border-2 border-amber-500/30 bg-amber-500/5">
                       <AlertTriangle className="h-4 w-4 text-amber-600" />
                       <p className="text-sm text-amber-700">
@@ -621,6 +685,7 @@ export function UsersTab({ users, canManage, sessionRole, availableTenants = [],
                   {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   {t("create")}
                 </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => setFormStep(1)}>← {t("role")}</Button>
                 <Button type="button" variant="outline" size="sm" onClick={() => setShowForm(false)}>{t("cancel")}</Button>
               </div>
             </form>

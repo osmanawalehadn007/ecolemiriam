@@ -66,6 +66,7 @@ export default async function ParametresPage() {
           annees={annees}
           canManage={canManage}
           sessionRole={session.user.role}
+          sessionSiteId={session.user.siteId ?? undefined}
           availableTenants={session.user.availableTenants}
         />
       </div>
