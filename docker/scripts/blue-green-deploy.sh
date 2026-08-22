@@ -107,7 +107,13 @@ validate_caddy() {
     fi
   done
 
-  # 2. Valider la syntaxe via caddy validate (dans le conteneur)
+  # 2. Valider la syntaxe via caddy validate
+  # Les bind mounts :ro ne reflètent pas les changements après git pull
+  # (inodes différents). On recrée le conteneur Caddy pour forcer la
+  # relecture, puis on valide.
+  docker restart ecolemiriam-caddy 2>/dev/null
+  sleep 3
+
   if ! docker exec ecolemiriam-caddy caddy validate --config /etc/caddy/Caddyfile 2>&1 | grep -q "Valid configuration"; then
     err "Configuration Caddy invalide (caddy validate a échoué)"
     err "Logs :"
