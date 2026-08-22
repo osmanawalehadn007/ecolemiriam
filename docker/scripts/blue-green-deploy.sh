@@ -88,6 +88,36 @@ get_service() {
   echo "app-$1"
 }
 
+# Valide la configuration Caddy avant tout reload.
+# Vérifie :
+#   1. Absence de marqueurs de conflit Git dans les fichiers de config
+#   2. `caddy validate` passe (syntaxe Caddyfile correcte)
+# Retourne 0 si OK, 1 si invalide (et affiche l'erreur).
+validate_caddy() {
+  local caddyfile="${DOCKER_DIR}/caddy/Caddyfile"
+  local upstream_simple="${DOCKER_DIR}/caddy/upstream-simple.conf"
+
+  # 1. Vérifier l'absence de marqueurs de conflit Git
+  for f in "$caddyfile" "$UPSTREAM_FILE" "$upstream_simple"; do
+    [ -f "$f" ] || continue
+    if grep -nE '^<{7} |^>{7} |^={7}$' "$f" 2>/dev/null | grep -q .; then
+      err "Configuration Caddy corrompue : marqueurs de conflit Git dans $f"
+      err "Lancer : git status && git diff pour résoudre, puis recommencer le déploiement."
+      return 1
+    fi
+  done
+
+  # 2. Valider la syntaxe via caddy validate (dans le conteneur)
+  if ! docker exec ecolemiriam-caddy caddy validate --config /etc/caddy/Caddyfile 2>&1 | grep -q "Valid configuration"; then
+    err "Configuration Caddy invalide (caddy validate a échoué)"
+    err "Logs :"
+    docker exec ecolemiriam-caddy caddy validate --config /etc/caddy/Caddyfile 2>&1 | tail -5
+    return 1
+  fi
+
+  return 0
+}
+
 # Met à jour les fichiers upstream de Caddy et recharge
 switch_caddy() {
   local new_color="$1"
@@ -114,7 +144,7 @@ reverse_proxy $new_service:3000 {
     header_up Host {host}
     header_up X-Real-IP {remote_host}
     header_up X-Forwarded-For {remote_host}
-    header_up X-Forwarded-Proto {scheme}
+    header_up X-Forwarded-Proto https
 }
 EOF
 
@@ -122,8 +152,18 @@ EOF
   cat > "$upstream_simple" <<EOF
 # Auto-généré par blue-green-deploy.sh — ne pas éditer manuellement
 # Slot actif : $new_color ($(date -u +%Y-%m-%dT%H:%M:%SZ))
-reverse_proxy $new_service:3000
+reverse_proxy $new_service:3000 {
+    header_up X-Forwarded-Proto https
+}
 EOF
+
+  # ── Valider AVANT de reload (sécurité critique) ────────────
+  # Un Caddyfile corrompu = production hors ligne. On valide
+  # systématiquement avant de toucher à la config active.
+  if ! validate_caddy; then
+    err "Refus de recharger Caddy : configuration invalide. Production NON modifiée."
+    return 1
+  fi
 
   # Recharger Caddy (zero downtime — Caddy reload est non-bloquant)
   docker exec ecolemiriam-caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null || {
@@ -234,6 +274,17 @@ fi
 # Fonction : déployer en staging (slot inactif) sans toucher à la prod
 # ============================================================
 deploy_staging() {
+  # ── Pré-check : valider la config Caddy avant de commencer ──
+  # Si le Caddyfile est corrompu (marqueurs de conflit, syntaxe invalide),
+  # on refuse de démarrer le déploiement — même si on ne touche pas à
+  # Caddy dans cette phase, la promotion échouerait ensuite.
+  log "0/5 — Validation de la configuration Caddy..."
+  if ! validate_caddy; then
+    err "Configuration Caddy invalide. Déploiement annulé. Production intacte."
+    exit 1
+  fi
+  log "  → Configuration Caddy valide ✓"
+
   log "=== Phase STAGING — déploiement sur le slot inactif ==="
   info "Slot actif    : $ACTIVE ($ACTIVE_CTR) — NON MODIFIÉ"
   info "Slot staging  : $INACTIVE ($INACTIVE_CTR) — reçoit la nouvelle image"
