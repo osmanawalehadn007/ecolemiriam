@@ -22,12 +22,11 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "statut invalide" }, { status: 400 });
   }
 
-  const data: Record<string, unknown> = { statut };
-  if (statut === "CLOTUREE") {
-    data.cloturedAt = new Date();
-  } else {
-    data.cloturedAt = null;
-  }
+  const data: {
+    statut: "OUVERTE" | "CLOTUREE";
+    cloturedAt: Date | null;
+    dateLimiteSaisie?: Date;
+  } = { statut, cloturedAt: statut === "CLOTUREE" ? new Date() : null };
   if (dateLimiteSaisie) {
     data.dateLimiteSaisie = new Date(dateLimiteSaisie);
   }
