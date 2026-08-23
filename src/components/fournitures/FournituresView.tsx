@@ -19,6 +19,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { niveauToLabel } from "@/lib/niveau";
 
 // ---------------------------------------------------------------
 // Types
@@ -151,6 +152,7 @@ export function FournituresView({ role, currentYear, matieres, niveaux }: Fourni
     const s = search.toLowerCase();
     return (
       l.niveau.toLowerCase().includes(s) ||
+      niveauToLabel(l.niveau).toLowerCase().includes(s) ||
       l.annee.toLowerCase().includes(s) ||
       l.matiere?.nom.toLowerCase().includes(s) ||
       l.items.some((i) => i.nom.toLowerCase().includes(s))
@@ -324,7 +326,7 @@ export function FournituresView({ role, currentYear, matieres, niveaux }: Fourni
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <title>${t("printTitle")} — ${liste.niveau}</title>
+  <title>${t("printTitle")} — ${niveauToLabel(liste.niveau)}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #1e293b; }
@@ -346,7 +348,7 @@ export function FournituresView({ role, currentYear, matieres, niveaux }: Fourni
   <h1>${t("printTitle")}</h1>
   <h2>${liste.annee}</h2>
   <div class="info">
-    <div><strong>${t("niveau")}:</strong> ${liste.niveau}</div>
+    <div><strong>${t("niveau")}:</strong> ${niveauToLabel(liste.niveau)}</div>
     ${liste.matiere ? `<div><strong>${t("matiere")}:</strong> ${liste.matiere.nom}</div>` : ""}
   </div>
   <table>
@@ -401,7 +403,7 @@ export function FournituresView({ role, currentYear, matieres, niveaux }: Fourni
           <SelectContent>
             <SelectItem value="all">{t("allNiveaux")}</SelectItem>
             {niveaux.map((n) => (
-              <SelectItem key={n} value={n}>{n}</SelectItem>
+              <SelectItem key={n} value={n}>{niveauToLabel(n)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -430,7 +432,7 @@ export function FournituresView({ role, currentYear, matieres, niveaux }: Fourni
             .map(([niveau, listes]) => (
               <div key={niveau} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
-                  <h3 className="font-bold text-slate-800 text-lg">{niveau}</h3>
+                  <h3 className="font-bold text-slate-800 text-lg">{niveauToLabel(niveau)}</h3>
                   <Badge variant="secondary" className="ml-1">{listes.length}</Badge>
                 </div>
                 <div className="divide-y divide-slate-100">

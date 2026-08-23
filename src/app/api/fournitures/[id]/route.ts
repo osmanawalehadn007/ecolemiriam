@@ -79,7 +79,7 @@ export async function PUT(
 ) {
   const gate = await authorize({ permission: "fournitures:write" });
   if (!gate.ok) return gate.response;
-  const { tenantId, role } = gate;
+  const { tenantId, role, userId } = gate;
   const { id } = await params;
 
   const siteFilter = siteFilterForModel("fournitureListe", gate.session.user);
@@ -87,7 +87,7 @@ export async function PUT(
   // Vérifier que la liste existe et appartient au tenant
   const existing = await prisma.fournitureListe.findFirst({
     where: { id, tenantId, ...siteFilter },
-    select: { id: true, statut: true, enseignantId: true },
+    select: { id: true, statut: true, enseignantId: true, niveau: true, matiereId: true },
   });
 
   if (!existing) {
@@ -103,6 +103,21 @@ export async function PUT(
     role === "SECRETARY" ||
     existing.statut === "BROUILLON" ||
     existing.statut === "REJETEE";
+
+  // Enseignant : ne peut modifier que SES propres listes
+  if (role === "TEACHER" || role === "CLASS_TEACHER") {
+    const enseignantSiteFilter = siteFilterForModel("enseignant", gate.session.user);
+    const enseignant = await prisma.enseignant.findFirst({
+      where: { userId, tenantId, ...enseignantSiteFilter },
+      select: { id: true },
+    });
+    if (!enseignant || existing.enseignantId !== enseignant.id) {
+      return NextResponse.json(
+        { error: "Vous ne pouvez modifier que vos propres listes." },
+        { status: 403 }
+      );
+    }
+  }
 
   if (!canEdit) {
     return NextResponse.json(
@@ -170,18 +185,33 @@ export async function DELETE(
 ) {
   const gate = await authorize({ permission: "fournitures:write" });
   if (!gate.ok) return gate.response;
-  const { tenantId, role } = gate;
+  const { tenantId, role, userId } = gate;
   const { id } = await params;
 
   const siteFilter = siteFilterForModel("fournitureListe", gate.session.user);
 
   const liste = await prisma.fournitureListe.findFirst({
     where: { id, tenantId, ...siteFilter },
-    select: { id: true, statut: true },
+    select: { id: true, statut: true, enseignantId: true },
   });
 
   if (!liste) {
     return NextResponse.json({ error: "Liste introuvable" }, { status: 404 });
+  }
+
+  // Enseignant : ne peut supprimer que SES propres listes
+  if (role === "TEACHER" || role === "CLASS_TEACHER") {
+    const enseignantSiteFilter = siteFilterForModel("enseignant", gate.session.user);
+    const enseignant = await prisma.enseignant.findFirst({
+      where: { userId, tenantId, ...enseignantSiteFilter },
+      select: { id: true },
+    });
+    if (!enseignant || liste.enseignantId !== enseignant.id) {
+      return NextResponse.json(
+        { error: "Vous ne pouvez supprimer que vos propres listes." },
+        { status: 403 }
+      );
+    }
   }
 
   // Seuls les brouillons/rejetés peuvent être supprimés (ou un admin)

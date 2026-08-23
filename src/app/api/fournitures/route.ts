@@ -34,7 +34,7 @@ const FournitureListeSchema = z.object({
 export async function GET(request: NextRequest) {
   const gate = await authorize({ permission: "fournitures:read" });
   if (!gate.ok) return gate.response;
-  const { tenantId, role } = gate;
+  const { tenantId, role, userId } = gate;
 
   const { searchParams } = new URL(request.url);
   const niveau = searchParams.get("niveau");
@@ -51,6 +51,42 @@ export async function GET(request: NextRequest) {
 
   const siteFilter = siteFilterForModel("fournitureListe", gate.session.user);
 
+  // Pour les enseignants, filtrer par les niveaux ET matières de leurs affectations
+  let enseignantNiveaux: string[] | null = null;
+  let enseignantMatieres: string[] | null = null;
+  if (role === "TEACHER" || role === "CLASS_TEACHER") {
+    const enseignantSiteFilter = siteFilterForModel("enseignant", gate.session.user);
+    const enseignant = await prisma.enseignant.findFirst({
+      where: { userId, tenantId, ...enseignantSiteFilter },
+      select: { id: true },
+    });
+    if (enseignant) {
+      const affectations = await prisma.enseignantAffectation.findMany({
+        where: { enseignantId: enseignant.id, tenantId },
+        select: {
+          classe: { select: { niveau: true } },
+          matiere: { select: { id: true } },
+        },
+      });
+      enseignantNiveaux = [...new Set(affectations.map((a) => a.classe.niveau))];
+      // Matières depuis les affectations
+      const matiereIds = new Set<string>();
+      for (const a of affectations) {
+        if (a.matiere) matiereIds.add(a.matiere.id);
+      }
+      // Compléter avec enseignant_matieres
+      const ensMatieres = await prisma.enseignantMatiere.findMany({
+        where: { enseignantId: enseignant.id, tenantId },
+        select: { matiereId: true },
+      });
+      for (const em of ensMatieres) matiereIds.add(em.matiereId);
+      enseignantMatieres = [...matiereIds];
+    } else {
+      enseignantNiveaux = [];
+      enseignantMatieres = [];
+    }
+  }
+
   const listes = await prisma.fournitureListe.findMany({
     where: {
       tenantId,
@@ -60,6 +96,11 @@ export async function GET(request: NextRequest) {
       ...(matiereId ? { matiereId } : {}),
       ...(statutFilter ? { statut: statutFilter } : {}),
       ...(enseignantId ? { enseignantId } : {}),
+      ...(enseignantNiveaux !== null ? { niveau: { in: enseignantNiveaux } } : {}),
+      // Enseignant : ne voir que SES matières (ou listes générales sans matière)
+      ...(enseignantMatieres !== null
+        ? { OR: [{ matiereId: { in: enseignantMatieres } }, { matiereId: null }] }
+        : {}),
     },
     include: {
       matiere: { select: { id: true, nom: true, code: true } },
@@ -116,6 +157,40 @@ export async function POST(request: NextRequest) {
         select: { id: true },
       });
       enseignantId = enseignant?.id ?? null;
+
+      // ── Validation : l'enseignant ne peut créer que pour SES classes ──
+      if (enseignant) {
+        const affectations = await prisma.enseignantAffectation.findMany({
+          where: { enseignantId: enseignant.id, tenantId },
+          select: {
+            classe: { select: { niveau: true } },
+            matiere: { select: { id: true } },
+          },
+        });
+        const allowedNiveaux = new Set(affectations.map((a) => a.classe.niveau));
+        const allowedMatieres = new Set(
+          affectations.filter((a) => a.matiere).map((a) => a.matiere!.id)
+        );
+        // Compléter avec enseignant_matieres
+        const ensMatieres = await prisma.enseignantMatiere.findMany({
+          where: { enseignantId: enseignant.id, tenantId },
+          select: { matiereId: true },
+        });
+        for (const em of ensMatieres) allowedMatieres.add(em.matiereId);
+
+        if (!allowedNiveaux.has(data.niveau)) {
+          return NextResponse.json(
+            { error: "Vous n'êtes pas affecté à une classe de ce niveau." },
+            { status: 403 }
+          );
+        }
+        if (data.matiereId && !allowedMatieres.has(data.matiereId)) {
+          return NextResponse.json(
+            { error: "Vous n'êtes pas affecté à cette matière." },
+            { status: 403 }
+          );
+        }
+      }
     }
 
     const siteId = (gate.session.user as { siteId?: string | null }).siteId ?? null;
