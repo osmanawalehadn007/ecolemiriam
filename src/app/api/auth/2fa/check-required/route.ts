@@ -19,6 +19,32 @@ const CheckSchema = z.object({
   password: z.string().min(1),
 });
 
+// ── Anti-énumération : rate limit par email (5 tentatives / 15 min) ──────
+// Caddy limite par IP (60/min), mais une école entière partage la même IP.
+// Ce limiter par-email empêche un attaquant de valider des mots de passe en
+// rafale sur un compte donné via cette route (oracle de mot de passe).
+const LOGIN_ATTEMPTS = new Map<string, { count: number; windowStart: number }>();
+const LOGIN_WINDOW_MS = 15 * 60_000;
+const LOGIN_MAX_ATTEMPTS = 5;
+
+function checkEmailRateLimit(email: string): boolean {
+  const key = `2fa:${email.toLowerCase()}`;
+  const now = Date.now();
+  let bucket = LOGIN_ATTEMPTS.get(key);
+  if (!bucket || now - bucket.windowStart > LOGIN_WINDOW_MS) {
+    bucket = { count: 0, windowStart: now };
+    LOGIN_ATTEMPTS.set(key, bucket);
+  }
+  bucket.count++;
+  if (bucket.count > LOGIN_MAX_ATTEMPTS) return false;
+  if (LOGIN_ATTEMPTS.size > 10_000) {
+    for (const [k, b] of LOGIN_ATTEMPTS.entries()) {
+      if (now - b.windowStart > LOGIN_WINDOW_MS * 2) LOGIN_ATTEMPTS.delete(k);
+    }
+  }
+  return true;
+}
+
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const parsed = CheckSchema.safeParse(body);
@@ -27,6 +53,14 @@ export async function POST(req: Request) {
   }
 
   const { email, password } = parsed.data;
+
+  // Anti-énumération : trop de tentatives sur cet email → réponse neutre 429
+  if (!checkEmailRateLimit(email)) {
+    return NextResponse.json(
+      { requires2FA: false, emailVerified: true },
+      { status: 429, headers: { "Retry-After": "900" } }
+    );
+  }
 
   // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- pré-login : lookup par email pour vérifier 2FA/statut email, pas de session disponible
   const user = await prisma.user.findFirst({

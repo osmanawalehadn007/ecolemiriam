@@ -48,6 +48,31 @@
 	# {remote_host} derrière cloudflared est l'IP du conteneur tunnel —
 	# identique pour tous les visiteurs. Sans ce fix, 5 req/min étaient
 	# partagées par l'ensemble des utilisateurs.
+	#
+	# P0-1 (diagnostic instabilité) : la zone auth à 10 req/min/key IP était
+	# partagée par toute une école derrière un NAT → 128 × 429 / 24h, dont
+	# 100 % sur /api/auth/*. Les GET passifs (session re-sync du
+	# SessionProvider à chaque refocus d'onglet, CSRF token) grignotaient le
+	# quota en permanence. Split :
+	#   - session + csrf : GET idempotents, quota large (300/min/IP)
+	#   - reste /api/auth/* (login, 2fa, callback, signout) : 60/min/IP
+	# Le durcissement par-email (anti-énumération de mots de passe) est géré
+	# au niveau applicatif dans les routes 2fa/check-required et authorize.
+
+	@api_auth_passive {
+		path /api/auth/session /api/auth/csrf
+	}
+	handle @api_auth_passive {
+		rate_limit {
+			zone auth_passive {
+				key {http.request.header.CF-Connecting-IP}
+				events 300
+				window 1m
+			}
+		}
+		import upstream-simple.conf
+	}
+
 	@api_auth {
 		path /api/auth/*
 	}
@@ -55,7 +80,7 @@
 		rate_limit {
 			zone auth {
 				key {http.request.header.CF-Connecting-IP}
-				events 10
+				events 60
 				window 1m
 			}
 		}

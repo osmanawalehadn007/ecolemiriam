@@ -47,8 +47,8 @@ services:
       - SETUID
       - SETGID
       - DAC_OVERRIDE
-    mem_limit: 2g
-    memswap_limit: 2g
+    mem_limit: 2.5g
+    memswap_limit: 2.5g
     pids_limit: 200
 
     networks:
@@ -101,7 +101,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    mem_limit: 512m
+    mem_limit: 768m
     pids_limit: 100
 
     networks:
@@ -121,8 +121,8 @@ services:
       DB_PASSWORD_FILE: /run/secrets/postgres_app_password
       DB_NAME: ${POSTGRES_DB:-ecolemiriam}
       POOL_MODE: transaction
-      MAX_CLIENT_CONN: 200
-      DEFAULT_POOL_SIZE: 20
+      MAX_CLIENT_CONN: 500
+      DEFAULT_POOL_SIZE: 40
 
     secrets:
       - postgres_app_password
@@ -164,8 +164,8 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    mem_limit: 1g
-    memswap_limit: 1g
+    mem_limit: 1.5g
+    memswap_limit: 1.5g
     pids_limit: 200
     tmpfs:
       - /tmp:size=64M,mode=1777
