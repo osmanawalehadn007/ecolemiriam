@@ -14,6 +14,13 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/ecolemiriam-app
 
+# Le GITHUB_TOKEN automatique a besoin de packages: write pour push
+# l'image Docker vers GHCR. Sans cette déclaration, le login GHCR
+# échoue avec "denied: denied".
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   # ============================================================
   # JOB 1 : CI Gate — Lint, Type-check, Tests unitaires
