@@ -78,8 +78,9 @@ log "Mise à jour des mots de passe Postgres (ALTER ROLE)..."
 
 # Utiliser l'ancien mot de passe owner pour se connecter
 # psql variable substitution (:var) évite l'injection SQL et l'exposition dans le process list
-PGPASSWORD="$OLD_OWNER_PASS" docker exec -i "$PG_CONTAINER" \
-  psql -U ecolemiriam_owner -d "$DB_NAME" -v new_owner="$NEW_OWNER_PASS" -v new_app="$NEW_APP_PASS" <<'SQL'
+# `-e PGPASSWORD=…` : docker exec ne transmet pas l'environnement de l'hôte.
+docker exec -i -e PGPASSWORD="$OLD_OWNER_PASS" "$PG_CONTAINER" \
+  psql -w -U ecolemiriam_owner -d "$DB_NAME" -v ON_ERROR_STOP=1 -v new_owner="$NEW_OWNER_PASS" -v new_app="$NEW_APP_PASS" <<'SQL'
 ALTER ROLE ecolemiriam_owner WITH PASSWORD :'new_owner';
 ALTER ROLE ecolemiriam_app   WITH PASSWORD :'new_app';
 SQL

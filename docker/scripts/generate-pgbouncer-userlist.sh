@@ -32,8 +32,9 @@ DB_NAME="ecolemiriam"
 echo "[generate-pgbouncer-userlist] Récupération des hashes SCRAM depuis pg_authid..."
 
 # Récupérer les hashes au format PgBouncer : "username" "hash"
-HASHES=$(PGPASSWORD="$OWNER_PASS" docker exec -i "$PG_CONTAINER" \
-  psql -U "$DB_USER" -d "$DB_NAME" -t -A -c \
+# `-e PGPASSWORD=…` : docker exec ne transmet pas l'environnement de l'hôte.
+HASHES=$(docker exec -i -e PGPASSWORD="$OWNER_PASS" "$PG_CONTAINER" \
+  psql -w -U "$DB_USER" -d "$DB_NAME" -t -A -c \
   "SELECT '\"' || rolname || '\" \"' || rolpassword || '\"' FROM pg_authid WHERE rolname IN ('ecolemiriam_app','ecolemiriam_owner') ORDER BY rolname;")
 
 [ -n "$HASHES" ] || { echo "Erreur: aucun hash récupéré depuis pg_authid"; exit 1; }

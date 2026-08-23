@@ -58,31 +58,46 @@ log "Cible : $PG_CONTAINER / $DB_NAME"
 echo ""
 
 # Appliquer le SQL via psql (idempotent — DROP POLICY IF EXISTS + CREATE)
+#
+# `-e PGPASSWORD=…` et NON `PGPASSWORD=… docker exec` : préfixer la commande
+# `docker` ne pose la variable que dans l'environnement du client Docker sur
+# l'hôte. `docker exec` ne transmet pas l'environnement de l'appelant, donc
+# psql démarrait dans le conteneur SANS mot de passe, tombait sur la règle
+# `local all all scram-sha-256` de pg_hba.conf et réclamait le mot de passe
+# de façon interactive — ce qui échoue en CI.
+#
+# `-w` interdit toute invite : en l'absence de mot de passe, psql échoue
+# immédiatement avec un message clair au lieu d'attendre une saisie.
 log "Exécution de migration_rls_activate.sql..."
-PGPASSWORD="$OWNER_PASS" docker exec -i "$PG_CONTAINER" \
-  psql -U ecolemiriam_owner -d "$DB_NAME" -v ON_ERROR_STOP=1 < "$RLS_SQL"
+docker exec -i -e PGPASSWORD="$OWNER_PASS" "$PG_CONTAINER" \
+  psql -w -U ecolemiriam_owner -d "$DB_NAME" -v ON_ERROR_STOP=1 < "$RLS_SQL"
 
 log ""
 log "=== Vérification de l'état RLS ==="
 
 # Vérifier combien de tables ont RLS activé
-RLS_COUNT=$(PGPASSWORD="$OWNER_PASS" docker exec -i "$PG_CONTAINER" \
-  psql -U ecolemiriam_owner -d "$DB_NAME" -t -A -c \
+RLS_COUNT=$(docker exec -i -e PGPASSWORD="$OWNER_PASS" "$PG_CONTAINER" \
+  psql -w -U ecolemiriam_owner -d "$DB_NAME" -t -A -c \
   "SELECT count(*) FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r' AND relrowsecurity = true;")
 
 # Vérifier combien de policies existent
-POLICY_COUNT=$(PGPASSWORD="$OWNER_PASS" docker exec -i "$PG_CONTAINER" \
-  psql -U ecolemiriam_owner -d "$DB_NAME" -t -A -c \
+POLICY_COUNT=$(docker exec -i -e PGPASSWORD="$OWNER_PASS" "$PG_CONTAINER" \
+  psql -w -U ecolemiriam_owner -d "$DB_NAME" -t -A -c \
   "SELECT count(*) FROM pg_policies WHERE schemaname = 'public';")
 
-log "  → Tables avec RLS activé : $RLS_COUNT"
-log "  → Policies créées        : $POLICY_COUNT"
+# Ne garder que les chiffres : une comparaison `-eq` sur une chaîne non
+# numérique interromprait le script avec une erreur peu lisible.
+RLS_COUNT="${RLS_COUNT//[!0-9]/}"
+POLICY_COUNT="${POLICY_COUNT//[!0-9]/}"
 
-if [ "$RLS_COUNT" -eq 0 ]; then
+log "  → Tables avec RLS activé : ${RLS_COUNT:-0}"
+log "  → Policies créées        : ${POLICY_COUNT:-0}"
+
+if [ "${RLS_COUNT:-0}" -eq 0 ]; then
   err "⚠  Aucune table n'a RLS activé ! Vérifier que les migrations Prisma ont été exécutées."
 fi
 
-if [ "$POLICY_COUNT" -eq 0 ]; then
+if [ "${POLICY_COUNT:-0}" -eq 0 ]; then
   err "⚠  Aucune policy RLS n'existe ! Le SQL a échoué silencieusement."
 fi
 
