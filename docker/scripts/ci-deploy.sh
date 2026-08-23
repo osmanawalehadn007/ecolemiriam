@@ -36,10 +36,23 @@ echo "=== CI Deploy — phase: $PHASE ==="
 echo "=== 1/3 — Git pull ==="
 # Stasher les modifications locales (docker-compose.yml a des changements
 # spécifiques au VPS : backups, rclone, TLS postgres, etc.)
-git stash 2>/dev/null || true
+# Les fichiers générés par blue-green-deploy.sh (upstream.conf,
+# upstream-simple.conf, ofelia/config.ini) sont dans .gitignore → git stash
+# ne les touche plus, fini la course silencieuse.
+if git stash 2>/dev/null; then
+  STASHED=true
+else
+  STASHED=false
+fi
 git pull origin main 2>&1
-# Réappliquer les modifications locales du VPS
-git stash pop 2>/dev/null || true
+# Réappliquer les modifications locales du VPS — échec explicite si conflit
+if [ "$STASHED" = "true" ]; then
+  if ! git stash pop 2>&1; then
+    echo "ERREUR: git stash pop a échoué (conflit). Stash conservé."
+    echo "Résoudre manuellement : cd /opt/ecolemiriam && git stash pop"
+    exit 1
+  fi
+fi
 
 # --- 2. Login GHCR ---
 echo "=== 2/3 — Login GHCR ==="

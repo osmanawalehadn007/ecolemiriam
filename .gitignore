@@ -3,6 +3,10 @@ node_modules/
 .pnp
 .pnp.js
 
+# Lockfile pnpm — standardisé sur npm (package-lock.json)
+# Ignorer si pnpm est accidentellement utilisé
+pnpm-lock.yaml
+
 # Next.js
 .next/
 out/
@@ -66,6 +70,15 @@ next-env.d.ts
 /android/build/
 /android/local.properties
 .gstack/
+
+# Docker — fichiers générés par blue-green-deploy.sh (jamais committer)
+# Ces fichiers sont régénérés à chaque déploiement. Les suivre dans git
+# provoque une course avec git stash/pop dans ci-deploy.sh → conflit
+# silencieux → Caddy peut pointer vers un conteneur arrêté → 502 total.
+docker/caddy/upstream.conf
+docker/caddy/upstream-simple.conf
+docker/.active-color
+docker/ofelia/config.ini
 
 # Docker secrets (jamais committer)
 docker/secrets/

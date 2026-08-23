@@ -2,6 +2,11 @@
 # Slot actif : blue (initial)
 # Ce fichier est importé par Caddyfile via `import upstream.conf`
 # Il contient le bloc reverse_proxy complet avec health checks + headers
+#
+# NOTE : Ce fichier est dans .gitignore car il est régénéré à chaque
+# déploiement. Cette version .example sert de référence pour le premier
+# déploiement. Copier en upstream.conf au premier setup :
+#   cp upstream.conf.example upstream.conf
 reverse_proxy app-blue:3000 {
     health_uri /api/health
     health_interval 30s

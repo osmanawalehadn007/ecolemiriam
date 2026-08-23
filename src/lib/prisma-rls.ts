@@ -133,10 +133,17 @@ const rlsExtension = Prisma.defineExtension((client) => {
           }
         }
 
-        // Pas de contexte → exécuter sans SET LOCAL
-        // La DB RLS renverra 0 ligne pour les tables protégées (fail-closed)
+        // Pas de contexte → fail-closed explicite (N-5)
+        // Avant : on exécutait sans SET LOCAL et la DB renvoyait 0 ligne
+        // silencieusement → bugs invisibles (listes vides sans erreur).
+        // Maintenant : on throw pour rendre le bug visible et empêcher
+        // l'application de présenter un état incohérent.
         if (!ctx || !ctx.tenantId) {
-          return query(args);
+          throw new Error(
+            "prisma-rls: contexte tenant manquant — " +
+            "appelez runWithTenant() ou auth() dans le contexte requête. " +
+            `Modèle: ${model}, opération: ${operation}`
+          );
         }
 
         // Enrouler dans une transaction avec SET LOCAL

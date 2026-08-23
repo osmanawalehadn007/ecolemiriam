@@ -69,12 +69,13 @@ jobs:
           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
 
       - name: Unit tests
-        continue-on-error: true # Non-bloquant : certains tests nécessitent une DB (tenant-claims)
+        continue-on-error: true # Non-bloquant : RLS_ACTIVE nécessite une DB avec policies
         run: npm run test
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          RLS_ACTIVE: ${{ secrets.RLS_ACTIVE }}
 
       - name: Check if deployment needed
         id: check

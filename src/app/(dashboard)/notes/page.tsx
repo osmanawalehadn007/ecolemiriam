@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
+import { runWithTenant } from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { NotesOverview } from "@/components/notes/NotesOverview";
 import { Button } from "@/components/ui/button";
@@ -21,12 +22,16 @@ import { getSiteColorMap } from "@/lib/site-colors";
 const getNotesData = unstable_cache(
   async (
     tenantId: string,
+    siteId: string | null,
     // Revendications de site réduites au strict nécessaire : elles entrent dans
     // la clé de cache, on n'y met donc rien d'identifiant (ni id, ni e-mail).
     claims: SessionSiteClaims,
     classeId?: string,
     scope?: { classeIds: string[]; matiereIds: string[]; isRestricted: boolean }
   ) => {
+    // N-4 : unstable_cache détache le contexte requête → auth() échoue →
+    // RLS non positionnée. runWithTenant injecte le contexte via ALS.
+    return runWithTenant(tenantId, siteId, async () => {
     const classeWhere = { tenantId, ...siteFilterForModel("classe", claims), ...(scope?.isRestricted && scope.classeIds.length > 0 ? { id: { in: scope.classeIds } } : scope?.isRestricted ? { id: "__none__" } : {}) };
     const matiereWhere = { tenantId, ...siteFilterForModel("matiere", claims), ...(scope?.isRestricted && scope.matiereIds.length > 0 ? { id: { in: scope.matiereIds } } : scope?.isRestricted ? { id: "__none__" } : {}) };
     // Le filtre de site s'applique dans tous les cas : auparavant il sautait dès
@@ -62,6 +67,7 @@ const getNotesData = unstable_cache(
     ]);
 
     return { classes, matieres, statsNotes };
+    }); // fin runWithTenant
   },
   ["notes-data"],
   { revalidate: 60, tags: ["notes-data"] }
@@ -118,7 +124,7 @@ export default async function NotesPage({
     : undefined;
 
   // Récupérer les classes et matières (filtrées pour les enseignants)
-  const { classes, matieres, statsNotes } = await getNotesData(tenantId, noteClaims, classeId, scope);
+  const { classes, matieres, statsNotes } = await getNotesData(tenantId, session.user.siteId ?? null, noteClaims, classeId, scope);
 
   // Si classe et matière sont sélectionnées, on récupère les évaluations correspondantes
   let evaluations: any[] = [];

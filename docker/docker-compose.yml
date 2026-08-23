@@ -47,8 +47,8 @@ services:
       - SETUID
       - SETGID
       - DAC_OVERRIDE
-    mem_limit: 2.5g
-    memswap_limit: 2.5g
+    mem_limit: 4g
+    memswap_limit: 4g
     pids_limit: 200
 
     networks:
@@ -128,7 +128,7 @@ services:
       - postgres_app_password
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h localhost -p 6432 -u $${DB_USER}"]
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 6432 -U $${DB_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5

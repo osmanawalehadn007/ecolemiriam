@@ -60,6 +60,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { checkPermission } from "@/lib/rbac";
 import JSZip from "jszip";
+import { Readable } from "node:stream";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -640,18 +641,27 @@ ATTENTION : Ces données sont confidentielles.
 Ne pas partager hors de l'établissement.
 `);
 
-  // ── Générer le ZIP ──────────────────────────────────────────
-  const zipBuffer = await zip.generateAsync({
+  // ── Générer le ZIP en streaming ─────────────────────────────
+  // N-3 (diagnostic instabilité) : generateAsync() bufferisait tout le ZIP
+  // en mémoire + une seconde copie via new Uint8Array() → OOM du conteneur
+  // app (mem_limit 1.5g) sur les grands exports. generateNodeStream() stream
+  // le ZIP directement vers la réponse HTTP, évitant le double buffer.
+  // Contrepartie : Content-Length inconnu (chunked transfer encoding).
+  const zipStream = zip.generateNodeStream({
     type: "nodebuffer",
+    streamFiles: true,
     compression: "DEFLATE",
     compressionOptions: { level: 6 },
   });
 
-  return new NextResponse(new Uint8Array(zipBuffer), {
+  const webStream = Readable.toWeb(zipStream as Readable) as unknown as BodyInit;
+
+  return new NextResponse(webStream, {
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="ecolemiriam_export_${timestamp}.zip"`,
-      "Content-Length": zipBuffer.length.toString(),
+      // Pas de Content-Length : taille inconnue en streaming (chunked TE).
+      "Cache-Control": "no-store",
     },
   });
 }

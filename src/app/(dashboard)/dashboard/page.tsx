@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
+import { runWithTenant } from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { DashboardStats } from "@/components/dashboard/DashboardStats";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
@@ -18,6 +19,7 @@ import type { Prisma } from "@prisma/client";
 const getDashboardData = unstable_cache(
   async (
     tenantId: string,
+    siteId: string | null,
     eleveFilter: Record<string, unknown>,
     classeFilter: Record<string, unknown>,
     absenceFilter: Record<string, unknown>,
@@ -25,6 +27,13 @@ const getDashboardData = unstable_cache(
     examenFilter: Record<string, unknown>,
     scope?: { classeIds: string[]; matiereIds: string[]; isRestricted: boolean }
   ) => {
+    // N-4 (diagnostic instabilité) : unstable_cache exécute ce callback
+    // dans un contexte détaché de la requête → auth() échoue → l'extension
+    // RLS ne positionne pas SET LOCAL app.tenant_id → les policies RLS
+    // renvoient 0 ligne (fail-closed) → dashboard vide mis en cache 30s.
+    // Fix : runWithTenant injecte le contexte via AsyncLocalStorage,
+    // contournant le besoin de auth()/cookies().
+    return runWithTenant(tenantId, siteId, async () => {
     // Pour les enseignants : restreindre aux classes/matières assignées
     const teacherClasseFilter = scope?.isRestricted && scope.classeIds.length > 0
       ? { classeId: { in: scope.classeIds } }
@@ -140,6 +149,7 @@ const getDashboardData = unstable_cache(
       notesRecentes,
       prochainExamen,
     };
+    }); // fin runWithTenant
   },
   ["dashboard-data"],
   { revalidate: 30, tags: ["dashboard-data"] }
@@ -176,7 +186,7 @@ export default async function DashboardPage() {
     : undefined;
 
   const [data, sites, anneeCourante] = await Promise.all([
-    getDashboardData(tenantId, eleveFilter, classeFilter, absenceFilter, noteFilter, examenFilter, scope),
+    getDashboardData(tenantId, session.user.siteId ?? null, eleveFilter, classeFilter, absenceFilter, noteFilter, examenFilter, scope),
     prisma.site.findMany({
       where: { tenantId, actif: true, deletedAt: null },
       select: { id: true, nom: true },

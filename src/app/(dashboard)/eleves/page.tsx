@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
+import { runWithTenant } from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { ElevesTable } from "@/components/eleves/ElevesTable";
 import { ElevesStats } from "@/components/eleves/ElevesStats";
@@ -111,7 +112,10 @@ async function getEffectifsParClasse(where: Prisma.EleveWhereInput, tenantId: st
 }
 
 const getClassesList = unstable_cache(
-  async (tenantId: string, siteFilter: Record<string, unknown>) => {
+  async (tenantId: string, siteId: string | null, siteFilter: Record<string, unknown>) => {
+    // N-4 : unstable_cache détache le contexte requête → auth() échoue →
+    // RLS non positionnée. runWithTenant injecte le contexte via ALS.
+    return runWithTenant(tenantId, siteId, async () => {
     // eslint-disable-next-line ecolemiriam/require-site-filter -- where includes ...siteFilter spread, not detectable inside unstable_cache
     const classes = await prisma.classe.findMany({
       where: { tenantId, ...siteFilter } as Prisma.ClasseWhereInput,
@@ -123,6 +127,7 @@ const getClassesList = unstable_cache(
       seen.set(c.id, { id: c.id, nom: c.nom, siteNom: c.site?.nom ?? null });
     }
     return Array.from(seen.values());
+    }); // fin runWithTenant
   },
   ["classes-list"],
   { revalidate: 300, tags: ["classes-list"] }
@@ -130,6 +135,7 @@ const getClassesList = unstable_cache(
 
 async function getElevesData(
   tenantId: string,
+  siteId: string | null,
   siteFilter: Record<string, unknown>,
   classeSiteFilter: Record<string, unknown>,
   filters: { q?: string; classeId?: string; statut?: string },
@@ -181,7 +187,7 @@ async function getElevesData(
     // Sans filtre actif, les deux coïncident — c'est le contrôle que fait
     // naturellement l'utilisateur en additionnant les classes.
     getElevesStats(base),
-    getClassesList(tenantId, classeSiteFilter),
+    getClassesList(tenantId, siteId, classeSiteFilter),
     getEffectifsParClasse(where, tenantId),
   ]);
 
@@ -218,7 +224,7 @@ export default async function ElevesPage({
     getSitesForUser(),
     getAnneeCouranteLibelle(session.user.tenantId),
     getSiteColorMap(session.user.tenantId),
-    getElevesData(session.user.tenantId, siteFilter, classeSiteFilter, {
+    getElevesData(session.user.tenantId, session.user.siteId ?? null, siteFilter, classeSiteFilter, {
       q,
       classeId,
       statut,
