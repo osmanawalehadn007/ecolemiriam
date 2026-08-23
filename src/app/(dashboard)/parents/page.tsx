@@ -43,7 +43,7 @@ export default async function ParentsPage() {
     auth(),
     getTranslations("parents"),
   ]);
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "parents:read");
 
   // `Parent` n'a pas de colonne `siteId` : le rattachement passe par l'utilisateur.

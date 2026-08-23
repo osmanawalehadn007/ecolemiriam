@@ -16,7 +16,7 @@ export default async function SaisieNotesPage({
   params: Promise<{ id: string }>
 }) {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "evaluations:read");
 
   const { id: evaluationId } = await params;

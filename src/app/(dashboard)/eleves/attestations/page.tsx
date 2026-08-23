@@ -10,7 +10,7 @@ import { AttestationForm } from "@/components/eleves/AttestationForm";
 
 export default async function AttestationsPage() {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "eleves:read");
 
   // Filtrer par classes de l'enseignant si applicable

@@ -199,7 +199,7 @@ export default async function ElevesPage({
     getTranslations("common"),
     searchParams,
   ]);
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "eleves:read");
 
   const { q, classeId, statut } = sp;

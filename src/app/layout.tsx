@@ -4,9 +4,11 @@ import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { PWAProvider } from "@/components/providers/PWAProvider";
 import { PWAEnhanced } from "@/components/providers/PWAEnhanced";
 import { NativeProvider } from "@/components/providers/NativeProvider";
+import { AuthProvider } from "@/components/providers/AuthProvider";
 import { Toaster } from "sonner";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
+import { auth } from "@/lib/auth";
 import "./globals.css";
 
 const inter = Inter({
@@ -40,6 +42,7 @@ export default async function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const locale = await getLocale();
   const messages = await getMessages();
+  const session = await auth();
 
   return (
     <html lang={locale} suppressHydrationWarning>
@@ -58,11 +61,13 @@ export default async function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            <PWAProvider />
-            <PWAEnhanced />
-            <NativeProvider />
-            {children}
-            <Toaster position="top-right" richColors closeButton />
+            <AuthProvider session={session}>
+              <PWAProvider />
+              <PWAEnhanced />
+              <NativeProvider />
+              {children}
+              <Toaster position="top-right" richColors closeButton />
+            </AuthProvider>
           </ThemeProvider>
         </NextIntlClientProvider>
       </body>

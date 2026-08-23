@@ -10,9 +10,11 @@ import { useTranslations } from "next-intl";
 interface TenantSelectorProps {
   tenants: AvailableTenant[];
   userName: string;
+  /** Destination d'origine à restaurer après la sélection du tenant. */
+  callbackUrl?: string;
 }
 
-export function TenantSelector({ tenants, userName }: TenantSelectorProps) {
+export function TenantSelector({ tenants, userName, callbackUrl }: TenantSelectorProps) {
   const router = useRouter();
   const [switching, setSwitching] = useState<string | null>(null);
   const t = useTranslations("login");
@@ -33,7 +35,12 @@ export function TenantSelector({ tenants, userName }: TenantSelectorProps) {
         throw new Error(data.error || "Erreur");
       }
 
-      router.push("/dashboard");
+      // Honorer callbackUrl : atterrir sur la page demandée, pas /dashboard.
+      // On valide que c'est un chemin relatif (anti open-redirect).
+      const dest = callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")
+        ? callbackUrl
+        : "/dashboard";
+      router.push(dest);
       router.refresh();
     } catch (error) {
       console.error("Erreur sélection tenant:", error);

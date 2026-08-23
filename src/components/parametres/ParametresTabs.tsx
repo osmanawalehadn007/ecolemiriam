@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   Settings, Users, GraduationCap, BookOpen, UserCog, Settings2, Calendar, Stamp, Building2,
   School, UsersRound, BookOpenCheck, ChevronDown, DollarSign, CopyCheck, ClipboardList, DoorOpen,
-  Shield,
+  Shield, HardDriveDownload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EtablissementTab } from "./EtablissementTab";
@@ -20,6 +20,7 @@ import { SitesTab } from "./SitesTab";
 import { TarifsTab } from "./TarifsTab";
 import { DoublonsTab } from "./DoublonsTab";
 import { Security2FA } from "./Security2FA";
+import { SauvegardesTab } from "./SauvegardesTab";
 import { AnneesScolairesTab } from "./AnneesScolairesTab";
 import { EnseignantsAffectationTab } from "./EnseignantsAffectationTab";
 import { SallesTab } from "./SallesTab";
@@ -41,7 +42,8 @@ type Tab =
   | "sites"
   | "tarifs"
   | "doublons"
-  | "securite";
+  | "securite"
+  | "sauvegardes";
 
 type TabDef = { id: Tab; labelKey: string; icon: typeof Settings };
 
@@ -49,6 +51,8 @@ type TabGroup = {
   groupKey: string;
   icon: typeof Settings;
   tabs: TabDef[];
+  /** Si défini, le groupe n'est visible que pour ces rôles. */
+  adminOnly?: boolean;
 };
 
 const tabGroups: TabGroup[] = [
@@ -93,8 +97,10 @@ const tabGroups: TabGroup[] = [
   {
     groupKey: "groupSecurite",
     icon: Shield,
+    adminOnly: true,
     tabs: [
       { id: "securite", labelKey: "securite", icon: Shield },
+      { id: "sauvegardes", labelKey: "sauvegardes", icon: HardDriveDownload },
     ],
   },
 ];
@@ -135,8 +141,13 @@ export function ParametresTabs({
   const t = useTranslations("parametres");
   const [activeTab, setActiveTab] = useState<Tab>("etablissement");
 
-  // Trouver le groupe actif
-  const activeGroup = tabGroups.find((g) => g.tabs.some((tab) => tab.id === activeTab)) ?? tabGroups[0];
+  // ── Filtrage par rôle : le groupe Sécurité (2FA + Sauvegardes) n'est
+  //    visible que pour TENANT_ADMIN et SUPER_ADMIN (le directeur).
+  const isAdmin = sessionRole === "TENANT_ADMIN" || sessionRole === "SUPER_ADMIN";
+  const visibleGroups = tabGroups.filter((g) => !g.adminOnly || isAdmin);
+
+  // Trouver le groupe actif (parmi les groupes visibles seulement)
+  const activeGroup = visibleGroups.find((g) => g.tabs.some((tab) => tab.id === activeTab)) ?? visibleGroups[0];
   const [activeGroupId, setActiveGroupId] = useState(activeGroup.groupKey);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(activeGroup.groupKey);
 
@@ -153,7 +164,7 @@ export function ParametresTabs({
     <div className="space-y-4">
       {/* Niveau 1: Onglets de groupe */}
       <div className="flex flex-wrap gap-2">
-        {tabGroups.map((group) => (
+        {visibleGroups.map((group) => (
           <button
             key={group.groupKey}
             onClick={() => handleGroupClick(group)}
@@ -179,7 +190,7 @@ export function ParametresTabs({
       {/* Niveau 2: Sous-onglets du groupe actif */}
       {expandedGroup && (
         <div className="flex flex-wrap gap-1.5 border-b pb-px">
-          {tabGroups
+          {visibleGroups
             .find((g) => g.groupKey === expandedGroup)
             ?.tabs.map((tab) => (
               <button
@@ -239,6 +250,7 @@ export function ParametresTabs({
         {activeTab === "tarifs" && <TarifsTab />}
         {activeTab === "doublons" && <DoublonsTab />}
         {activeTab === "securite" && <Security2FA />}
+        {activeTab === "sauvegardes" && <SauvegardesTab />}
       </div>
     </div>
   );

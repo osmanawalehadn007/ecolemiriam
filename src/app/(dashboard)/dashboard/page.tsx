@@ -156,7 +156,10 @@ export default async function DashboardPage() {
     redirect("/super-admin");
   }
 
-  if (!session?.user?.tenantId) redirect("/login");
+  // Pas de tenantId : aller à /select-tenant (qui affichera une page
+  // « aucun établissement » si l'utilisateur n'en a aucun) au lieu de
+  // /login qui créait une boucle de redirection.
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session);
 
   const eleveFilter = siteFilterForModel("eleve", session.user);

@@ -74,7 +74,7 @@ export default async function AbsencesPage() {
     auth(),
     getTranslations("absences"),
   ]);
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "absences:read");
 
   const siteFilter = siteFilterForModel("absence", session.user);

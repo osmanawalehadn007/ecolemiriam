@@ -39,7 +39,7 @@ async function getClasses(
 
 export default async function AppelPage() {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "absences:write");
 
   // Filtrer par classes de l'enseignant si applicable

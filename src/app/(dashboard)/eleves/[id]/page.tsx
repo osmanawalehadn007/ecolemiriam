@@ -87,7 +87,7 @@ export default async function EleveDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "eleves:read");
 
   const eleveFilter = siteFilterForModel("eleve", session.user);

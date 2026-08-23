@@ -8,7 +8,7 @@ import { GenerationComptesForm } from "@/components/eleves/GenerationComptesForm
 
 export default async function ComptesElevesPage() {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "eleves:write");
 
 

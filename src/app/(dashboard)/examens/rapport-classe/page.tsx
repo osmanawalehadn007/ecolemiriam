@@ -10,7 +10,7 @@ import { RapportClasseTable } from "@/components/examens/RapportClasseTable";
 
 export default async function RapportClassePage() {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "examens:read");
 
   // Filtrer par classes de l'enseignant si applicable

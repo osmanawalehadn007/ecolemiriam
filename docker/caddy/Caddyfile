@@ -27,14 +27,16 @@
 	# "Client sent an HTTP request to an HTTPS server").
 
 	# --- Headers de sécurité ---
+	# CSP, Permissions-Policy et X-DNS-Prefetch-Control sont gérés par
+	# next.config.ts (plus complets et plus stricts). Les dupliquer ici
+	# produisait deux valeurs contradictoires dans la réponse (Caddy "on"
+	# vs Next "off" pour X-DNS-Prefetch-Control ; CSP avec 'unsafe-eval'
+	# côté Caddy vs sans côté Next).
 	header {
 		X-Frame-Options "DENY"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
-		X-DNS-Prefetch-Control "on"
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https://api.africastalking.com https://api.resend.com https://graph.facebook.com https://api.telegram.org https://api.stripe.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
-		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 		# Cache des assets statiques Next.js
 		/.next/static/* {
 			Cache-Control "public, max-age=31536000, immutable"
@@ -42,15 +44,18 @@
 	}
 
 	# --- Rate limiting ---
-	# Login : 5 tentatives / minute / IP
+	# Keyé sur CF-Connecting-IP (positionné par Cloudflare à l'edge) car
+	# {remote_host} derrière cloudflared est l'IP du conteneur tunnel —
+	# identique pour tous les visiteurs. Sans ce fix, 5 req/min étaient
+	# partagées par l'ensemble des utilisateurs.
 	@api_auth {
 		path /api/auth/*
 	}
 	handle @api_auth {
 		rate_limit {
 			zone auth {
-				key {remote_host}
-				events 5
+				key {http.request.header.CF-Connecting-IP}
+				events 10
 				window 1m
 			}
 		}
@@ -65,7 +70,7 @@
 	handle @api_cron {
 		rate_limit {
 			zone cron {
-				key {remote_host}
+				key {http.request.header.CF-Connecting-IP}
 				events 10
 				window 1m
 			}
@@ -80,7 +85,7 @@
 	handle @api_upload {
 		rate_limit {
 			zone upload {
-				key {remote_host}
+				key {http.request.header.CF-Connecting-IP}
 				events 10
 				window 1m
 			}

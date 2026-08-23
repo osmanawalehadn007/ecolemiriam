@@ -7,7 +7,7 @@ import { getClassesForTenant, getSitesForUser, createEleve } from "@/lib/actions
 
 export default async function NouveauElevePage() {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "eleves:write");
 
   const classes = await getClassesForTenant();

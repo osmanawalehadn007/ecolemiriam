@@ -14,7 +14,7 @@ export default async function BulletinPage({
   params: Promise<{ eleveId: string; periodeId: string }>;
 }) {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
 
   const { eleveId, periodeId } = await params;
 

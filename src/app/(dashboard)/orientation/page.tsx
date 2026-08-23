@@ -10,7 +10,7 @@ export default async function OrientationPage() {
     auth(),
     getTranslations("orientation"),
   ]);
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "orientation:read");
   return (
     <div className="flex flex-col flex-1 overflow-hidden">

@@ -10,7 +10,7 @@ export default async function MessagesPage() {
     auth(),
     getTranslations("messages"),
   ]);
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "messages:read");
 
   return (

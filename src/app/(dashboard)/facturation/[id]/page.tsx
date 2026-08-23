@@ -11,7 +11,7 @@ export default async function FactureDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "finance:read");
 
   const { id } = await params;

@@ -14,7 +14,7 @@ export const metadata = { title: "Cahier de texte — École Miriam" };
 
 export default async function CahierTextePage() {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   const { tenantId, role } = guardPage(session, "cahier-texte:read");
 
   const [t, siteFilter] = await Promise.all([

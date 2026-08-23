@@ -84,7 +84,7 @@ async function getEmploiData(tenantId: string, claims: SessionSiteClaims) {
 
 export default async function EmploiDuTempsPage() {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "emploi-du-temps:read");
 
   const [t, tCommon, sites, siteColors] = await Promise.all([

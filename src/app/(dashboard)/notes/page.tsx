@@ -73,7 +73,7 @@ export default async function NotesPage({
   searchParams: Promise<{ classeId?: string; matiereId?: string; evaluationId?: string; siteId?: string }>;
 }) {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "notes:read");
 
   const [t, tCommon, sp, sites, siteColors] = await Promise.all([

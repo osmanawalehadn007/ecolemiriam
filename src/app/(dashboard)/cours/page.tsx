@@ -16,7 +16,7 @@ export default async function CoursPage({
   searchParams: Promise<{ siteId?: string }>;
 }) {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "cours:read");
 
   const [t, tCommon, sites, siteColors, sp] = await Promise.all([

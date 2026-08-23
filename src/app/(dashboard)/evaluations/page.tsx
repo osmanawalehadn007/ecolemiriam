@@ -28,7 +28,7 @@ export default async function EvaluationsPage({
     getTranslations("evaluations"),
     searchParams,
   ]);
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "evaluations:read");
 
   const tenantId = session.user.tenantId;

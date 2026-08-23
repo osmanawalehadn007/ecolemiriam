@@ -51,7 +51,7 @@ export default async function BulletinsPage() {
     auth(),
     getTranslations("bulletins"),
   ]);
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "bulletins:read");
 
   // Filtrer par classes de l'enseignant si applicable

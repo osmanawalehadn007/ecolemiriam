@@ -10,7 +10,7 @@ import { ConvocationForm } from "@/components/vie-scolaire/ConvocationForm";
 
 export default async function ConvocationsPage() {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
 
   guardPage(session, "vie-scolaire:read");
 

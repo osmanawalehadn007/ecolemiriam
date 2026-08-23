@@ -10,7 +10,7 @@ import { getTranslations } from "next-intl/server";
 
 export default async function EmploiEnseignantPage() {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "emploi-du-temps:read");
 
   const t = await getTranslations("emploi");

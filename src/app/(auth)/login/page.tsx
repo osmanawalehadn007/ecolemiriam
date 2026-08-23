@@ -95,7 +95,10 @@ function LoginForm() {
         setTotp("");
       } else {
         toast.success(t("title") === "Sign In" ? "Signed in!" : "Connexion réussie !");
-        window.location.href = "/select-tenant";
+        // Préserver callbackUrl à travers /select-tenant pour que
+        // l'utilisateur atterrisse sur la page demandée, pas /dashboard.
+        const dest = callbackUrl && callbackUrl !== "/" ? `/select-tenant?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/select-tenant";
+        window.location.href = dest;
       }
     });
   }

@@ -12,7 +12,7 @@ export default async function NouvelleFacturePage({
   searchParams: Promise<{ eleveId?: string }>;
 }) {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "finance:write");
 
   const siteFilter = siteFilterForModel("eleve", session.user);

@@ -12,7 +12,7 @@ export default async function AlumniPage() {
     auth(),
     getTranslations("alumni"),
   ]);
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "alumni:read");
   return (
     <div className="flex flex-col flex-1 overflow-hidden">

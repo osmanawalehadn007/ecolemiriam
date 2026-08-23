@@ -8,7 +8,7 @@ import { TransfertClasseForm } from "@/components/eleves/TransfertClasseForm";
 
 export default async function TransfertClassePage() {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "eleves:write");
 
 
