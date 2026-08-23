@@ -13,15 +13,18 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     serverActions: {
-      allowedOrigins: ["*.ecolemiriam.com", "*.ecolemiriam.app", "*.netlify.app", "*.pages.dev", "*.vercel.app", "localhost:3000", "localhost:3001", "localhost:3002", "localhost:3003", "localhost:3004", "localhost:3005", "10.139.161.24:3003"],
+      // VPS uniquement : plus de netlify.app / vercel.app / pages.dev.
+      // Une origine autorisée en trop est une surface CSRF ouverte.
+      allowedOrigins: [
+        "app.ecolemiriam.com",
+        "*.ecolemiriam.com",
+        ...(isProd ? [] : ["localhost:3000", "localhost:3001"]),
+      ],
     },
   },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**.ecolemiriam.com" },
-      { protocol: "https", hostname: "**.ecolemiriam.app" },
-      { protocol: "https", hostname: "**.pages.dev" },
-      { protocol: "https", hostname: "**.vercel.app" },
       { protocol: "https", hostname: "avatars.githubusercontent.com" },
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
     ],
@@ -82,7 +85,7 @@ const nextConfig: NextConfig = {
       {
         source: "/api/mobile/:path*",
         headers: [
-          { key: "Access-Control-Allow-Origin", value: isProd ? "https://ecolemiriam.com" : "*" },
+          { key: "Access-Control-Allow-Origin", value: isProd ? "https://app.ecolemiriam.com" : "*" },
           { key: "Access-Control-Allow-Methods", value: "GET, POST, PUT, DELETE, OPTIONS" },
           { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization" },
           { key: "Access-Control-Max-Age", value: "86400" },
@@ -91,7 +94,7 @@ const nextConfig: NextConfig = {
       {
         source: "/api/auth/mobile",
         headers: [
-          { key: "Access-Control-Allow-Origin", value: isProd ? "https://ecolemiriam.com" : "*" },
+          { key: "Access-Control-Allow-Origin", value: isProd ? "https://app.ecolemiriam.com" : "*" },
           { key: "Access-Control-Allow-Methods", value: "POST, OPTIONS" },
           { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization" },
         ],

@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyEmailToken } from "@/lib/security/email-verification";
+import { generateSetPasswordToken } from "@/lib/security/password-reset";
 import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
 import { auditFire } from "@/lib/audit";
 
@@ -58,7 +59,22 @@ export async function POST(req: Request) {
       metadata: { email: result.email },
     });
 
-    return NextResponse.json({ success: true, email: result.email });
+    // Générer un token set-password pour que l'utilisateur puisse
+    // définir son propre mot de passe après vérification
+    let setPasswordToken: string | undefined;
+    if (result.email) {
+      try {
+        setPasswordToken = await generateSetPasswordToken(result.email);
+      } catch (err) {
+        console.warn("[verify-email] Échec génération token set-password:", err);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      email: result.email,
+      setPasswordToken,
+    });
   } catch (error) {
     console.error("[API/auth/verify-email]", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });

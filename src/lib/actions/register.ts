@@ -108,7 +108,9 @@ export async function registerTenant(data: RegisterFormData) {
     const verifyResult = await sendVerificationEmail(
       values.adminEmail,
       `${values.adminFirstName} ${values.adminLastName}`,
-      values.schoolName
+      values.schoolName,
+      false,
+      values.adminPassword // mot de passe choisi à l'inscription, inclus dans l'email
     );
     if (!verifyResult.success) {
       console.warn("[registerTenant] Échec envoi email de vérification:", verifyResult.error);

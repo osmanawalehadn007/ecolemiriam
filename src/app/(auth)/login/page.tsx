@@ -3,11 +3,12 @@
 import { useState, useTransition, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Eye, EyeOff, Loader2, Shield, MailWarning } from "lucide-react";
+import { Eye, EyeOff, Loader2, Shield, MailWarning, KeyRound } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 const LoginSchema = z.object({
@@ -165,6 +166,13 @@ function LoginForm() {
             <label className="text-sm font-medium" htmlFor="password">
               {t("password")}
             </label>
+            <Link
+              href="/forgot-password"
+              className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+            >
+              <KeyRound className="h-3 w-3" />
+              {t("forgotPassword") ?? "Mot de passe oublié ?"}
+            </Link>
           </div>
           <div className="relative">
             <Input

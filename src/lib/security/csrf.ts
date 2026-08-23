@@ -24,26 +24,42 @@ const EXEMPT_PREFIXES = [
   "/api/stripe/webhook", // Webhook Stripe vérifié par signature
 ];
 
-/** Domaines autorisés pour Origin/Referer. */
+/**
+ * Domaines autorisés pour Origin/Referer.
+ *
+ * Tout est dérivé de l'environnement : plus aucun domaine en dur. Auparavant
+ * `https://ecolemiriam.com` et `https://app.ecolemiriam.com` étaient codés
+ * dans le fichier, si bien qu'un déploiement servi sur une autre adresse
+ * voyait chaque POST refusé en 403 « Requête non autorisée (CSRF) », y compris
+ * la connexion. `EXTRA_ALLOWED_ORIGINS` couvre les cas légitimes (domaine
+ * apex + sous-domaine, environnement de recette).
+ */
 function getAllowedOrigins(): string[] {
-  const appUrl = process.env.NEXTAUTH_URL ?? process.env.AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL;
   const domains: string[] = [];
-  if (appUrl) {
+
+  const candidates = [
+    process.env.AUTH_URL,
+    process.env.NEXTAUTH_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    ...(process.env.EXTRA_ALLOWED_ORIGINS ?? "").split(","),
+  ];
+
+  for (const candidate of candidates) {
+    const value = candidate?.trim();
+    if (!value) continue;
     try {
-      const url = new URL(appUrl);
-      domains.push(url.origin);
+      domains.push(new URL(value).origin);
     } catch {
       // URL invalide, on ignore
     }
   }
-  // Domaines explicites connus
-  domains.push("https://ecolemiriam.com");
-  domains.push("https://app.ecolemiriam.com");
+
   // En dev, autoriser localhost
   if (process.env.NODE_ENV !== "production") {
     domains.push("http://localhost:3000");
     domains.push("http://127.0.0.1:3000");
   }
+
   return [...new Set(domains)];
 }
 

@@ -71,4 +71,7 @@ next-env.d.ts
 docker/secrets/
 docker/keys/
 .env.production
+.env.*.backup
+.env.supabase-backup
+.env.backup
 .cf-token.env

@@ -187,6 +187,10 @@ services:
       # Ne pas les surcharger ici — sinon le mot de passe est perdu.
       NODE_ENV: production
       RLS_ACTIVE: "true"
+      # Cloudflare Tunnel → Caddy → app : la requête arrive en HTTP interne
+      # avec l'en-tête Host du proxy. Sans AUTH_TRUST_HOST, Auth.js v5 lève
+      # UntrustedHost et toute la chaîne /api/auth/* répond 500.
+      AUTH_TRUST_HOST: "true"
 
     expose:
       - "3000"

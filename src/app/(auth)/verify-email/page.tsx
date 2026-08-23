@@ -9,12 +9,21 @@ import { CheckCircle2, XCircle, Loader2, MailCheck, ArrowLeft } from "lucide-rea
 
 type Status = "loading" | "success" | "error" | "missing";
 
+interface VerifyResponse {
+  success: boolean;
+  email?: string;
+  setPasswordToken?: string;
+  error?: string;
+}
+
 // ─── Formulaire isolé dans un Suspense pour useSearchParams ───────────────────
 function VerifyEmailForm() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
   const [status, setStatus] = useState<Status>(token ? "loading" : "missing");
   const [errorMsg, setErrorMsg] = useState("");
+  const [setPasswordToken, setSetPasswordToken] = useState<string | null>(null);
+  const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -30,9 +39,11 @@ function VerifyEmailForm() {
           body: JSON.stringify({ token }),
         });
 
-        const data = await res.json();
+        const data: VerifyResponse = await res.json();
 
         if (res.ok && data.success) {
+          setSetPasswordToken(data.setPasswordToken ?? null);
+          setVerifiedEmail(data.email ?? null);
           setStatus("success");
         } else {
           setStatus("error");
@@ -59,6 +70,10 @@ function VerifyEmailForm() {
   }
 
   if (status === "success") {
+    const setPwdUrl = setPasswordToken
+      ? `/set-password?token=${encodeURIComponent(setPasswordToken)}${verifiedEmail ? `&email=${encodeURIComponent(verifiedEmail)}` : ""}`
+      : null;
+
     return (
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
@@ -69,11 +84,20 @@ function VerifyEmailForm() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground text-center">
-            Votre adresse email a été confirmée avec succès. Vous pouvez maintenant
-            vous connecter à votre espace.
+            Votre adresse email a été confirmée avec succès. Pour finaliser votre
+            inscription, définissez votre mot de passe de connexion.
           </p>
-          <Button asChild className="w-full">
-            <Link href="/login">Se connecter</Link>
+          {setPwdUrl ? (
+            <Button asChild className="w-full">
+              <Link href={setPwdUrl}>Définir mon mot de passe</Link>
+            </Button>
+          ) : (
+            <Button asChild className="w-full">
+              <Link href="/login">Se connecter</Link>
+            </Button>
+          )}
+          <Button asChild variant="ghost" className="w-full">
+            <Link href="/login">Se connecter avec le mot de passe temporaire</Link>
           </Button>
         </CardContent>
       </Card>

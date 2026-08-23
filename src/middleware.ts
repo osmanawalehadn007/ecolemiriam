@@ -8,7 +8,24 @@ import { applySecurityHeaders } from "@/lib/security/headers";
 
 const { auth } = NextAuth(authConfig);
 
-const PUBLIC_ROUTES = ["/login", "/register", "/api/auth", "/", "/_next", "/select-tenant"];
+/**
+ * Routes publiques comparées par PRÉFIXE DE SEGMENT.
+ *
+ * `"/"` en est volontairement absent : avec `startsWith`, « / » est un préfixe
+ * de TOUS les chemins, ce qui rendait publique la totalité de l'application —
+ * le middleware retournait avant toute vérification de session. La racine est
+ * traitée séparément, en égalité stricte.
+ */
+const PUBLIC_PREFIXES = ["/login", "/register", "/api/auth", "/_next", "/select-tenant"];
+
+/** Chemins publics en correspondance exacte. */
+const PUBLIC_EXACT = new Set(["/", "/offline"]);
+
+/** Exige un segment complet : `/loginfoo` ne doit pas hériter de `/login`. */
+function isPublic(pathname: string): boolean {
+  if (PUBLIC_EXACT.has(pathname)) return true;
+  return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
 
 const SELF_AUTH_API = ["/api/auth", "/api/cron", "/api/webhooks"];
 
@@ -19,7 +36,7 @@ export default auth(async function middleware(req: NextRequest) {
   const response = NextResponse.next();
   applySecurityHeaders(response, pathname);
 
-  if (PUBLIC_ROUTES.some((r) => pathname.startsWith(r))) {
+  if (isPublic(pathname)) {
     return response;
   }
 
