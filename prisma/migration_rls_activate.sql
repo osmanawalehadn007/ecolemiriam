@@ -155,12 +155,12 @@ END $$;
 -- ============================================================
 SELECT '=== RLS activée sur : ===' AS info;
 
-SELECT tablename, relrowsecurity AS rls, relforcerowsecurity AS force_rls
+SELECT relname AS tablename, relrowsecurity AS rls, relforcerowsecurity AS force_rls
 FROM pg_class
 WHERE relnamespace = 'public'::regnamespace
   AND relkind = 'r'
   AND relrowsecurity = true
-ORDER BY tablename;
+ORDER BY relname;
 
 -- Compter les policies
 SELECT count(*) AS total_policies FROM pg_policies WHERE schemaname = 'public';
