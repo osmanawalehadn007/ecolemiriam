@@ -10,9 +10,12 @@ import type { CapacitorConfig } from "@capacitor/cli";
  *
  * Définir l'URL de production via la variable d'environnement CAP_SERVER_URL
  * avant `npx cap sync` :
- *   CAP_SERVER_URL=https://app.ecolemiriam.app npx cap sync
+ *   CAP_SERVER_URL=https://ecolemiriam.com npx cap sync
  */
-const SERVER_URL = process.env.CAP_SERVER_URL ?? "https://app.ecolemiriam.app";
+// Défaut aligné sur le domaine canonique. L'ancienne valeur pointait vers
+// `app.ecolemiriam.app` — un TLD `.app` qui n'a jamais été servi : la coque
+// mobile buildée sans CAP_SERVER_URL chargeait donc un hôte inexistant.
+const SERVER_URL = process.env.CAP_SERVER_URL ?? "https://ecolemiriam.com";
 
 const config: CapacitorConfig = {
   appId: "app.ecolemiriam.mobile",

@@ -328,6 +328,10 @@ export const SITE_PATHS: Record<string, SitePath> = {
   remiseCaisse: "column",
   // Liste de fournitures : `null` = partagée entre tous les sites.
   fournitureListe: "column",
+  // Devoirs & chapitres portent `siteId` (`null` = non assigné / orphan
+  // après suppression du site) : filtrage strict, pas de shared-null.
+  devoir: "column",
+  chapitre: "column",
 
   // --- rattachement via l'élève ---
   absence: { one: "eleve" },
@@ -373,6 +377,8 @@ export const SITE_PATHS: Record<string, SitePath> = {
   enseignantMatiere: { one: "enseignant" },
   enseignantAffectation: { one: "enseignant" },
   cahierTexteCommentaire: { one: "cahierTexte" },
+  // Ligne d'une liste de fournitures : rattachée au site via sa liste.
+  fournitureItem: { one: "liste" },
 
   // --- données de référence, partagées par tous les sites du tenant ---
   periode: "tenant",

@@ -27,7 +27,7 @@ const actions = [
   {
     labelKey: "examens.schedule",
     icon: CalendarPlus,
-    href: "/evaluations",
+    href: "/examens",
     color: "bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400",
   },
 ];

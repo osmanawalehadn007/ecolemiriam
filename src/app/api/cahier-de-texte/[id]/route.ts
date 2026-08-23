@@ -34,6 +34,13 @@ export async function GET(
           include: { auteur: { select: { name: true, role: true } } },
           orderBy: { createdAt: "asc" },
         },
+        devoirsLiees: {
+          include: {
+            classe: { select: { nom: true } },
+            matiere: { select: { nom: true } },
+          },
+          orderBy: { dateRemise: "asc" },
+        },
       },
     });
 
@@ -65,6 +72,23 @@ const UpdateSchema = z.object({
     taille: z.number(),
     dataUrl: z.string(),
   })).nullable().optional(),
+  // Nouveaux champs
+  statut: z.enum(["PLANIFIEE", "EFFECTUEE", "CLOTUREE", "ANNULEE", "REMPLACEE"]).optional(),
+  chapitreId: z.string().nullable().optional(),
+  contenuStructure: z.object({
+    objectifs: z.array(z.string()).optional(),
+    activites: z.array(z.object({
+      type: z.enum(["COURS", "EXERCICE", "TP", "EVALUATION", "PROJET"]),
+      description: z.string(),
+      dureeMin: z.number().optional(),
+    })).optional(),
+    supports: z.array(z.object({
+      type: z.enum(["DOCUMENT", "VIDEO", "LIEN", "COURS_EN_LIGNE"]),
+      url: z.string(),
+      coursId: z.string().optional(),
+    })).optional(),
+    differentiation: z.string().optional(),
+  }).nullable().optional(),
 });
 
 export async function PATCH(
@@ -100,6 +124,17 @@ export async function PATCH(
     }
 
     const data = parsed.data;
+
+    // Gérer les horodatages de transition de statut
+    const statutUpdates: Record<string, Date | null> = {};
+    if (data.statut !== undefined) {
+      if (data.statut === "EFFECTUEE" && existing.statut === "PLANIFIEE") {
+        statutUpdates.effectueeAt = new Date();
+      } else if (data.statut === "CLOTUREE") {
+        statutUpdates.clotureeAt = new Date();
+      }
+    }
+
     const entry = await prisma.cahierTexte.update({
       where: { id },
       data: {
@@ -113,6 +148,13 @@ export async function PATCH(
         ...(data.fichiers !== undefined
           ? { fichiers: data.fichiers === null ? undefined : data.fichiers }
           : {}),
+        // Nouveaux champs
+        ...(data.statut !== undefined ? { statut: data.statut } : {}),
+        ...(data.chapitreId !== undefined ? { chapitreId: data.chapitreId } : {}),
+        ...(data.contenuStructure !== undefined
+          ? { contenuStructure: data.contenuStructure === null ? undefined : data.contenuStructure }
+          : {}),
+        ...statutUpdates,
       },
       include: {
         classe: { select: { nom: true, niveau: true } },

@@ -198,15 +198,25 @@ TUNNEL_CNAME="${TUNNEL_ID}.cfargotunnel.com"
 # Fonction pour créer ou mettre à jour un enregistrement DNS CNAME
 setup_dns_record() {
   local subdomain="$1"
-  local full_domain="${subdomain}.${DOMAIN}"
   local proxied="${2:-true}"
+  local full_domain record_name
+
+  # "@" (ou vide) = apex. Cloudflare attend alors le domaine nu comme `name`.
+  # Le CNAME à l'apex est légal ici grâce au CNAME flattening de Cloudflare.
+  if [ -z "$subdomain" ] || [ "$subdomain" = "@" ]; then
+    full_domain="${DOMAIN}"
+    record_name="${DOMAIN}"
+  else
+    full_domain="${subdomain}.${DOMAIN}"
+    record_name="${subdomain}"
+  fi
 
   # Vérifier si l'enregistrement existe déjà
   EXISTING_RESP=$(cf_api GET "/zones/${ZONE_ID}/dns_records?name=${full_domain}&type=CNAME")
   EXISTING_ID=$(echo "$EXISTING_RESP" | jq -r '.result[0].id // empty' 2>/dev/null)
 
   local data
-  data=$(jq -n --arg name "$subdomain" --arg content "$TUNNEL_CNAME" --argjson proxied "$proxied" \
+  data=$(jq -n --arg name "$record_name" --arg content "$TUNNEL_CNAME" --argjson proxied "$proxied" \
     '{type:"CNAME",name:$name,content:$content,proxied:$proxied}')
 
   if [ -n "$EXISTING_ID" ]; then
@@ -228,6 +238,10 @@ setup_dns_record() {
   fi
 }
 
+# Domaine canonique servi à l'apex.
+setup_dns_record "@" "true"
+setup_dns_record "www" "true"
+# Conservé le temps de la transition — supprimable après bascule.
 setup_dns_record "app" "true"
 setup_dns_record "status" "true"
 

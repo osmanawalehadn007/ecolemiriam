@@ -34,8 +34,8 @@ check_var() {
   fi
 }
 
-check_var AUTH_URL "doit valoir https://app.ecolemiriam.com"
-check_var NEXT_PUBLIC_APP_URL "doit valoir https://app.ecolemiriam.com"
+check_var AUTH_URL "doit valoir https://ecolemiriam.com"
+check_var NEXT_PUBLIC_APP_URL "doit valoir https://ecolemiriam.com"
 
 if echo "$ENVDUMP" | grep -q "^AUTH_TRUST_HOST=true"; then
   echo -e "$OK AUTH_TRUST_HOST=true"

@@ -12,7 +12,7 @@ export interface AvailableTenant {
 
 /**
  * URL publique de l'application, source de vérité unique.
- * En prod VPS : https://app.ecolemiriam.com (défini dans .env.production).
+ * En prod VPS : https://ecolemiriam.com (défini dans .env.production).
  */
 export const APP_ORIGIN =
   process.env.AUTH_URL ??
@@ -54,8 +54,11 @@ export const authConfig: NextAuthConfig = {
         path: "/",
         secure: useSecureCookies,
         // Pas de domain explicite : le cookie est scoped au domaine exact
-        // (app.ecolemiriam.com). Partager entre sous-domaines exigerait
-        // domain: ".ecolemiriam.com" mais élargirait la surface d'attaque.
+        // (ecolemiriam.com). Conséquence de la bascule apex : une session
+        // ouverte sur app.ecolemiriam.com n'est PAS partagée avec l'apex —
+        // les utilisateurs déjà connectés devront se reconnecter une fois.
+        // Partager exigerait domain: ".ecolemiriam.com", ce qui exposerait
+        // le cookie à tous les sous-domaines.
       },
     },
     callbackUrl: {

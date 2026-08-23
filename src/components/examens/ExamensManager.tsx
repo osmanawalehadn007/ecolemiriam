@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Calendar, Clock, MapPin, Users, BookOpen,
   CheckCircle2, PlayCircle, XCircle, Loader2,
-  ChevronDown, ChevronUp, Edit2, Trash2,
+  ChevronDown, ChevronUp, Edit2, Trash2, FileBarChart,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
@@ -673,13 +674,21 @@ export function ExamensManager({
             </button>
           ))}
         </div>
-        <Button
-          onClick={() => setShowCreate(true)}
-          className="gap-2 bg-green-600 hover:bg-green-700 text-white"
-        >
-          <Plus className="w-4 h-4" />
-          {t("newExam")}
-        </Button>
+        <div className="flex gap-2">
+          <Link href="/examens/rapport-classe">
+            <Button variant="outline" className="gap-2">
+              <FileBarChart className="w-4 h-4" />
+              {t("classReport")}
+            </Button>
+          </Link>
+          <Button
+            onClick={() => setShowCreate(true)}
+            className="gap-2 bg-green-600 hover:bg-green-700 text-white"
+          >
+            <Plus className="w-4 h-4" />
+            {t("newExam")}
+          </Button>
+        </div>
       </div>
 
       {/* Filtre par classes coloré */}

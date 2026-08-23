@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, eleveScopeFilter } from "@/lib/site-scope";
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,7 +12,8 @@ export async function GET(req: NextRequest) {
     }
     const denied = checkPermission(session.user.role, "bulletins:read");
     if (denied) return denied;
-    const siteFilter = siteFilterForModel("eleve", session.user);
+    // eleveScopeFilter restreint aux enfants du parent / à soi-même pour STUDENT
+    const siteFilter = eleveScopeFilter(session.user, null);
 
     const { searchParams } = new URL(req.url);
     const classeId = searchParams.get("classeId");

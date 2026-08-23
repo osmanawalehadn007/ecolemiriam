@@ -159,9 +159,39 @@ EOF
 # Auto-généré par blue-green-deploy.sh — ne pas éditer manuellement
 # Slot actif : $new_color ($(date -u +%Y-%m-%dT%H:%M:%SZ))
 reverse_proxy $new_service:3000 {
+    health_uri /api/health
+    health_interval 30s
+    health_timeout 5s
+    health_status 2xx
+    transport http {
+        read_timeout 60s
+        write_timeout 60s
+        dial_timeout 5s
+    }
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-For {remote_host}
     header_up X-Forwarded-Proto https
 }
 EOF
+
+  # ── Mettre à jour le config.ini d'Ofelia avec le nouveau conteneur actif ──
+  # Les crons applicatifs (job-exec) doivent pointer vers le slot actif
+  # pour que curl s'exécute dans le conteneur qui a CRON_SECRET.
+  local ofelia_config="${DOCKER_DIR}/ofelia/config.ini"
+  local new_container
+  new_container=$(get_container "$new_color")
+  if [ -f "$ofelia_config" ]; then
+    info "Mise à jour Ofelia → $new_container"
+    sed -i.bak "s/container = \"ecolemiriam-app-blue\"/container = \"ecolemiriam-app-green\"/g; s/container = \"ecolemiriam-app-green\"/container = \"ecolemiriam-app-blue\"/g" "$ofelia_config" 2>/dev/null || true
+    # sed double-substitution ci-dessus est fragile — on utilise une approche robuste :
+    # 1. Sauvegarder, 2. Remplacer toutes les lignes container= par le nouveau conteneur
+    cp "$ofelia_config" "${ofelia_config}.bak"
+    sed "s/^container = \"ecolemiriam-app-[a-z]*\"/container = \"$new_container\"/" "${ofelia_config}.bak" > "$ofelia_config"
+    rm -f "${ofelia_config}.bak"
+    # Recharger Ofelia pour prendre en compte le nouveau config
+    docker restart ecolemiriam-ofelia 2>/dev/null || warn "Ofelia non redémarré (conteneur absent ?)"
+  fi
 
   # ── Redémarrer Caddy pour recharger les bind mounts ──────────
   # Les bind mounts :ro de Docker ne reflètent PAS les changements
@@ -303,7 +333,7 @@ deploy_staging() {
   # Si le Caddyfile est corrompu (marqueurs de conflit, syntaxe invalide),
   # on refuse de démarrer le déploiement — même si on ne touche pas à
   # Caddy dans cette phase, la promotion échouerait ensuite.
-  log "0/5 — Validation de la configuration Caddy..."
+  log "0/6 — Validation de la configuration Caddy..."
   if ! validate_caddy; then
     err "Configuration Caddy invalide. Déploiement annulé. Production intacte."
     exit 1
@@ -316,26 +346,26 @@ deploy_staging() {
   echo ""
 
   # Phase 1 : Backup
-  log "1/5 — Backup pré-déploiement (pgBackRest)..."
+  log "1/6 — Backup pré-déploiement (pgBackRest)..."
   docker exec ecolemiriam-pgbackrest pgbackrest --stanza=ecolemiriam --type=incr backup 2>/dev/null || warn "Backup a échoué — continuer"
 
   # Phase 2 : Pull
   if [ "${BUILD_ONLY:-false}" != "true" ]; then
-    log "2/5 — Login GHCR + pull de la nouvelle image..."
+    log "2/6 — Login GHCR + pull de la nouvelle image..."
     ghcr_login
     docker pull "${GHCR_IMAGE}"
   else
-    log "2/5 — Image construite localement (skip pull)"
+    log "2/6 — Image construite localement (skip pull)"
   fi
 
   # Phase 3 : Démarrer le conteneur inactif
-  log "3/5 — Démarrage du conteneur staging ($INACTIVE_SVC)..."
+  log "3/6 — Démarrage du conteneur staging ($INACTIVE_SVC)..."
   docker stop "$INACTIVE_CTR" 2>/dev/null || true
   docker rm "$INACTIVE_CTR" 2>/dev/null || true
   docker compose -f "$COMPOSE_FILE" up -d --no-deps --pull never "$INACTIVE_SVC"
 
   # Phase 4 : Healthcheck
-  log "4/5 — Healthcheck sur le staging ($INACTIVE_CTR)..."
+  log "4/6 — Healthcheck sur le staging ($INACTIVE_CTR)..."
   if ! healthcheck_container "$INACTIVE_CTR" 90; then
     err "Healthcheck échoué sur le staging"
     log "Logs du staging :"
@@ -345,8 +375,19 @@ deploy_staging() {
     exit 1
   fi
 
-  # Phase 5 : Smoke tests
-  log "5/5 — Smoke tests sur le staging..."
+  # Phase 5 : Application des policies RLS (N-5)
+  # Les migrations Prisma s'exécutent au démarrage du conteneur (healthcheck
+  # passé = tables créées). On applique ensuite les policies RLS pour
+  # garantir l'isolation multi-tenant au niveau base de données.
+  log "5/6 — Application des policies RLS..."
+  if ! bash "$SCRIPT_DIR/apply-rls.sh"; then
+    err "Application RLS échouée sur le staging"
+    log "Le slot actif ($ACTIVE) n'a PAS été modifié. Production intacte."
+    exit 1
+  fi
+
+  # Phase 6 : Smoke tests
+  log "6/6 — Smoke tests sur le staging..."
   if ! bash "$SMOKE_TEST" "$INACTIVE_CTR"; then
     err "Smoke tests échoués sur le staging"
     log "Le conteneur staging reste disponible pour investigation :"

@@ -13,10 +13,11 @@
  *
  * TOUT autre fichier doit importer depuis @/lib/prisma (client RLS).
  *
- * Sécurité : ce client utilise le rôle ecolemiriam_app (NOBYPASSRLS).
- * Les tables exemptées de RLS (users, tenants, user_tenants, audit_logs,
- * accounts, sessions, verification_tokens) sont librement accessibles.
- * Les tables métier RLS-protégées renvoient 0 ligne sans contexte.
+ * Sécurité : ce client utilise DIRECT_URL (rôle ecolemiriam_owner,
+ * BYPASSRLS) pour pouvoir lire les tables RLS-protégées (sites, etc.)
+ * sans contexte tenant — indispensable pour deriveClaims au login,
+ * avant qu'une session existe. En l'absence de DIRECT_URL (ex: CI sans
+ * tunnel), on retombe sur DATABASE_URL.
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -25,13 +26,18 @@ const globalForPrisma = globalThis as unknown as {
   prismaBase: PrismaClient | undefined;
 };
 
+// DIRECT_URL pointe vers Postgres direct (rôle owner, bypass RLS).
+// DATABASE_URL pointe vers PgBouncer (rôle app, RLS actif).
+// prismaBase doit bypasser le RLS pour lire sites/user_sites au login.
+const baseURL = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+
 export const prismaBase =
   globalForPrisma.prismaBase ??
   new PrismaClient({
     log: ["error"],
     datasources: {
       db: {
-        url: process.env.DATABASE_URL,
+        url: baseURL,
       },
     },
   });

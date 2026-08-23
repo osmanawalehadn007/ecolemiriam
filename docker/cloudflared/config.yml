@@ -6,7 +6,9 @@
 # Le token est stocké dans secrets/cloudflare_tunnel_token.txt.
 #
 # Ingress rules :
-#   - app.ecolemiriam.com    → http://caddy:8080
+#   - ecolemiriam.com        → http://caddy:8080  (canonique)
+#   - www.ecolemiriam.com    → http://caddy:8080
+#   - app.ecolemiriam.com    → http://caddy:8080  (transition)
 #   - status.ecolemiriam.com → http://caddy:8081  (access policy requise)
 #
 # Sécurité Cloudflare (configurée via API — cloudflare-setup.sh) :
@@ -23,13 +25,33 @@ tunnel: 4d0ebccb-dbaf-433c-9acd-0bb986827599
 credentials-file: /etc/cloudflared/credentials.json
 
 ingress:
+  # --- Domaine canonique : ecolemiriam.com (apex) ---
+  # `http2Origin` a été retiré : cloudflared forcerait HTTP/2 vers Caddy, qui
+  # écoute en clair sur :8080 sans h2c activé — source de 502 intermittents.
+  - hostname: ecolemiriam.com
+    service: http://caddy:8080
+    originRequest:
+      noTLSVerify: false
+      connectTimeout: 10s
+      keepAliveTimeout: 30s
+
+  - hostname: www.ecolemiriam.com
+    service: http://caddy:8080
+    originRequest:
+      noTLSVerify: false
+      connectTimeout: 10s
+      keepAliveTimeout: 30s
+
+  # --- Ancien domaine, conservé le temps de la transition ---
+  # Les signets et sessions en cours continuent de fonctionner. Auth.js
+  # ramènera les utilisateurs sur AUTH_URL (l'apex) au prochain callback.
+  # Supprimable une fois la bascule confirmée.
   - hostname: app.ecolemiriam.com
     service: http://caddy:8080
     originRequest:
       noTLSVerify: false
       connectTimeout: 10s
       keepAliveTimeout: 30s
-      http2Origin: true
 
   - hostname: status.ecolemiriam.com
     service: http://caddy:8081

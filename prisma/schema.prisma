@@ -121,6 +121,8 @@ model Tenant {
   enseignantAffectations EnseignantAffectation[]
   cahierTextes          CahierTexte[]
   cahierTexteCommentaires CahierTexteCommentaire[]
+  devoirs               Devoir[]
+  chapitres             Chapitre[]
 
   // Fournitures scolaires
   fournitureListes FournitureListe[]
@@ -170,6 +172,8 @@ model Site {
 
   // Cahier de texte
   cahierTextes CahierTexte[]
+  devoirs      Devoir[]
+  chapitres    Chapitre[]
 
   // Tarifs par niveau
   tarifsNiveau TarifNiveau[]
@@ -290,6 +294,7 @@ model Periode {
   notes       Note[]
   bulletins   Bulletin[]
   evaluations Evaluation[]
+  chapitres   Chapitre[]
 
   @@index([anneeId])
   @@map("periodes")
@@ -404,6 +409,9 @@ model User {
   // Cahier de texte saisi par cet utilisateur
   cahierTextesSaisis CahierTexte[] @relation("CahierTexteSaisiePar")
   cahierTexteCommentaires CahierTexteCommentaire[] @relation("CahierTexteCommentaireAuteur")
+
+  // Devoirs donnés par cet utilisateur
+  devoirsDonnes Devoir[] @relation("DevoirDonnePar")
 
   // Fournitures validées par cet utilisateur (secrétariat)
   fournitureValideePar FournitureListe[] @relation("FournitureValideePar")
@@ -565,6 +573,8 @@ model Classe {
   conversations Conversation[] @relation("ConversationClasse")
   enseignantAffectations EnseignantAffectation[]
   cahierTextes CahierTexte[]
+  devoirs      Devoir[]
+  chapitres    Chapitre[]
   sessionsExamen SessionExamen[]
 
   @@index([tenantId])
@@ -595,6 +605,8 @@ model Matiere {
   enseignantMatieres    EnseignantMatiere[]
   enseignantAffectations EnseignantAffectation[]
   cahierTextes     CahierTexte[]
+  devoirs          Devoir[]
+  chapitres        Chapitre[]
   sessionsExamen   SessionExamen[]
 
   // Fournitures scolaires
@@ -878,6 +890,9 @@ model EmploiTemps {
   @@index([matiereId])
   @@index([enseignantId])
   @@map("emplois_temps")
+
+  // Back-relation : séances du cahier de texte générées depuis ce créneau
+  cahierTextes CahierTexte[]
 }
 
 model DisponibiliteEnseignant {
@@ -1003,6 +1018,7 @@ model Evaluation {
   statut      String   @default("PLANIFIE") // PLANIFIE, TERMINE
 
   notes Note[]
+  devoirs Devoir[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2325,6 +2341,20 @@ enum AuditVerdict {
 // les devoirs donnés et ce qui est prévu pour le cours suivant.
 // Le conseiller (CPE) et la direction peuvent consulter.
 
+// Workflow d'une séance :
+//   PLANIFIEE  → créée depuis l'emploi du temps, pas encore renseignée
+//   EFFECTUEE  → l'enseignant a rempli le contenu (défaut pour saisie manuelle)
+//   CLOTUREE   → validée par l'enseignant ou la direction
+//   ANNULEE    → cours annulé (prof absent, grève, etc.)
+//   REMPLACEE  → remplacée par une autre séance (lien via seanceRemplacementId)
+enum StatutSeance {
+  PLANIFIEE
+  EFFECTUEE
+  CLOTUREE
+  ANNULEE
+  REMPLACEE
+}
+
 model CahierTexte {
   id       String @id @default(cuid())
   tenantId String
@@ -2340,14 +2370,32 @@ model CahierTexte {
   enseignantId String?
   enseignant   Enseignant? @relation(fields: [enseignantId], references: [id])
 
+  // Lien optionnel vers l'emploi du temps (séance auto-générée)
+  emploiTempsId String?
+  emploiTemps   EmploiTemps? @relation(fields: [emploiTempsId], references: [id], onDelete: SetNull)
+
+  // Lien optionnel vers un chapitre du programme
+  chapitreId String?
+  chapitre   Chapitre?   @relation(fields: [chapitreId], references: [id], onDelete: SetNull)
+
   date       DateTime  // date de la séance
   heureDebut String?   // "08:00"
   heureFin   String?   // "09:00"
 
+  // Statut de la séance (workflow)
+  statut      StatutSeance @default(EFFECTUEE)
+
   contenu      String  @db.Text // ce qui a été fait en classe
-  devoirs      String? @db.Text // devoirs / travail à faire à la maison
+  devoirs      String? @db.Text // devoirs / travail à faire à la maison (legacy — préférer le modèle Devoir)
   prochainCours String? @db.Text // prévision pour la séance suivante
   commentaire  String? @db.Text // remarques libres de l'enseignant
+
+  // Contenu structuré (JSON)
+  // objectifs: String[] — objectifs pédagogiques de la séance
+  // activites: [{ type: "COURS"|"EXERCICE"|"TP"|"EVALUATION"|"PROJET", description: string, dureeMin?: number }]
+  // supports: [{ type: "DOCUMENT"|"VIDEO"|"LIEN"|"COURS_EN_LIGNE", url: string, coursId?: string }]
+  // differentiation?: string — adaptations pour élèves à besoins spécifiques
+  contenuStructure  Json?
 
   // Fichiers attachés (JSON array: [{nom, type, taille, dataUrl}])
   // .doc, .docx, .pdf, .odt — stockés en base64 data URL
@@ -2356,8 +2404,15 @@ model CahierTexte {
   saisieParId String? // userId de l'enseignant qui a saisi
   saisiePar   User?   @relation("CahierTexteSaisiePar", fields: [saisieParId], references: [id], onDelete: SetNull)
 
+  // Horodatage des transitions de statut
+  effectueeAt   DateTime? // quand la séance a été renseignée
+  clotureeAt    DateTime? // quand la séance a été clôturée
+
   // Commentaires (CPE / conseiller / direction)
   commentaires CahierTexteCommentaire[]
+
+  // Devoirs liés à cette séance
+  devoirsLiees Devoir[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2367,6 +2422,9 @@ model CahierTexte {
   @@index([classeId])
   @@index([matiereId])
   @@index([enseignantId])
+  @@index([emploiTempsId])
+  @@index([chapitreId])
+  @@index([statut])
   @@index([tenantId, date])
   @@map("cahier_textes")
 }
@@ -2506,4 +2564,118 @@ model FournitureItem {
 
   @@index([listeId])
   @@map("fourniture_items")
+}
+
+// ============================================================
+// DEVOIRS — travail à faire à la maison, lié à une séance
+// ============================================================
+// Remplace le champ texte libre `devoirs` sur CahierTexte par un
+// objet traçable avec date de remise, type, et suivi des rendus.
+// Les élèves/parents voient les devoirs sur l'app mobile.
+
+enum TypeDevoir {
+  EXERCICE
+  LECTURE
+  RECHERCHE
+  REVISION
+  PROJET
+  DISSERTATION
+  AUTRE
+}
+
+enum StatutDevoir {
+  DONNE       // devoir donné, en attente de remise
+  RENDU       // élève a rendu le devoir
+  NON_RENDU   // date de remise dépassée sans rendu
+  CORRIGE     // corrigé par l'enseignant
+}
+
+model Devoir {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  // Séance qui a donné le devoir
+  seanceId   String
+  seance     CahierTexte @relation(fields: [seanceId], references: [id], onDelete: Cascade)
+
+  classeId  String
+  classe    Classe  @relation(fields: [classeId], references: [id], onDelete: Cascade)
+  matiereId String
+  matiere   Matiere @relation(fields: [matiereId], references: [id])
+
+  description  String  @db.Text
+  type         TypeDevoir @default(EXERCICE)
+  dateRemise   DateTime  // échéance
+  statut       StatutDevoir @default(DONNE)
+
+  // Lien optionnel vers une évaluation (si le devoir est noté)
+  evaluationId String?
+  evaluation   Evaluation? @relation(fields: [evaluationId], references: [id], onDelete: SetNull)
+
+  // Fichiers attachés (consigne, sujet)
+  fichiers Json?
+
+  donneParId String?
+  donnePar   User?   @relation("DevoirDonnePar", fields: [donneParId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([siteId])
+  @@index([seanceId])
+  @@index([classeId])
+  @@index([matiereId])
+  @@index([statut])
+  @@index([dateRemise])
+  @@map("devoirs")
+}
+
+// ============================================================
+// CHAPITRES — progression du programme par matière/classe
+// ============================================================
+// Permet de suivre l'avancement du programme : chaque chapitre
+// a un nombre d'heures prévues, et les séances rattachées
+// permettent de calculer le % réalisé.
+
+model Chapitre {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  matiereId String
+  matiere   Matiere @relation(fields: [matiereId], references: [id])
+
+  // Cible : niveau (ex: "6ème") ou classe spécifique
+  niveau  String?  // "6eme", "Terminale S", etc.
+  classeId String?
+  classe   Classe?  @relation(fields: [classeId], references: [id], onDelete: SetNull)
+
+  titre       String  // "Calcul différentiel"
+  description String? @db.Text
+  ordre       Int     @default(0) // ordre dans le programme
+  nbHeuresPrevues Int  @default(0) // durée estimée en heures
+
+  // Période (trimestre/semestre)
+  periodeId String?
+  periode   Periode? @relation(fields: [periodeId], references: [id], onDelete: SetNull)
+
+  // Séances rattachées à ce chapitre
+  seances CahierTexte[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([matiereId])
+  @@index([classeId])
+  @@index([periodeId])
+  @@map("chapitres")
 }

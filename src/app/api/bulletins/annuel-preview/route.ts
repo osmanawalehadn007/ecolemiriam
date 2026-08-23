@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getBulletinAnnuelData } from "@/lib/pdf/bulletin-generator";
 import { checkPermission } from "@/lib/rbac";
+import { checkEleveAccess } from "@/lib/financial-guard";
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,6 +19,15 @@ export async function GET(req: NextRequest) {
 
     if (!eleveId || !anneeId) {
       return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 });
+    }
+
+    // Vérifier la filiation pour PARENT/STUDENT
+    const access = await checkEleveAccess(eleveId, session.user.tenantId, {
+      userId: session.user.id,
+      role: session.user.role,
+    });
+    if (!access.allowed) {
+      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
     const data = await getBulletinAnnuelData(eleveId, anneeId, session.user.tenantId);

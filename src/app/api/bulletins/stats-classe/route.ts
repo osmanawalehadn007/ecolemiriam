@@ -22,6 +22,13 @@ export async function GET(req: NextRequest) {
   }
   const denied = checkPermission(session.user.role, "bulletins:read");
   if (denied) return denied;
+  // Les routes agrégées par classe exposent les données de tous les élèves :
+  // restreindre aux rôles administratifs/pédagogiques. Les PARENT/STUDENT
+  // passent par /api/bulletins/list et /api/bulletins/preview qui filtrent
+  // par filiation.
+  if (session.user.role === "PARENT" || session.user.role === "STUDENT") {
+    return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   const classeId = searchParams.get("classeId");

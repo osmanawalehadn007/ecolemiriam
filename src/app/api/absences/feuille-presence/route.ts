@@ -4,7 +4,7 @@ import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, eleveScopeFilter } from "@/lib/site-scope";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -23,7 +23,8 @@ export async function GET(req: NextRequest) {
 
 
   const classeFilter = siteFilterForModel("classe", session.user);
-  const eleveFilter = siteFilterForModel("eleve", session.user);
+  // eleveScopeFilter restreint aux enfants du parent / à soi-même pour STUDENT
+  const eleveFilter = eleveScopeFilter(session.user, null);
   const [classe, eleves, tenant] = await Promise.all([
     prisma.classe.findFirst({
       where: { id: classeId, tenantId: session.user.tenantId, ...classeFilter },

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getBulletinData } from "@/lib/pdf/bulletin-generator";
 import { checkPermission } from "@/lib/rbac";
+import { checkEleveAccess } from "@/lib/financial-guard";
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,6 +19,16 @@ export async function GET(req: NextRequest) {
 
     if (!eleveId || !periodeId) {
       return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 });
+    }
+
+    // Vérifier la filiation pour PARENT/STUDENT : un parent ne doit voir
+    // que les bulletins de ses propres enfants.
+    const access = await checkEleveAccess(eleveId, session.user.tenantId, {
+      userId: session.user.id,
+      role: session.user.role,
+    });
+    if (!access.allowed) {
+      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
     const data = await getBulletinData(eleveId, periodeId, session.user.tenantId);

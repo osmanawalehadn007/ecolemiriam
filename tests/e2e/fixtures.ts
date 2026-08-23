@@ -1,12 +1,30 @@
 import { test as base, expect, type Page } from "@playwright/test";
 
-// Shared auth fixture — logs in once per test file and reuses the session
+// Shared auth fixture — logs in via l'API NextAuth directement (contourne
+// le problème d'hydratation React du serveur dev où le formulaire se soumet
+// en HTML GET avant que onSubmit ne soit attaché).
 async function login(page: Page) {
-  await page.goto("/login");
-  await page.fill('input[type="email"]', "admin@lycee-djibouti.ecolemiriam.app");
-  await page.fill('input[type="password"]', "Demo@2026!");
-  await page.click('button[type="submit"]');
-  await page.waitForURL("**/dashboard");
+  // 1. Récupérer le CSRF token
+  const csrfRes = await page.request.get("/api/auth/csrf");
+  const { csrfToken } = await csrfRes.json();
+
+  // 2. Soumettre les credentials via l'API NextAuth
+  const loginRes = await page.request.post("/api/auth/callback/credentials", {
+    form: {
+      email: "admin@lycee-djibouti.ecolemiriam.app",
+      password: "Demo@2026!",
+      csrfToken,
+      callbackUrl: "/dashboard",
+      json: "true",
+    },
+    maxRedirects: 0,
+  });
+
+  // 3. Les cookies de session sont automatiquement stockés dans le
+  //    BrowserContext par page.request. Naviguer vers /dashboard pour
+  //    vérifier que la session est active.
+  await page.goto("/dashboard");
+  await page.waitForURL("**/dashboard", { timeout: 60_000 });
 }
 
 export const test = base.extend<{ authedPage: Page }>({

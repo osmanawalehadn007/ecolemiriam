@@ -86,14 +86,53 @@ export async function getSituationFinanciere(eleveId: string, tenantId: string):
 }
 
 /**
- * Vérifie si un élève a accès à la plateforme (non exclu).
- * Utilisé dans le middleware ou les pages élève/parent.
+ * Vérifie si un élève a accès à la plateforme (non exclu) ET que
+ * l'utilisateur appelant a bien le droit d'accéder à CET élève (filiation).
+ *
+ * @param eleveId  L'élève consulté
+ * @param tenantId Le tenant
+ * @param user     Optionnel — { userId, role } du session.user. Si fourni
+ *                 et que le rôle est PARENT ou STUDENT, la filiation est
+ *                 vérifiée en plus de l'exclusion financière. Sans ce
+ *                 paramètre, la fonction conserve son comportement
+ *                 historique (exclusion seulement) pour les callers
+ *                 legacy qui n'ont pas encore été migrés.
  */
-export async function checkEleveAccess(eleveId: string, tenantId: string): Promise<{
+export async function checkEleveAccess(
+  eleveId: string,
+  tenantId: string,
+  user?: { userId: string; role: string }
+): Promise<{
   allowed: boolean;
   reason?: string;
   exclusion?: { id: string; motif: string; dateDebut: Date };
 }> {
+  // 1. Vérification de filiation (PARENT / STUDENT uniquement)
+  if (user && (user.role === "PARENT" || user.role === "STUDENT")) {
+    if (user.role === "STUDENT") {
+      // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- portée déjà close : id + tenantId + userId de l'appelant
+      const own = await prisma.eleve.findFirst({
+        where: { id: eleveId, tenantId, userId: user.userId },
+        select: { id: true },
+      });
+      if (!own) return { allowed: false, reason: "FORBIDDEN" };
+    } else {
+      // PARENT : vérifier le lien parent → enfant
+      // EleveParent est une table de jointure : clé primaire composite
+      // [eleveId, parentId], donc ni `id` ni `tenantId` propres. La frontière
+      // tenant passe par la relation `eleve` — le contrôle est conservé, pas
+      // supprimé, mais les règles de lint ne savent pas le reconnaître à
+      // travers une relation.
+      // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- portée : eleveId + eleve.tenantId + parent.userId
+      const link = await prisma.eleveParent.findFirst({
+        where: { eleveId, eleve: { tenantId }, parent: { userId: user.userId } },
+        select: { eleveId: true },
+      });
+      if (!link) return { allowed: false, reason: "FORBIDDEN" };
+    }
+  }
+
+  // 2. Vérification d'exclusion financière
   // eslint-disable-next-line ecolemiriam/require-tenant-id -- eleveId + tenantId fournis par le caller
   const exclusion = await prisma.exclusionEleve.findFirst({
     where: { eleveId, tenantId, dateFin: null },

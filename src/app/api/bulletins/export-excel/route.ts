@@ -13,6 +13,10 @@ export async function GET(req: NextRequest) {
     }
     const denied = checkPermission(session.user.role, "bulletins:read");
     if (denied) return denied;
+    // Route agrégée par classe — refuser l'accès aux PARENT/STUDENT
+    if (session.user.role === "PARENT" || session.user.role === "STUDENT") {
+      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+    }
     const siteFilter = siteFilterForModel("classe", session.user);
 
     const { searchParams } = new URL(req.url);

@@ -16,6 +16,10 @@ const nextConfig: NextConfig = {
       // VPS uniquement : plus de netlify.app / vercel.app / pages.dev.
       // Une origine autorisée en trop est une surface CSRF ouverte.
       allowedOrigins: [
+        // L'apex doit être listé explicitement : le joker `*.ecolemiriam.com`
+        // ne couvre QUE les sous-domaines, jamais le domaine nu.
+        "ecolemiriam.com",
+        "www.ecolemiriam.com",
         "app.ecolemiriam.com",
         "*.ecolemiriam.com",
         ...(isProd ? [] : ["localhost:3000", "localhost:3001"]),
@@ -24,6 +28,8 @@ const nextConfig: NextConfig = {
   },
   images: {
     remotePatterns: [
+      // Idem : `**.ecolemiriam.com` ne matche pas le domaine nu.
+      { protocol: "https", hostname: "ecolemiriam.com" },
       { protocol: "https", hostname: "**.ecolemiriam.com" },
       { protocol: "https", hostname: "avatars.githubusercontent.com" },
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
@@ -55,7 +61,7 @@ const nextConfig: NextConfig = {
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: https: blob:",
           "font-src 'self' data:",
-          "connect-src 'self' https://*.ecolemiriam.com https://api.africastalking.com https://api.sandbox.africastalking.com https://api.resend.com https://graph.facebook.com https://api.telegram.org https://api.stripe.com",
+          "connect-src 'self' https://ecolemiriam.com https://*.ecolemiriam.com https://api.africastalking.com https://api.sandbox.africastalking.com https://api.resend.com https://graph.facebook.com https://api.telegram.org https://api.stripe.com",
           "frame-ancestors 'none'",
           "base-uri 'self'",
           "form-action 'self'",
@@ -85,7 +91,7 @@ const nextConfig: NextConfig = {
       {
         source: "/api/mobile/:path*",
         headers: [
-          { key: "Access-Control-Allow-Origin", value: isProd ? "https://app.ecolemiriam.com" : "*" },
+          { key: "Access-Control-Allow-Origin", value: isProd ? "https://ecolemiriam.com" : "*" },
           { key: "Access-Control-Allow-Methods", value: "GET, POST, PUT, DELETE, OPTIONS" },
           { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization" },
           { key: "Access-Control-Max-Age", value: "86400" },
@@ -94,7 +100,7 @@ const nextConfig: NextConfig = {
       {
         source: "/api/auth/mobile",
         headers: [
-          { key: "Access-Control-Allow-Origin", value: isProd ? "https://app.ecolemiriam.com" : "*" },
+          { key: "Access-Control-Allow-Origin", value: isProd ? "https://ecolemiriam.com" : "*" },
           { key: "Access-Control-Allow-Methods", value: "POST, OPTIONS" },
           { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization" },
         ],

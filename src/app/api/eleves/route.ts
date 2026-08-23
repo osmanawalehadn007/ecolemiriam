@@ -4,7 +4,7 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { generateMatricule } from "@/lib/utils";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForModel, siteIdForCreate, requireSiteIdForCreate } from "@/lib/site-scope";
+import { siteFilterForModel, siteIdForCreate, requireSiteIdForCreate, eleveScopeFilter } from "@/lib/site-scope";
 import { revalidateTag, revalidatePath } from "next/cache";
 
 const EleveSchema = z.object({
@@ -33,7 +33,10 @@ export async function GET(req: NextRequest) {
     if (!session?.user?.tenantId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     const denied = checkPermission(session.user.role, "eleves:read");
     if (denied) return denied;
-    const siteFilter = siteFilterForModel("eleve", session.user);
+    // eleveScopeFilter combine le filtrage par site ET le périmètre personnel
+    // (lien familial pour PARENT, userId pour STUDENT). Sans cela, un parent
+    // disposant de `eleves:read` voit tous les élèves du tenant.
+    const siteFilter = eleveScopeFilter(session.user, null);
 
     const { searchParams } = new URL(req.url);
     const classeId = searchParams.get("classeId");

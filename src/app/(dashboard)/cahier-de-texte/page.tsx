@@ -47,6 +47,16 @@ export default async function CahierTextePage() {
           include: { auteur: { select: { name: true, role: true } } },
           orderBy: { createdAt: "asc" },
         },
+        devoirsLiees: {
+          select: {
+            id: true,
+            description: true,
+            type: true,
+            dateRemise: true,
+            statut: true,
+          },
+          orderBy: { dateRemise: "asc" },
+        },
       },
       orderBy: { date: "desc" },
       take: 100,
@@ -105,9 +115,14 @@ export default async function CahierTextePage() {
             ...e,
             date: e.date.toISOString(),
             fichiers: e.fichiers as unknown as { nom: string; type: string; taille: number; dataUrl: string }[] | null,
+            contenuStructure: (e.contenuStructure as unknown as import("@/components/cahier-texte/ContenuStructureEditor").ContenuStructure | null) ?? null,
             commentaires: (e.commentaires ?? []).map((c) => ({
               ...c,
               createdAt: c.createdAt.toISOString(),
+            })),
+            devoirsLiees: (e.devoirsLiees ?? []).map((d) => ({
+              ...d,
+              dateRemise: d.dateRemise.toISOString(),
             })),
           }))}
           canWrite={canWrite}

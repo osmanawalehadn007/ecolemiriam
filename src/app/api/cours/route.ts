@@ -38,11 +38,15 @@ export async function GET(req: NextRequest) {
   };
 
   const siteFilter = siteFilterForModel("cours", claims);
+  // Les PARENT/STUDENT ne doivent voir que les cours publiés (pas les
+  // brouillons ni les archives). Les rôles pédagogiques/administratifs
+  // conservent l'accès à tous les statuts via le paramètre `statut`.
+  const isPersonalRole = session.user.role === "PARENT" || session.user.role === "STUDENT";
   const cours = await prisma.cours.findMany({
     where: {
       tenantId: session.user.tenantId,
       ...siteFilter,
-      ...(statut && { statut: statut as "BROUILLON" | "PUBLIE" | "ARCHIVE" }),
+      ...(isPersonalRole ? { statut: "PUBLIE" } : statut ? { statut: statut as "BROUILLON" | "PUBLIE" | "ARCHIVE" } : {}),
       ...(niveau && { niveau: niveau as "DEBUTANT" | "INTERMEDIAIRE" | "AVANCE" }),
     },
     include: {

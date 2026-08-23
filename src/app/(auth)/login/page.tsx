@@ -82,12 +82,30 @@ function LoginForm() {
     }
 
     startTransition(async () => {
-      const result = await signIn("credentials", {
-        email: form.email,
-        password: form.password,
-        totp: need2FA ? totp : undefined,
-        redirect: false,
-      });
+      // `signIn()` fait `fetch(...).then(r => r.json())` en interne. Si une
+      // réponse HTML arrive là où du JSON est attendu — page mise en cache
+      // par le navigateur ou l'edge, page d'erreur d'un intermédiaire — le
+      // `res.json()` lève « Unexpected token '<' ». Sans ce try/catch le
+      // rejet traversait la frontière d'erreur de route et faisait tomber
+      // toute l'application sur global-error.tsx (« Erreur critique »).
+      let result: Awaited<ReturnType<typeof signIn>> | undefined;
+      try {
+        result = await signIn("credentials", {
+          email: form.email,
+          password: form.password,
+          totp: need2FA ? totp : undefined,
+          redirect: false,
+        });
+      } catch (err) {
+        console.error("[login] signIn a échoué:", err);
+        toast.error(
+          t("title") === "Sign In"
+            ? "Service temporarily unavailable. Please try again."
+            : "Service momentanément indisponible. Réessayez."
+        );
+        setTotp("");
+        return;
+      }
 
       if (result?.error) {
         toast.error(t("title") === "Sign In" ? "Invalid email or password" : "Email ou mot de passe incorrect");
@@ -283,6 +301,13 @@ function LoginForm() {
             t("signIn")
           )}
         </Button>
+
+        <div className="text-center text-sm text-muted-foreground">
+          {t("title") === "Sign In" ? "Don't have an account? " : "Pas de compte ? "}
+          <Link href="/register" className="font-medium text-primary hover:underline">
+            {t("title") === "Sign In" ? "Create one" : "Créer un compte"}
+          </Link>
+        </div>
       </form>
     </div>
   );

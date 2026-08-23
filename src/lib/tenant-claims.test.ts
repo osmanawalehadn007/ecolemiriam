@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/prisma", () => ({
+vi.mock("@/lib/prisma-base", () => ({
   default: {
     user: { findUnique: vi.fn() },
     userSite: { findMany: vi.fn(), findFirst: vi.fn() },
@@ -13,7 +13,7 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-import prisma from "@/lib/prisma";
+import prisma from "@/lib/prisma-base";
 import { deriveClaims, resolveSiteAccess } from "@/lib/tenant-claims";
 
 const db = prisma as unknown as {

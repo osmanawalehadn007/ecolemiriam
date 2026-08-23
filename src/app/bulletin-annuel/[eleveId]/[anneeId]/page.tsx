@@ -21,7 +21,10 @@ export default async function BulletinAnnuelPage({
 
   // Blocage financier : bloquer l'accès aux bulletins annuels pour les élèves exclus
   if (session.user.role === "PARENT" || session.user.role === "STUDENT") {
-    const access = await checkEleveAccess(eleveId, session.user.tenantId);
+    const access = await checkEleveAccess(eleveId, session.user.tenantId, {
+      userId: session.user.id,
+      role: session.user.role,
+    });
     if (!access.allowed) {
       redirect("/acces-bloque");
     }

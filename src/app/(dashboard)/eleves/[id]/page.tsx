@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect, notFound } from "next/navigation";
 import prisma from "@/lib/prisma";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, eleveScopeFilter } from "@/lib/site-scope";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import type { Role } from "@prisma/client";
 import { Header } from "@/components/layout/Header";
@@ -90,7 +90,10 @@ export default async function EleveDetailPage({
   if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "eleves:read");
 
-  const eleveFilter = siteFilterForModel("eleve", session.user);
+  // eleveScopeFilter combine le filtrage par site ET le périmètre personnel
+  // (lien familial pour PARENT, userId pour STUDENT). Sans cela, un parent
+  // pourrait consulter le dossier de n'importe quel élève du tenant.
+  const eleveFilter = eleveScopeFilter(session.user, null);
   const matiereFilter = siteFilterForModel("matiere", session.user);
   const dispenseFilter = siteFilterForModel("dispenseMatiere", session.user);
   const { id } = await params;
@@ -115,7 +118,10 @@ export default async function EleveDetailPage({
 
   // Blocage financier : si l'élève est exclu, rediriger les parents/élèves
   if (session.user.role === "PARENT" || session.user.role === "STUDENT") {
-    const access = await checkEleveAccess(id, session.user.tenantId);
+    const access = await checkEleveAccess(id, session.user.tenantId, {
+      userId: session.user.id,
+      role: session.user.role,
+    });
     if (!access.allowed) {
       redirect("/acces-bloque");
     }

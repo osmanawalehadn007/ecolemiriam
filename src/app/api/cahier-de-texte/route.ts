@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
     const enseignantId = searchParams.get("enseignantId");
     const from = searchParams.get("from");
     const to = searchParams.get("to");
+    const statut = searchParams.get("statut");
 
     const siteFilter = siteFilterForModel("cahierTexte", session.user);
 
@@ -48,6 +49,7 @@ export async function GET(req: NextRequest) {
         ...(classeId ? { classeId } : {}),
         ...(matiereId ? { matiereId } : {}),
         ...(enseignantId ? { enseignantId } : {}),
+        ...(statut ? { statut: statut as never } : {}),
         ...(from || to
           ? {
               date: {
@@ -65,6 +67,16 @@ export async function GET(req: NextRequest) {
         commentaires: {
           include: { auteur: { select: { name: true, role: true } } },
           orderBy: { createdAt: "asc" },
+        },
+        devoirsLiees: {
+          select: {
+            id: true,
+            description: true,
+            dateRemise: true,
+            statut: true,
+            type: true,
+          },
+          orderBy: { dateRemise: "asc" },
         },
       },
       orderBy: { date: "desc" },
@@ -98,6 +110,24 @@ const CreateSchema = z.object({
     taille: z.number(),
     dataUrl: z.string(),
   })).optional().default([]),
+  // Nouveaux champs structurés
+  statut: z.enum(["PLANIFIEE", "EFFECTUEE", "CLOTUREE", "ANNULEE", "REMPLACEE"]).default("EFFECTUEE"),
+  emploiTempsId: z.string().optional().nullable(),
+  chapitreId: z.string().optional().nullable(),
+  contenuStructure: z.object({
+    objectifs: z.array(z.string()).optional().default([]),
+    activites: z.array(z.object({
+      type: z.enum(["COURS", "EXERCICE", "TP", "EVALUATION", "PROJET"]),
+      description: z.string(),
+      dureeMin: z.number().optional(),
+    })).optional(),
+    supports: z.array(z.object({
+      type: z.enum(["DOCUMENT", "VIDEO", "LIEN", "COURS_EN_LIGNE"]),
+      url: z.string(),
+      coursId: z.string().optional(),
+    })).optional(),
+    differentiation: z.string().optional(),
+  }).optional().nullable(),
 });
 
 export async function POST(req: NextRequest) {
@@ -150,6 +180,12 @@ export async function POST(req: NextRequest) {
         commentaire: data.commentaire ?? null,
         fichiers: data.fichiers.length > 0 ? data.fichiers : undefined,
         saisieParId: session.user.id,
+        // Nouveaux champs
+        statut: data.statut,
+        emploiTempsId: data.emploiTempsId ?? null,
+        chapitreId: data.chapitreId ?? null,
+        contenuStructure: data.contenuStructure ?? undefined,
+        effectueeAt: data.statut === "EFFECTUEE" ? new Date() : null,
       },
       include: {
         classe: { select: { nom: true, niveau: true } },

@@ -5,7 +5,7 @@
     {
       "name": "App Health",
       "type": "http",
-      "url": "https://app.ecolemiriam.com/api/health",
+      "url": "https://ecolemiriam.com/api/health",
       "interval": 60,
       "timeout": 10,
       "retryInterval": 30,
@@ -31,7 +31,7 @@
     {
       "name": "Cloudflare Tunnel",
       "type": "http",
-      "url": "https://app.ecolemiriam.com",
+      "url": "https://ecolemiriam.com",
       "interval": 120,
       "timeout": 15,
       "notification": {

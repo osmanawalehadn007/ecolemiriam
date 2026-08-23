@@ -37,11 +37,22 @@
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-		# Cache des assets statiques Next.js
-		/.next/static/* {
-			Cache-Control "public, max-age=31536000, immutable"
-		}
 	}
+
+	# --- Cache des assets statiques Next.js ---
+	# La directive `header` n'accepte PAS de matcher de chemin imbriqué.
+	# Écrite `header { /chemin/* { ... } }`, Caddy lit `/chemin/*` comme un
+	# NOM DE CHAMP et applique la règle à TOUTES les réponses : pages
+	# authentifiées et routes /api/* partaient avec
+	#   Cache-Control: public, max-age=31536000, immutable
+	# en plus du `no-store` applicatif. Les deux valeurs se combinent en une
+	# directive contradictoire ; navigateurs et edge Cloudflare pouvaient
+	# retenir `public/immutable` et resservir une page HTML en cache sur une
+	# requête attendant du JSON → « Unexpected token '<' » sur /api/auth/*.
+	# Le matcher doit être nommé et porté par la directive elle-même.
+	# Chemin réel des assets : /_next/static (underscore), pas /.next/static.
+	@static path /_next/static/*
+	header @static Cache-Control "public, max-age=31536000, immutable"
 
 	# --- Rate limiting ---
 	# Keyé sur CF-Connecting-IP (positionné par Cloudflare à l'edge) car

@@ -6,11 +6,11 @@ import { defineConfig, devices } from "@playwright/test";
 const externalBaseURL = process.env.PLAYWRIGHT_BASE_URL;
 const baseURL = externalBaseURL ?? "http://localhost:3001";
 
-// En CI : build de production + next start (déterministe, pas de compilation
-// à la demande pendant les tests). En local : next dev pour l'itération rapide.
-const webServerCommand = process.env.CI
-  ? "npm run build && npm run start -- --port 3001"
-  : "npm run dev -- --port 3001";
+// next dev : le serveur dev compile à la demande mais fonctionne avec
+// output: standalone (next start ne le supporte pas). L'hydratation React
+// peut prendre un instant après networkidle — le fixture attend que le
+// handler onSubmit soit attaché avant de soumettre.
+const webServerCommand = "AUTH_URL=http://localhost:3001 npm run dev -- --port 3001";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -19,7 +19,7 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   reporter: "html",
-  timeout: 30000,
+  timeout: 60000,
   use: {
     baseURL,
     trace: "on-first-retry",

@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, eleveScopeFilter } from "@/lib/site-scope";
 
 // GET — liste des élèves avec leur parcours et recommandation
 export async function GET(req: NextRequest) {
@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
   const eleveId = searchParams.get("eleveId");
   const niveau = searchParams.get("niveau");
 
-  const siteFilter = siteFilterForModel("eleve", session.user);
+  // eleveScopeFilter restreint aux enfants du parent / à soi-même pour STUDENT
+  const siteFilter = eleveScopeFilter(session.user, null);
   if (eleveId) {
     // Parcours complet d'un élève
     const [eleve, parcours, notes, absences, incidents] = await Promise.all([
