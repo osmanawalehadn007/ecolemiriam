@@ -80,6 +80,10 @@ docker/caddy/upstream-simple.conf
 docker/.active-color
 docker/ofelia/config.ini
 
+# PgBouncer userlist — généré sur le VPS avec les hashes réels
+# (docker/scripts/generate-pgbouncer-userlist.sh). Ne JAMAIS committer.
+docker/pgbouncer/userlist.txt
+
 # Docker secrets (jamais committer)
 docker/secrets/
 docker/keys/
