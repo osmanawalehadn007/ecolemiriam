@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
+import { runWithTenant, runWithRlsBatch } from "@/lib/prisma";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { CreateEvaluationForm } from "@/components/evaluations/CreateEvaluationForm";
@@ -12,7 +13,10 @@ import { Button } from "@/components/ui/button";
 import { getTranslations } from "next-intl/server";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import { getSitesForUserCached } from "@/lib/sites-cached";
+import { getSiteColorMap } from "@/lib/site-colors";
 import type { Role } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 export const metadata = {
   title: "Liste des examens | École Miriam",
@@ -35,7 +39,6 @@ export default async function EvaluationsPage({
   const { matiereId } = sp;
 
   const evalFilter = siteFilterForModel("evaluation", session.user);
-  const classeFilter = siteFilterForModel("classe", session.user);
   const matiereFilter = siteFilterForModel("matiere", session.user);
 
   // Filtrer par classes de l'enseignant si applicable
@@ -55,40 +58,55 @@ export default async function EvaluationsPage({
       ? { id: "__none__" as const }
       : {};
 
-  const [evaluations, classes, matieres, periodes] = await Promise.all([
-    prisma.evaluation.findMany({
-      where: {
-        tenantId,
-        ...evalFilter,
-        ...teacherClasseFilter,
-        ...(matiereId ? { matiereId } : {}),
-      },
-      include: {
-        classe: { select: { nom: true, niveau: true } },
-        matiere: { select: { nom: true, coefficient: true } },
-        periode: { select: { nom: true } },
-        _count: { select: { notes: true } }
-      },
-      orderBy: { date: "desc" }
-    }),
-    prisma.classe.findMany({
-      where: {
-        tenantId,
-        ...classeFilter,
-        ...(scope?.isRestricted && scope.classeIds.length > 0
-          ? { id: { in: scope.classeIds } }
-          : scope?.isRestricted
-            ? { id: "__none__" }
-            : {}),
-      },
-      select: { id: true, nom: true },
-    }),
-    prisma.matiere.findMany({
-      where: { tenantId, ...matiereFilter, ...teacherMatiereFilter },
-      select: { id: true, nom: true },
-    }),
-    prisma.periode.findMany({ where: { annee: { tenantId } }, select: { id: true, nom: true } }),
-  ]);
+  // Pour les enseignants restreints : filtrer les classes par scope (classeIds)
+  // SANS filtre de site, car un enseignant peut enseigner dans des classes
+  // situées sur des sites auxquels il n'est pas explicitement rattaché.
+  const classeWhere = scope?.isRestricted && scope.classeIds.length > 0
+    ? { tenantId, id: { in: scope.classeIds } }
+    : scope?.isRestricted
+      ? { tenantId, id: "__none__" as const }
+      : { tenantId, ...siteFilterForModel("classe", session.user) };
+
+  // OPTIMISATION: exécuter les 4 requêtes dans UNE SEULE transaction RLS
+  // au lieu de 4 séparées → 1 SET LOCAL + 4 queries = 5 round trips
+  // au lieu de 8 (2×4). Via le tunnel SSH (~100ms/round trip), on économise
+  // ~300ms.
+  const [evaluations, classes, matieres, periodes] = await runWithRlsBatch(
+    tenantId,
+    session.user.siteId ?? null,
+    async (tx: Prisma.TransactionClient) => {
+      return Promise.all([
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- evalFilter is built from siteFilterForModel above
+        tx.evaluation.findMany({
+          where: {
+            tenantId,
+            ...evalFilter,
+            ...teacherClasseFilter,
+            ...(matiereId ? { matiereId } : {}),
+          },
+          include: {
+            classe: { select: { nom: true, niveau: true } },
+            matiere: { select: { nom: true, coefficient: true } },
+            periode: { select: { nom: true } },
+            _count: { select: { notes: true } }
+          },
+          orderBy: { date: "desc" }
+        }),
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- classeWhere is built above with site filter or scope
+        tx.classe.findMany({
+          where: classeWhere,
+          select: { id: true, nom: true },
+        }),
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- matiereFilter is built from siteFilterForModel above
+        tx.matiere.findMany({
+          where: { tenantId, ...matiereFilter, ...teacherMatiereFilter },
+          select: { id: true, nom: true },
+        }),
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- periode is tenant-scoped, no siteId
+        tx.periode.findMany({ where: { annee: { tenantId } }, select: { id: true, nom: true } }),
+      ]);
+    }
+  );
 
   function getTypeColor(type: string) {
     switch (type) {

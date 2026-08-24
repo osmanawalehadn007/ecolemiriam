@@ -69,6 +69,13 @@ export const EXEMPT_MODELS = new Set([
   "Tenant",
   "UserTenant",
   "UserSite",
+  // User : RLS est active sur users avec une policy tenant-only (pas de
+  // filtrage par site). Le siteId de users n'est qu'une préférence, pas un
+  // périmètre de sécurité — les rattachements réels sont dans user_sites et
+  // enseignant_sites. Une policy avec filtre par site cassait les jointures
+  // enseignant → user (Prisma crash "Field user is required, got null").
+  // "User" n'est PAS exempté : l'extension RLS pose le contexte tenant pour
+  // chaque requête, et la policy tenant_isolation filtre correctement.
 ]);
 
 // Opérations qui ne portent pas sur des données métier

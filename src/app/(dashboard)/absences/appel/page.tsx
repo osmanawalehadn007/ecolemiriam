@@ -13,19 +13,30 @@ async function getClasses(
   claims: SessionSiteClaims,
   scope?: { classeIds: string[]; isRestricted: boolean }
 ) {
+  // Pour les enseignants restreints : filtrer par scope (classeIds) SANS
+  // filtre de site, car un enseignant peut enseigner dans des classes
+  // situées sur des sites auxquels il n'est pas rattaché.
+  const isScoped = scope?.isRestricted && scope.classeIds.length > 0;
+  const scopeDenyAll = scope?.isRestricted && scope.classeIds.length === 0;
+
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- teacher scope: classeIds is the security boundary for restricted teachers, not siteId
   return prisma.classe.findMany({
     where: {
       tenantId,
-      ...siteFilterForModel("classe", claims),
-      ...(scope?.isRestricted && scope.classeIds.length > 0
+      ...(isScoped || scopeDenyAll ? {} : siteFilterForModel("classe", claims)),
+      ...(isScoped
         ? { id: { in: scope.classeIds } }
-        : scope?.isRestricted
+        : scopeDenyAll
           ? { id: "__none__" }
           : {}),
     },
     include: {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- eleves filtered via classe scope (classeIds), not site
       eleves: {
-        where: { statut: "ACTIF", ...siteFilterForModel("eleve", claims) },
+        where: {
+          statut: "ACTIF",
+          ...(isScoped || scopeDenyAll ? {} : siteFilterForModel("eleve", claims)),
+        },
         select: {
           id: true, nom: true, prenom: true,
           photoUrl: true, sexe: true, matricule: true,

@@ -33,9 +33,19 @@ export default async function CahierTextePage() {
       ? { id: "__none__" as const }
       : {};
 
+  // Pour les enseignants restreints : filtrer les entrées par classeId
+  // (scope) SANS filtre de site, car un enseignant peut enseigner dans
+  // des classes situées sur des sites auxquels il n'est pas rattaché.
+  // Le scope (classeIds) est la sécurité, pas le site.
+  const entryWhere = scope?.isRestricted && scope.classeIds.length > 0
+    ? { tenantId, ...teacherClasseFilter }
+    : scope?.isRestricted
+      ? { tenantId, id: "__none__" as const }
+      : { tenantId, ...siteFilter };
+
   const [entries, classes, matieres, enseignants] = await Promise.all([
     prisma.cahierTexte.findMany({
-      where: { tenantId, ...siteFilter, ...teacherClasseFilter },
+      where: entryWhere,
       include: {
         classe: { select: { nom: true, niveau: true } },
         matiere: { select: { nom: true, code: true } },

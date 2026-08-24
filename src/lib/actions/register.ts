@@ -1,6 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
+import prismaBase from "@/lib/prisma-base";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -39,7 +40,7 @@ export async function registerTenant(data: RegisterFormData) {
   const values = parsed.data;
 
   // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- inscription publique, pas de session/tenant : vérification d'unicité email globale
-  const existingUser = await prisma.user.findFirst({
+  const existingUser = await prismaBase.user.findFirst({
     where: { email: { equals: values.adminEmail, mode: "insensitive" } },
   });
   if (existingUser) {

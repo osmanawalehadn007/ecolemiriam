@@ -35,58 +35,64 @@ const getDashboardData = unstable_cache(
     // Fix : runWithTenant injecte le contexte via AsyncLocalStorage,
     // contournant le besoin de auth()/cookies().
     return runWithTenant(tenantId, siteId, async () => {
-    // Pour les enseignants : restreindre aux classes/matières assignées
-    const teacherClasseFilter = scope?.isRestricted && scope.classeIds.length > 0
+    // Pour les enseignants restreints : le scope (classeIds) est la sécurité,
+    // PAS le site. Un enseignant peut enseigner dans des classes situées sur
+    // des sites auxquels il n'est pas rattaché via UserSite/EnseignantSite.
+    // On n'applique donc PAS le filtre de site quand le scope est restreint.
+    const isScoped = scope?.isRestricted && scope.classeIds.length > 0;
+    const scopeDenyAll = scope?.isRestricted && scope.classeIds.length === 0;
+
+    const teacherClasseFilter = isScoped
       ? { classeId: { in: scope.classeIds } }
-      : scope?.isRestricted
+      : scopeDenyAll
         ? { id: "__none__" as const }
         : {};
 
     const baseWhere = {
       tenantId,
-      ...eleveFilter,
+      ...(isScoped || scopeDenyAll ? {} : eleveFilter),
       deletedAt: null,
-      ...(scope?.isRestricted && scope.classeIds.length > 0
+      ...(isScoped
         ? { classeId: { in: scope.classeIds } }
-        : scope?.isRestricted
+        : scopeDenyAll
           ? { id: "__none__" as const }
           : {}),
     } as Prisma.EleveWhereInput;
 
     const classeWhere = {
       tenantId,
-      ...classeFilter,
+      ...(isScoped || scopeDenyAll ? {} : classeFilter),
       ...teacherClasseFilter,
     } as Prisma.ClasseWhereInput;
 
     const absenceWhere = {
       tenantId,
-      ...absenceFilter,
-      ...(scope?.isRestricted && scope.classeIds.length > 0
+      ...(isScoped || scopeDenyAll ? {} : absenceFilter),
+      ...(isScoped
         ? { eleve: { classeId: { in: scope.classeIds } } }
-        : scope?.isRestricted
+        : scopeDenyAll
           ? { id: "__none__" as const }
           : {}),
     } as Prisma.AbsenceWhereInput;
 
     const noteWhere = {
       tenantId,
-      ...noteFilter,
-      ...(scope?.isRestricted && scope.classeIds.length > 0
+      ...(isScoped || scopeDenyAll ? {} : noteFilter),
+      ...(isScoped
         ? { eleve: { classeId: { in: scope.classeIds } } }
-        : scope?.isRestricted
+        : scopeDenyAll
           ? { id: "__none__" as const }
           : {}),
     } as Prisma.NoteWhereInput;
 
     const examenWhere = {
       tenantId,
-      ...examenFilter,
+      ...(isScoped || scopeDenyAll ? {} : examenFilter),
       // Pour les enseignants : filtrer les examens par leurs classes
       // (SessionExamen a maintenant un classeId)
-      ...(scope?.isRestricted && scope.classeIds.length > 0
+      ...(isScoped
         ? { sessions: { some: { classeId: { in: scope.classeIds } } } }
-        : scope?.isRestricted
+        : scopeDenyAll
           ? { id: "__none__" as const }
           : {}),
     } as Prisma.ExamenWhereInput;

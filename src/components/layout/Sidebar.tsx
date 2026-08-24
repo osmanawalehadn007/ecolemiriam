@@ -77,7 +77,7 @@ const navGroups: NavGroup[] = [
     items: [
       { labelKey: "absences", icon: ClipboardList, href: "/absences", color: "text-orange-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "CLASS_TEACHER", "TEACHER", "COUNSELOR", "NURSE", "PARENT", "STUDENT"] },
       { labelKey: "vieScolaire", icon: Shield, href: "/vie-scolaire", color: "text-red-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "CLASS_TEACHER"] },
-      { labelKey: "parents", icon: UserCheck, href: "/parents", color: "text-pink-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "TEACHER", "CLASS_TEACHER"] },
+      { labelKey: "parents", icon: UserCheck, href: "/parents", color: "text-pink-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "CLASS_TEACHER"] },
     ],
   },
   {
@@ -94,7 +94,7 @@ const navGroups: NavGroup[] = [
     groupKey: "groupCommunication",
     items: [
       { labelKey: "messages", icon: MessageSquare, href: "/messages", color: "text-indigo-500" },
-      { labelKey: "communication", icon: Bell, href: "/communication", color: "text-sky-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "TEACHER", "CLASS_TEACHER"] },
+      { labelKey: "communication", icon: Bell, href: "/communication", color: "text-sky-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR"] },
     ],
   },
   {

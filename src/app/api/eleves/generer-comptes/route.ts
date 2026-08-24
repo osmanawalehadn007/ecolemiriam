@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
+import prismaBase from "@/lib/prisma-base";
 import bcrypt from "bcryptjs";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { revalidateTag } from "next/cache";
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
     const password = customPassword || generateRandomPassword();
 
     // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- vérification d'unicité globale par email avant création de compte élève
-    const existing = await prisma.user.findFirst({ where: { email: { equals: username, mode: "insensitive" } } });
+    const existing = await prismaBase.user.findFirst({ where: { email: { equals: username, mode: "insensitive" } } });
     if (existing) continue;
 
     const hashedPassword = await bcrypt.hash(password, 10);

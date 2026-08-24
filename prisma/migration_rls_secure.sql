@@ -257,6 +257,28 @@ BEGIN
       EXECUTE format('ALTER TABLE public.%I DISABLE ROW LEVEL SECURITY', tbl);
     END IF;
   END LOOP;
+
+  -- 3d. USERS : isolation tenant SANS filtrage par site
+  --     La boucle 3a a créé rls_access + rls_tenant_guard sur users avec un
+  --     filtre par siteId (users porte la colonne siteId). Or le siteId de
+  --     users n'est qu'une préférence de site par défaut, pas un périmètre de
+  --     sécurité. Les vrais rattachements sont dans user_sites / enseignant_sites.
+  --     Le filtrage par site cassait les jointures enseignant → user quand
+  --     l'enseignant et son user n'étaient pas sur le même site (crash Prisma
+  --     "Field user is required to return data, got null instead").
+  --     On remplace donc les policies automatiques par une policy tenant-only,
+  --     identique à celle de enseignants.
+  FOR pol IN SELECT policyname FROM pg_policies
+             WHERE schemaname = 'public' AND tablename = 'users'
+  LOOP
+    EXECUTE format('DROP POLICY %I ON public.users', pol.policyname);
+  END LOOP;
+  EXECUTE 'ALTER TABLE public.users ENABLE ROW LEVEL SECURITY';
+  EXECUTE 'ALTER TABLE public.users FORCE ROW LEVEL SECURITY';
+  EXECUTE 'CREATE POLICY tenant_isolation ON public.users
+             FOR ALL TO public
+             USING (public.app_is_super_admin() OR "tenantId" = public.app_tenant_id())
+             WITH CHECK (public.app_is_super_admin() OR "tenantId" = public.app_tenant_id())';
 END
 $mig$;
 

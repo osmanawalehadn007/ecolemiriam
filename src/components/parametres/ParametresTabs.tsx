@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   Settings, Users, GraduationCap, BookOpen, UserCog, Settings2, Calendar, Stamp, Building2,
   School, UsersRound, BookOpenCheck, ChevronDown, DollarSign, CopyCheck, ClipboardList, DoorOpen,
-  Shield, HardDriveDownload,
+  Shield, HardDriveDownload, CalendarX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EtablissementTab } from "./EtablissementTab";
@@ -23,6 +23,7 @@ import { Security2FA } from "./Security2FA";
 import { SauvegardesTab } from "./SauvegardesTab";
 import { AnneesScolairesTab } from "./AnneesScolairesTab";
 import { EnseignantsAffectationTab } from "./EnseignantsAffectationTab";
+import { EdtPersonnelsTab } from "./EdtPersonnelsTab";
 import { SallesTab } from "./SallesTab";
 
 import type { AvailableTenant } from "@/auth.config";
@@ -35,6 +36,7 @@ type Tab =
   | "classes"
   | "matieres"
   | "enseignants"
+  | "edtPersonnels"
   | "salles"
   | "appreciations"
   | "periodes"
@@ -82,6 +84,7 @@ const tabGroups: TabGroup[] = [
       { id: "classes", labelKey: "classes", icon: GraduationCap },
       { id: "matieres", labelKey: "matieres", icon: BookOpen },
       { id: "enseignants", labelKey: "enseignantsAffectation", icon: ClipboardList },
+      { id: "edtPersonnels", labelKey: "edtPersonnels", icon: CalendarX },
       { id: "salles", labelKey: "salles", icon: DoorOpen },
       { id: "appreciations", labelKey: "appreciations", icon: Settings2 },
       { id: "periodes", labelKey: "periodes", icon: Calendar },
@@ -219,6 +222,7 @@ export function ParametresTabs({
         {activeTab === "classes" && <ClassesTab classes={classes} canManage={canManage} sites={sites} />}
         {activeTab === "matieres" && <MatieresTab matieres={matieres} canManage={canManage} />}
         {activeTab === "enseignants" && <EnseignantsAffectationTab canManage={canManage} />}
+        {activeTab === "edtPersonnels" && <EdtPersonnelsTab canManage={canManage} />}
         {activeTab === "salles" && <SallesTab canManage={canManage} sites={sites} />}
         {activeTab === "appreciations" && <ReglesAppreciationManager regles={regles} />}
         {activeTab === "periodes" && (

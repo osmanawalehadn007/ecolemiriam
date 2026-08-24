@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
-import { runWithTenant } from "@/lib/prisma";
+import { runWithTenant, runWithRlsBatch } from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { NotesOverview } from "@/components/notes/NotesOverview";
 import { Button } from "@/components/ui/button";
@@ -14,9 +14,9 @@ import { SiteTabs } from "@/components/sites/SiteTabs";
 import { getTranslations } from "next-intl/server";
 import { unstable_cache } from "next/cache";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
-import type { Role } from "@prisma/client";
+import type { Role, Prisma } from "@prisma/client";
 import { siteFilterForModel, mergeFilters, type SessionSiteClaims } from "@/lib/site-scope";
-import { getSitesForUser } from "@/lib/actions/eleve";
+import { getSitesForUserCached } from "@/lib/sites-cached";
 import { getSiteColorMap } from "@/lib/site-colors";
 
 const getNotesData = unstable_cache(
@@ -32,7 +32,15 @@ const getNotesData = unstable_cache(
     // N-4 : unstable_cache détache le contexte requête → auth() échoue →
     // RLS non positionnée. runWithTenant injecte le contexte via ALS.
     return runWithTenant(tenantId, siteId, async () => {
-    const classeWhere = { tenantId, ...siteFilterForModel("classe", claims), ...(scope?.isRestricted && scope.classeIds.length > 0 ? { id: { in: scope.classeIds } } : scope?.isRestricted ? { id: "__none__" } : {}) };
+    // Pour les enseignants restreints : filtrer les classes par scope
+    // (classeIds) SANS filtre de site, car un enseignant peut enseigner
+    // dans des classes situées sur des sites auxquels il n'est pas
+    // explicitement rattaché. Le scope est la sécurité.
+    const classeWhere = scope?.isRestricted && scope.classeIds.length > 0
+      ? { tenantId, id: { in: scope.classeIds } }
+      : scope?.isRestricted
+        ? { tenantId, id: "__none__" as const }
+        : { tenantId, ...siteFilterForModel("classe", claims) };
     const matiereWhere = { tenantId, ...siteFilterForModel("matiere", claims), ...(scope?.isRestricted && scope.matiereIds.length > 0 ? { id: { in: scope.matiereIds } } : scope?.isRestricted ? { id: "__none__" } : {}) };
     // Le filtre de site s'applique dans tous les cas : auparavant il sautait dès
     // qu'une `classeId` était fournie dans l'URL, ce qui laissait lire les
@@ -48,6 +56,7 @@ const getNotesData = unstable_cache(
     );
 
     const [classes, matieres, statsNotes] = await Promise.all([
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- teacher scope: classeWhere uses classeIds for restricted teachers, site filter for others
       prisma.classe.findMany({
         where: classeWhere,
         select: { id: true, nom: true, niveau: true, siteId: true, site: { select: { nom: true } } },
@@ -86,7 +95,7 @@ export default async function NotesPage({
     getTranslations("notes"),
     getTranslations("common"),
     searchParams,
-    getSitesForUser(),
+    getSitesForUserCached(session.user.tenantId, session.user.id, session.user.role === "TENANT_ADMIN" || session.user.role === "SUPER_ADMIN"),
     getSiteColorMap(session.user.tenantId),
   ]);
 
@@ -114,8 +123,6 @@ export default async function NotesPage({
     ? tCommon("allSites")
     : (sites.find((s) => s.id === activeSite)?.nom ?? "Site inconnu");
   const currentSiteColor = activeSite === "all" ? undefined : siteColors[activeSite];
-  const siteFilter = siteFilterForModel("classe", noteClaims);
-  const eleveFilter = siteFilterForModel("note", noteClaims);
   const evalFilter = siteFilterForModel("evaluation", noteClaims);
 
   // Filtrer par classes/matières de l'enseignant si applicable
@@ -128,32 +135,47 @@ export default async function NotesPage({
 
   // Si classe et matière sont sélectionnées, on récupère les évaluations correspondantes
   let evaluations: any[] = [];
+  let evaluation: any = null;
+  let grille: any[] = [];
+
   if (classeId && matiereId) {
-    // Vérifier que l'enseignant a accès à cette classe/matière
+    // Vérifier que l'enseignant a accès à cette classe
     if (scope?.isRestricted && !scope.classeIds.includes(classeId)) {
       redirect("/notes");
     }
-    evaluations = await prisma.evaluation.findMany({
-      where: { tenantId, ...evalFilter, classeId, matiereId },
-      select: { id: true, titre: true, type: true },
-      orderBy: { date: "desc" },
-    });
-  }
 
-  // Si tout est sélectionné, on récupère l'évaluation avec sa grille
-  let evaluation: any = null;
-  let grille: any[] = [];
-  if (classeId && matiereId && evaluationId) {
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-    evaluation = await prisma.evaluation.findUnique({
-      where: { id: evaluationId, tenantId },
-      include: {
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
-        classe: { include: { eleves: { orderBy: { prenom: 'asc' } } } },
-        matiere: true,
-        notes: true,
-      }
-    });
+    if (evaluationId) {
+      // OPTIMISATION: batcher la liste des évaluations + le détail de
+      // l'évaluation dans UNE SEULE transaction RLS → 1 SET LOCAL + 2
+      // queries = 3 round trips au lieu de 4 (2×2).
+      [evaluations, evaluation] = await runWithRlsBatch(
+        tenantId,
+        session.user.siteId ?? null,
+        async (tx: Prisma.TransactionClient) => Promise.all([
+          // eslint-disable-next-line ecolemiriam/require-site-filter -- evalFilter is built from siteFilterForModel above
+          tx.evaluation.findMany({
+            where: { tenantId, ...evalFilter, classeId, matiereId },
+            select: { id: true, titre: true, type: true },
+            orderBy: { date: "desc" },
+          }),
+          // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via scope
+          tx.evaluation.findUnique({
+            where: { id: evaluationId, tenantId },
+            include: {
+              classe: { include: { eleves: { orderBy: { prenom: 'asc' } } } },
+              matiere: true,
+              notes: true,
+            }
+          }),
+        ])
+      );
+    } else {
+      evaluations = await prisma.evaluation.findMany({
+        where: { tenantId, ...evalFilter, classeId, matiereId },
+        select: { id: true, titre: true, type: true },
+        orderBy: { date: "desc" },
+      });
+    }
 
     if (evaluation) {
       grille = evaluation.classe.eleves.map((eleve: any) => {

@@ -242,8 +242,24 @@ async function getElevesData(
     }
   );
 
-  // Les classes sont cachées séparément (getClassesList utilise unstable_cache)
-  const classeNoms = await getClassesList(tenantId, siteId, classeSiteFilter);
+  // Pour les enseignants restreints : récupérer les classes par scope
+  // (classeIds) SANS filtre de site, car un enseignant peut enseigner dans
+  // des classes situées sur des sites auxquels il n'est pas explicitement
+  // rattaché via UserSite/EnseignantSite. Le scope est la sécurité, pas le
+  // site. (Voir cahier-de-texte/page.tsx qui fait de même.)
+  //
+  // Pour les autres rôles : cache partagé filtré par site.
+  const classeNoms = scope?.isRestricted && scope.classeIds.length > 0
+    ? await runWithTenant(tenantId, siteId, async () => {
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- teacher scope: classeIds is the security boundary, not siteId
+        const classes = await prisma.classe.findMany({
+          where: { tenantId, id: { in: scope.classeIds } },
+          select: { id: true, nom: true, site: { select: { nom: true } } },
+          orderBy: [{ site: { nom: "asc" } }, { nom: "asc" }],
+        });
+        return classes.map((c) => ({ id: c.id, nom: c.nom, siteNom: c.site?.nom ?? null }));
+      })
+    : await getClassesList(tenantId, siteId, classeSiteFilter);
 
   return { eleves, total, stats, classeNoms, effectifs };
 }

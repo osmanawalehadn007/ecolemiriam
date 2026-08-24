@@ -2,6 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import prismaBase from "@/lib/prisma-base";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -167,7 +168,7 @@ export async function createUser(data: UserFormData) {
   // laisserait créer un doublon qui échouerait ensuite en base. Seule
   // l'existence est utilisée, aucune donnée de l'autre tenant n'est exposée.
   // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter
-  const existing = await prisma.user.findFirst({ where: { email: { equals: v.email, mode: "insensitive" } } });
+  const existing = await prismaBase.user.findFirst({ where: { email: { equals: v.email, mode: "insensitive" } } });
   if (existing) throw new Error("Un utilisateur avec cet email existe déjà");
 
   // Sécurité : pas de mot de passe par défaut codé en dur. Si aucun mot de

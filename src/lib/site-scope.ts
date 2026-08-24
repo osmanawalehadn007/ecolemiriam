@@ -316,6 +316,9 @@ export const SITE_PATHS: Record<string, SitePath> = {
   matiere: "column",
   structure: "column",
   disponibiliteEnseignant: "column",
+  // Indisponibilités enseignants (créneaux à éviter) : `null` = partagé entre
+  // tous les sites du tenant.
+  indisponibiliteEnseignant: "column",
   // Journal de suppression d'un site : rattaché au site qu'il décrit.
   siteDeletionLog: "column",
   // Grille tarifaire : `null` = tarif commun à tous les sites du tenant.
@@ -411,6 +414,7 @@ const SHARED_NULL_MODELS = new Set([
   "matiere",
   "structure",
   "disponibiliteEnseignant",
+  "indisponibiliteEnseignant",
   // Tarif applicable à tous les sites faute de site précisé.
   "tarifNiveau",
   // Une conversation sans site n'est pas « non assignée » : c'est un échange
