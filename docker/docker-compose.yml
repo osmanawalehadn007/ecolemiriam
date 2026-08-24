@@ -176,7 +176,7 @@ services:
       - backend
 
     depends_on:
-      pgbouncer:
+      postgres:
         condition: service_healthy
 
     env_file:
