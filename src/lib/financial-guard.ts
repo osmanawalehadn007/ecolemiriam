@@ -1,4 +1,6 @@
 import prisma from "@/lib/prisma";
+import { runWithTenant } from "@/lib/prisma";
+import { unstable_cache } from "next/cache";
 import type { Session } from "next-auth";
 
 export interface SituationFinanciere {
@@ -238,3 +240,26 @@ export async function checkUserFinancialBlock(userId: string, tenantId: string):
     messageParams: { count: excludedEleveIds.length },
   };
 }
+
+/**
+ * Version cachée de checkUserFinancialBlock pour le layout du dashboard.
+ *
+ * Le blocage financier est vérifié à CHAQUE navigation (layout server
+ * component). Sans cache, cela fait 2-4 requêtes DB par page pour les
+ * PARENT/STUDENT. Avec un cache de 30s, la première navigation paie le
+ * coût et les suivantes sont gratuites.
+ *
+ * Note: unstable_cache détache le contexte requête → auth() échoue →
+ * l'extension RLS ne positionne pas SET LOCAL. runWithTenant injecte
+ * le contexte via AsyncLocalStorage.
+ */
+export const checkUserFinancialBlockCached = unstable_cache(
+  async (
+    userId: string,
+    tenantId: string
+  ): Promise<Awaited<ReturnType<typeof checkUserFinancialBlock>>> => {
+    return runWithTenant(tenantId, null, () => checkUserFinancialBlock(userId, tenantId));
+  },
+  ["financial-block"],
+  { revalidate: 30, tags: ["financial-block"] }
+);

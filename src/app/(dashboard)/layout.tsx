@@ -5,7 +5,8 @@ import { AiChatWidget } from "@/components/ai/AiChatWidget";
 import prisma from "@/lib/prisma";
 import { getTranslations } from "next-intl/server";
 import { unstable_cache } from "next/cache";
-import { checkUserFinancialBlock } from "@/lib/financial-guard";
+import { checkUserFinancialBlockCached } from "@/lib/financial-guard";
+import { getSitesForUserCached } from "@/lib/sites-cached";
 
 const AI_GREETINGS: Record<string, string> = {
   SUPER_ADMIN:
@@ -55,7 +56,7 @@ export default async function DashboardLayout({
     (session.user.role === "STUDENT" || session.user.role === "PARENT") &&
     session.user.tenantId
   ) {
-    const block = await checkUserFinancialBlock(session.user.id, session.user.tenantId);
+    const block = await checkUserFinancialBlockCached(session.user.id, session.user.tenantId);
     if (block.blocked) {
       redirect("/acces-bloque");
     }
@@ -68,29 +69,12 @@ export default async function DashboardLayout({
     ? await getTenantName(session.user.tenantId)
     : "Mon École";
 
-  // Fetch sites for the current tenant
+  // Fetch sites for the current tenant (cached — shared with pages)
   // TENANT_ADMIN / SUPER_ADMIN see all sites; other roles see only their assigned sites
   const role = session.user.role;
   const isSiteAdmin = role === "TENANT_ADMIN" || role === "SUPER_ADMIN";
   const sites = session.user.tenantId
-    ? isSiteAdmin
-      ? await prisma.site.findMany({
-          where: { tenantId: session.user.tenantId, actif: true },
-          select: { id: true, nom: true, code: true },
-          orderBy: { nom: "asc" },
-        })
-      : await prisma.site.findMany({
-          where: {
-            tenantId: session.user.tenantId,
-            actif: true,
-            OR: [
-              { userSites: { some: { userId: session.user.id } } },
-              { enseignantSites: { some: { enseignant: { userId: session.user.id, tenantId: session.user.tenantId } } } },
-            ],
-          },
-          select: { id: true, nom: true, code: true },
-          orderBy: { nom: "asc" },
-        })
+    ? await getSitesForUserCached(session.user.tenantId, session.user.id, isSiteAdmin)
     : [];
 
   const siteId = (session.user as { siteId?: string | null }).siteId ?? null;

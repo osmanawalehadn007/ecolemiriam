@@ -24,10 +24,15 @@ export function applySecurityHeaders(response: NextResponse, pathname: string): 
   // ── Cross-Origin Resource Policy : restreint qui peut embarquer la ressource
   headers.set("Cross-Origin-Resource-Policy", "same-origin");
 
-  // ── Cross-Origin Embedder Policy : exige CORS pour les ressources cross-origin
-  // Attention : peut casser certains embeds. On utilise credentialless pour
-  // la compatibilité.
-  headers.set("Cross-Origin-Embedder-Policy", "credentialless");
+  // ── Cross-Origin Embedder Policy ────────────────────────────────────────
+  // RETIRÉ : `credentialless` bloquait le chargement des chunks JavaScript
+  // de Next.js chez certains utilisateurs en production (caches Cloudflare,
+  // redirects apex → sous-domaine, navigateurs plus anciens). Le symptôme
+  // était "rien ne se passe quand on clique sur login" — le JS ne s'exécutait
+  // pas car les chunks étaient bloqués par COEP.
+  // COEP n'est nécessaire que pour SharedArrayBuffer et APIs avancées que
+  // l'app n'utilise pas. Le risqué > le bénéfice.
+  // headers.set("Cross-Origin-Embedder-Policy", "credentialless");
 
   // ── X-DNS-Prefetch-Control : désactive le pré-fetch DNS (fuite d'info)
   headers.set("X-DNS-Prefetch-Control", "off");

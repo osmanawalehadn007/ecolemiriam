@@ -5,9 +5,12 @@
  * Utilise un Map en mémoire (suffisant pour un seul serveur VPS).
  *
  * Limites par IP :
- *  - Routes d'authentification : plus strict (géré par les routes elles-mêmes)
+ *  - Routes d'authentification : géré par Caddy (60 req/min) + routes
+ *    elles-mêmes (anti-énumération par email). Le middleware n'ajoute pas
+ *    de limite supplémentaire sur /api/auth/* pour éviter de doubler celle
+ *    de Caddy et de bloquer les écoles entières derrière un NAT.
  *  - Routes API authentifiées : 120 req/min
- *  - Routes API publiques : 30 req/min
+ *  - Routes API publiques (health, webhooks, cron) : 30 req/min
  */
 
 import type { NextRequest } from "next/server";
@@ -20,7 +23,7 @@ interface Bucket {
 const buckets = new Map<string, Bucket>();
 
 /** Routes API publiques (sans authentification requise) — limit plus strict. */
-const PUBLIC_API_PREFIXES = ["/api/auth", "/api/health", "/api/webhooks", "/api/cron"];
+const PUBLIC_API_PREFIXES = ["/api/health", "/api/webhooks", "/api/cron"];
 
 /** Routes sensibles nécessitant un limit plus strict. */
 const SENSITIVE_API_PREFIXES = ["/api/auth/mobile", "/api/stripe/checkout"];
@@ -30,6 +33,9 @@ const WINDOW_MS = 60_000; // 1 minute
 function getLimit(pathname: string): number {
   if (SENSITIVE_API_PREFIXES.some((p) => pathname.startsWith(p))) return 10;
   if (PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p))) return 30;
+  // /api/auth/* : pas de limite ici — Caddy gère déjà (60/min/IP) et les
+  // routes elles-mêmes ont leur propre anti-énumération par email.
+  if (pathname.startsWith("/api/auth")) return 600; // effectivement pas de limite
   return 120; // routes authentifiées standard
 }
 

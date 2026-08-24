@@ -2,7 +2,7 @@
  * Test d'intégration RLS — prouve l'isolation inter-tenant au niveau base.
  *
  * Prérequis :
- * - La migration `migration_rls_hardening.sql` a été exécutée.
+ * - La migration `migration_rls_secure.sql` a été exécutée.
  * - Le rôle `ecolemiriam_app` existe avec NOBYPASSRLS.
  * - DATABASE_URL pointe vers le rôle `ecolemiriam_app`.
  * - Deux tenants de test existent en base avec des élèves.

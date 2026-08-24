@@ -74,9 +74,20 @@ function LoginForm() {
             setChecking2FA(false);
             return;
           }
+        } else if (res.status === 429) {
+          // Rate limité — informer l'utilisateur au lieu d'avaler l'erreur
+          toast.error(
+            t("title") === "Sign In"
+              ? "Too many attempts. Please wait a moment."
+              : "Trop de tentatives. Patientez un instant."
+          );
+          setChecking2FA(false);
+          return;
         }
-      } catch {
-        // si la vérification échoue, on continue normalement
+      } catch (err) {
+        // Erreur réseau (CSP, timeout, etc.) — on log pour le debug
+        // mais on continue vers signIn() qui gérera l'erreur côté NextAuth
+        console.warn("[login] 2fa/check-required a échoué:", err);
       }
       setChecking2FA(false);
     }

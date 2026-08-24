@@ -51,18 +51,24 @@ const inRlsTx = new AsyncLocalStorage<boolean>();
 // Modèles exemptés de RLS (tables sans RLS côté DB)
 // ------------------------------------------------------------
 
-const EXEMPT_MODELS = new Set([
-  // Auth NextAuth
+// Cette liste DOIT correspondre exactement aux tables sans RLS en base
+// (section 3c de prisma/migration_rls_secure.sql). Un modèle exempté ici
+// mais protégé en base renverrait 0 ligne : aucun contexte n'étant posé,
+// les policies fail-closed rejettent tout.
+//
+// Exempter un modèle, c'est renoncer à l'isolation garantie par la base et
+// la reporter sur les clauses `where` du code applicatif. Réservé aux
+// tables lues avant qu'un contexte tenant existe.
+export const EXEMPT_MODELS = new Set([
+  // Auth NextAuth : lues par l'adaptateur, hors de toute requête tenant.
   "Account",
   "Session",
   "VerificationToken",
-  // Gestion cross-tenant (pas de RLS sur ces tables)
-  "User",
+  // Identité cross-tenant : résolution d'appartenance au login et bascule
+  // de tenant/site interrogent délibérément d'autres tenants que le courant.
   "Tenant",
   "UserTenant",
   "UserSite",
-  "AuditLog",
-  "DeviceToken",
 ]);
 
 // Opérations qui ne portent pas sur des données métier
@@ -149,6 +155,15 @@ const rlsExtension = Prisma.defineExtension((client) => {
         // Enrouler dans une transaction avec SET LOCAL
         // IMPORTANT: on doit utiliser le client étendu (pas `query`)
         // pour que la requête s'exécute DANS la transaction.
+        //
+        // OPTIMISATION: les deux set_config sont fusionnés en un seul
+        // $executeRaw afin de réduire de 3 à 2 le nombre d'allers-retours
+        // DB par requête (soit -33% de latence sur chaque opération Prisma).
+        // Refuse de servir si le rôle de connexion contourne RLS : sans
+        // ce contrôle, une DATABASE_URL pointant sur le rôle owner désactive
+        // toute l'isolation en silence (aucune erreur, aucun log).
+        await assertRlsEnforceable();
+
         const isSuperAdmin = ctx.role === "SUPER_ADMIN";
         const ctxRef = ctx;
         return inRlsTx.run(true, () =>
@@ -157,8 +172,9 @@ const rlsExtension = Prisma.defineExtension((client) => {
               if (isSuperAdmin) {
                 await tx.$executeRaw`SELECT set_config('app.is_super_admin', 'true', true)`;
               } else {
-                await tx.$executeRaw`SELECT set_config('app.tenant_id', ${ctxRef.tenantId!}, true)`;
-                await tx.$executeRaw`SELECT set_config('app.site_id', ${ctxRef.siteId ?? ''}, true)`;
+                // Fusion des deux SET LOCAL en une seule requête SQL
+                // — économise un round trip complet par opération Prisma.
+                await tx.$executeRaw`SELECT set_config('app.tenant_id', ${ctxRef.tenantId!}, true), set_config('app.site_id', ${ctxRef.siteId ?? ''}, true)`;
               }
               // Exécuter l'opération sur le tx (pas sur le client outer)
               // On accède au modèle via le tx qui est le client Prisma dans la transaction
@@ -182,10 +198,17 @@ const rlsExtension = Prisma.defineExtension((client) => {
 // Client Prisma avec RLS
 // ------------------------------------------------------------
 
-import prismaBase from "./prisma-base";
+import { prismaApp, assertRlsEnforceable } from "./prisma-app";
 
-/** Client Prisma étendu avec l'RLS. */
-export const prismaWithRls = prismaBase.$extends(rlsExtension);
+/**
+ * Client Prisma étendu avec l'RLS.
+ *
+ * Bâti sur `prismaApp` (DATABASE_URL → rôle ecolemiriam_app) et NON sur
+ * `prismaBase` (DIRECT_URL → rôle owner, BYPASSRLS) : un rôle BYPASSRLS
+ * n'évalue aucune policy, ce qui rendait l'isolation tenant totalement
+ * inopérante alors même que les SET LOCAL étaient correctement émis.
+ */
+export const prismaWithRls = prismaApp.$extends(rlsExtension);
 
 // ------------------------------------------------------------
 // API publique
@@ -209,4 +232,63 @@ export async function runWithTenant<T>(
  */
 export function getCurrentRlsContext(): RlsContext | null {
   return rlsStorage.getStore() ?? null;
+}
+
+/**
+ * Exécute plusieurs opérations Prisma dans UNE SEULE transaction RLS.
+ *
+ * Normalement, chaque appel Prisma (findMany, count, groupBy...) est
+ * enroulé individuellement dans une $transaction avec SET LOCAL — soit
+ * 2 round trips DB par opération. Avec N opérations en parallèle
+ * (Promise.all), cela fait 2N round trips.
+ *
+ * Cette fonction pose UN SEUL SET LOCAL puis exécute toutes les
+ * opérations dans la même transaction → 1 + N round trips au lieu de 2N.
+ * Pour N=5 opérations via un tunnel SSH à ~100ms/round trip, on passe
+ * de 1000ms à 600ms (-40%).
+ *
+ * @example
+ * const [eleves, stats, classes] = await runWithRlsBatch(tenantId, siteId, async (tx) => [
+ *   await tx.eleve.findMany({ where }),
+ *   await tx.eleve.groupBy({ by: ["statut"], where, _count: true }),
+ *   await tx.classe.findMany({ where }),
+ * ]);
+ */
+export async function runWithRlsBatch<T>(
+  tenantId: string | null,
+  siteId: string | null,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>
+): Promise<T> {
+  // Si pas de tenant, on ne peut pas faire de RLS
+  if (!tenantId) {
+    throw new Error("runWithRlsBatch: tenantId requis");
+  }
+
+  const ctx: RlsContext = { tenantId, siteId, role: null };
+
+  // Récupérer le rôle depuis le contexte ALS si disponible
+  const existingCtx = rlsStorage.getStore();
+  if (existingCtx?.role) {
+    ctx.role = existingCtx.role;
+  }
+
+  const isSuperAdmin = ctx.role === "SUPER_ADMIN";
+
+  await assertRlsEnforceable();
+
+  return rlsStorage.run(ctx, () =>
+    inRlsTx.run(true, () =>
+      (prismaApp as PrismaClient).$transaction(
+        async (tx) => {
+          if (isSuperAdmin) {
+            await tx.$executeRaw`SELECT set_config('app.is_super_admin', 'true', true)`;
+          } else {
+            await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true), set_config('app.site_id', ${siteId ?? ''}, true)`;
+          }
+          return fn(tx);
+        },
+        { timeout: 30000, maxWait: 10000 }
+      )
+    )
+  );
 }

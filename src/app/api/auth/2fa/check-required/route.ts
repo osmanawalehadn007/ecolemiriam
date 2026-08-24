@@ -11,7 +11,10 @@
  */
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import prisma from "@/lib/prisma";
+// Route pré-login : aucune session, donc aucun contexte tenant. Le modèle
+// User étant désormais sous RLS stricte, le client RLS renverrait 0 ligne
+// ici. Ce lookup par email est cross-tenant par nature → prismaBase.
+import prismaBase from "@/lib/prisma-base";
 import { z } from "zod";
 
 const CheckSchema = z.object({
@@ -63,7 +66,7 @@ export async function POST(req: Request) {
   }
 
   // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- pré-login : lookup par email pour vérifier 2FA/statut email, pas de session disponible
-  const user = await prisma.user.findFirst({
+  const user = await prismaBase.user.findFirst({
     where: { email: { equals: email, mode: "insensitive" } },
     select: { password: true, isActive: true, mfaEnabled: true, emailVerified: true, role: true },
   });

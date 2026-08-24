@@ -41,7 +41,7 @@ source "$ENV_FILE"
 
 TMPDIR=$(mktemp -d)
 DUMP_FILE="${TMPDIR}/ecolemiriam-supabase.dump"
-RLS_FILE="${PROJECT_DIR}/prisma/migration_rls_hardening.sql"
+RLS_FILE="${PROJECT_DIR}/prisma/migration_rls_secure.sql"
 
 trap 'rm -rf "$TMPDIR"' EXIT
 

@@ -1,4 +1,6 @@
 import prisma from "@/lib/prisma";
+import { runWithTenant } from "@/lib/prisma";
+import { unstable_cache } from "next/cache";
 
 export interface SiteColor {
   base: string;
@@ -19,16 +21,30 @@ function generateSiteColor(index: number): SiteColor {
   };
 }
 
-export async function getSiteColorMap(tenantId: string): Promise<Record<string, SiteColor>> {
-  const sites = await prisma.site.findMany({
-    where: { tenantId, deletedAt: null },
-    select: { id: true, createdAt: true },
-    orderBy: { createdAt: "asc" },
-  });
+/**
+ * OPTIMISATION: mise en cache 10 minutes — les sites changent rarement
+ * et la couleur est dérivée de l'ordre de création (stable).
+ *
+ * Note: unstable_cache détache le contexte requête → auth() échoue →
+ * l'extension RLS ne positionne pas SET LOCAL. runWithTenant injecte
+ * le contexte via AsyncLocalStorage.
+ */
+export const getSiteColorMap = unstable_cache(
+  async (tenantId: string): Promise<Record<string, SiteColor>> => {
+    return runWithTenant(tenantId, null, async () => {
+      const sites = await prisma.site.findMany({
+        where: { tenantId, deletedAt: null },
+        select: { id: true, createdAt: true },
+        orderBy: { createdAt: "asc" },
+      });
 
-  const colors: Record<string, SiteColor> = {};
-  for (let i = 0; i < sites.length; i++) {
-    colors[sites[i].id] = generateSiteColor(i);
-  }
-  return colors;
-}
+      const colors: Record<string, SiteColor> = {};
+      for (let i = 0; i < sites.length; i++) {
+        colors[sites[i].id] = generateSiteColor(i);
+      }
+      return colors;
+    });
+  },
+  ["site-colors"],
+  { revalidate: 600, tags: ["site-colors"] }
+);

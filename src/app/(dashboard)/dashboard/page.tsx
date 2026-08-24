@@ -13,6 +13,7 @@ import { unstable_cache } from "next/cache";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import { getSitesForUserCached } from "@/lib/sites-cached";
 import type { Role } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 
@@ -97,6 +98,7 @@ const getDashboardData = unstable_cache(
       absencesNonJustifiees,
       notesRecentes,
       prochainExamen,
+      absenceChartData,
     ] = await Promise.all([
       // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
       prisma.eleve.groupBy({
@@ -135,7 +137,44 @@ const getDashboardData = unstable_cache(
         where: { ...examenWhere, statut: "PROGRAMME", dateDebut: { gte: new Date() } },
         orderBy: { dateDebut: "asc" },
       }),
+      // OPTIMISATION: données du graphique d'absences chargées côté serveur
+      // → élimine le fetch HTTP client supplémentaire (/api/dashboard/absences-chart)
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès
+      prisma.absence.findMany({
+        where: {
+          ...absenceWhere,
+          date: { gte: new Date(Date.now() - 56 * 24 * 60 * 60 * 1000) },
+        },
+        select: { date: true, statut: true, isRetard: true },
+      }),
     ]);
+
+    // Grouper les absences par semaine (8 dernières semaines)
+    const now = new Date();
+    const semaines: Record<string, { justifiees: number; injustifiees: number; retards: number }> = {};
+    for (let i = 7; i >= 0; i--) {
+      const key = `S${8 - i}`;
+      semaines[key] = { justifiees: 0, injustifiees: 0, retards: 0 };
+    }
+    for (const a of absenceChartData) {
+      const diffDays = Math.floor((now.getTime() - a.date.getTime()) / (1000 * 60 * 60 * 24));
+      const weekIndex = 7 - Math.floor(diffDays / 7);
+      if (weekIndex >= 0 && weekIndex <= 7) {
+        const key = `S${weekIndex + 1}`;
+        if (!semaines[key]) semaines[key] = { justifiees: 0, injustifiees: 0, retards: 0 };
+        if (a.isRetard) {
+          semaines[key].retards++;
+        } else if (a.statut === "JUSTIFIEE") {
+          semaines[key].justifiees++;
+        } else if (a.statut === "INJUSTIFIEE" || a.statut === "EN_ATTENTE") {
+          semaines[key].injustifiees++;
+        }
+      }
+    }
+    const absenceChart = Object.entries(semaines).map(([semaine, vals]) => ({
+      semaine,
+      ...vals,
+    }));
 
     const statutMap = Object.fromEntries(eleveStats.map((s) => [s.statut, s._count]));
     const totalEleves = Object.values(statutMap).reduce((a, b) => a + b, 0);
@@ -148,6 +187,7 @@ const getDashboardData = unstable_cache(
       absencesNonJustifiees,
       notesRecentes,
       prochainExamen,
+      absenceChart,
     };
     }); // fin runWithTenant
   },
@@ -187,10 +227,8 @@ export default async function DashboardPage() {
 
   const [data, sites, anneeCourante] = await Promise.all([
     getDashboardData(tenantId, session.user.siteId ?? null, eleveFilter, classeFilter, absenceFilter, noteFilter, examenFilter, scope),
-    prisma.site.findMany({
-      where: { tenantId, actif: true, deletedAt: null },
-      select: { id: true, nom: true },
-    }),
+    // Réutilise le même cache que le layout → 0 requête DB supplémentaire
+    getSitesForUserCached(tenantId, session.user.id, session.user.role === "TENANT_ADMIN"),
     getAnneeCouranteLibelle(tenantId),
   ]);
 
@@ -253,9 +291,9 @@ export default async function DashboardPage() {
 
         {/* Grille principale */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Graphique absences */}
+          {/* Graphique absences — données passées côté serveur (plus de fetch client) */}
           <div className="lg:col-span-2">
-            <AbsenceChart tenantId={session.user.tenantId} siteFilter={eleveFilter} />
+            <AbsenceChart data={data.absenceChart} />
           </div>
 
           {/* Actions rapides */}

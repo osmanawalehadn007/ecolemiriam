@@ -605,6 +605,26 @@ export function ElevesTable({ eleves, total, effectifs, classes, siteColors, ini
               {t("selectLevelForClasses")}
             </div>
           )}
+
+          {/* Bouton "charger plus" si tous les élèves ne sont pas chargés */}
+          {eleves.length < total && (
+            <div className="px-4 py-3 border-t text-center">
+              <p className="text-xs text-muted-foreground mb-2">
+                {eleves.length} / {total} {t("title").toLowerCase()}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const params = new URLSearchParams(searchParams.toString());
+                  params.set("limit", String(Math.max(eleves.length + 200, 200)));
+                  router.push(`?${params.toString()}`);
+                }}
+              >
+                Charger plus
+              </Button>
+            </div>
+          )}
         </>
       )}
     </Card>

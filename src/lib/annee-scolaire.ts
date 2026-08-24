@@ -8,28 +8,45 @@
  */
 
 import prisma from "@/lib/prisma";
+import { runWithTenant } from "@/lib/prisma";
+import { unstable_cache, revalidateTag } from "next/cache";
 
 /**
  * Retourne l'année scolaire courante pour un tenant donné.
  * Lit la table `annees_scolaires` (isCurrent = true) en priorité.
  * Si aucune année n'est marquée comme courante, retourne null
  * plutôt que de fallback sur une valeur hardcodée.
+ *
+ * OPTIMISATION: mise en cache 10 minutes (l'année scolaire change rarement).
+ * Invalidation via revalidateTag("annee-courante") quand setAnneeCourante est appelé.
+ *
+ * Note: unstable_cache détache le contexte requête → auth() échoue →
+ * l'extension RLS ne positionne pas SET LOCAL. runWithTenant injecte
+ * le contexte via AsyncLocalStorage.
  */
-export async function getAnneeCourante(tenantId: string) {
-  const annee = await prisma.anneesScolaires.findFirst({
-    where: { tenantId, isCurrent: true },
-  });
+export const getAnneeCourante = unstable_cache(
+  async (tenantId: string) => {
+    return runWithTenant(tenantId, null, async () => {
+      const annee = await prisma.anneesScolaires.findFirst({
+        where: { tenantId, isCurrent: true },
+        select: { id: true, libelle: true, dateDebut: true, dateFin: true, isCurrent: true },
+      });
 
-  if (annee) return annee;
+      if (annee) return annee;
 
-  // Fallback: dernière année par date de fin (au cas où isCurrent n'est pas set)
-  const latest = await prisma.anneesScolaires.findFirst({
-    where: { tenantId },
-    orderBy: { dateFin: "desc" },
-  });
+      // Fallback: dernière année par date de fin (au cas où isCurrent n'est pas set)
+      const latest = await prisma.anneesScolaires.findFirst({
+        where: { tenantId },
+        orderBy: { dateFin: "desc" },
+        select: { id: true, libelle: true, dateDebut: true, dateFin: true, isCurrent: true },
+      });
 
-  return latest ?? null;
-}
+      return latest ?? null;
+    });
+  },
+  ["annee-courante"],
+  { revalidate: 600, tags: ["annee-courante"] }
+);
 
 /**
  * Retourne le libellé de l'année courante (ex: "2025-2026").
@@ -62,4 +79,7 @@ export async function setAnneeCourante(tenantId: string, anneeId: string) {
       data: { isCurrent: true },
     }),
   ]);
+
+  // Invalider le cache de l'année courante pour ce tenant
+  revalidateTag("annee-courante");
 }

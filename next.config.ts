@@ -53,11 +53,15 @@ const nextConfig: NextConfig = {
         key: "Content-Security-Policy",
         value: [
           "default-src 'self'",
-          // 'unsafe-eval' retiré : permet l'exécution de code arbitraire.
+          // 'unsafe-eval' est requis en développement par Next.js (React
+          // Refresh / HMR évalue du code à la volée). En production, il est
+          // retiré pour empêcher l'exécution de code arbitraire.
           // 'unsafe-inline' conservé temporairement (Next.js en a besoin pour
           // les styles inline et certains scripts d'hydration). Migration
           // vers des nonces CSP prévue.
-          "script-src 'self' 'unsafe-inline'",
+          isProd
+            ? "script-src 'self' 'unsafe-inline'"
+            : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: https: blob:",
           "font-src 'self' data:",
