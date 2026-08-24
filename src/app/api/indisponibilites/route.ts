@@ -68,9 +68,9 @@ export async function POST(req: NextRequest) {
 
     const tenantId = session.user.tenantId;
 
-    // Vérifier que l'enseignant appartient au tenant
+    // Vérifier que l'enseignant appartient au tenant et au site
     const ens = await prisma.enseignant.findFirst({
-      where: { id: parsed.data.enseignantId, tenantId },
+      where: { id: parsed.data.enseignantId, tenantId, ...siteFilterForModel("enseignant", session.user) },
       select: { id: true },
     });
     if (!ens) {

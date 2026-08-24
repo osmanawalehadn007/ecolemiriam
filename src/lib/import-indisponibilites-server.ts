@@ -132,7 +132,9 @@ export async function preparerPlanIndispo(
 ): Promise<PlanImport> {
   const rows = await parseBuffer(buffer);
 
-  // Récupérer tous les enseignants du tenant pour le matching
+  // Récupérer tous les enseignants du tenant pour le matching (multi-sites :
+  // l'import peut concerner des enseignants de n'importe quel site du tenant)
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- import multi-sites, matching par nom/email sur tout le tenant
   const enseignants = await prisma.enseignant.findMany({
     where: { tenantId },
     include: { user: { select: { name: true, email: true } } },
