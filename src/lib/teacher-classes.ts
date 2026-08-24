@@ -1,6 +1,6 @@
 import prisma from "@/lib/prisma";
 import { runWithTenant } from "@/lib/prisma";
-import { unstable_cache } from "next/cache";
+import { cached, cacheDel, cacheKey } from "@/lib/redis";
 import type { Role } from "@prisma/client";
 
 const TEACHER_ROLES: Role[] = ["TEACHER", "CLASS_TEACHER"];
@@ -18,28 +18,24 @@ export function isTeacherRole(role: Role): boolean {
  *
  * Retourne également les IDs des matières qu'il enseigne.
  *
- * OPTIMISATION: mise en cache 2 minutes — les affectations changent rarement
- * pendant une session de navigation. Invalidation via revalidateTag.
- *
- * Note: unstable_cache détache le contexte requête → auth() échoue →
- * l'extension RLS ne positionne pas SET LOCAL. runWithTenant injecte
- * le contexte via AsyncLocalStorage, contournant ce problème.
+ * CACHE: Redis (2 minutes, partagé entre instances blue/green).
  */
-export const getTeacherScope = unstable_cache(
-  async (
-    tenantId: string,
-    userId: string,
-    role: Role
-  ): Promise<{
-    classeIds: string[];
-    matiereIds: string[];
-    isRestricted: boolean;
-  }> => {
-    if (!isTeacherRole(role)) {
-      return { classeIds: [], matiereIds: [], isRestricted: false };
-    }
+export async function getTeacherScope(
+  tenantId: string,
+  userId: string,
+  role: Role
+): Promise<{
+  classeIds: string[];
+  matiereIds: string[];
+  isRestricted: boolean;
+}> {
+  if (!isTeacherRole(role)) {
+    return { classeIds: [], matiereIds: [], isRestricted: false };
+  }
 
-    return runWithTenant(tenantId, null, async () => {
+  return cached(
+    cacheKey(tenantId, "teacher-scope", userId),
+    () => runWithTenant(tenantId, null, async () => {
       // eslint-disable-next-line ecolemiriam/require-site-filter -- teacher lookup by userId+tenantId, site scoping is caller's responsibility
       const enseignant = await prisma.enseignant.findFirst({
         where: { userId, tenantId },
@@ -91,8 +87,17 @@ export const getTeacherScope = unstable_cache(
       );
 
       return { classeIds, matiereIds, isRestricted: true };
-    });
-  },
-  ["teacher-scope"],
-  { revalidate: 120, tags: ["teacher-scope"] }
-);
+    }),
+    120 // 2 minutes
+  );
+}
+
+/**
+ * Invalide le cache du scope enseignant pour un utilisateur.
+ */
+export async function invalidateTeacherScope(
+  tenantId: string,
+  userId: string
+): Promise<void> {
+  await cacheDel(cacheKey(tenantId, "teacher-scope", userId));
+}

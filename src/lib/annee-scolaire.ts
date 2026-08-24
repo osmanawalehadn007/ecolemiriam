@@ -9,7 +9,8 @@
 
 import prisma from "@/lib/prisma";
 import { runWithTenant } from "@/lib/prisma";
-import { unstable_cache, revalidateTag } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { cached, cacheDel, cacheKey } from "@/lib/redis";
 
 /**
  * Retourne l'année scolaire courante pour un tenant donné.
@@ -17,16 +18,16 @@ import { unstable_cache, revalidateTag } from "next/cache";
  * Si aucune année n'est marquée comme courante, retourne null
  * plutôt que de fallback sur une valeur hardcodée.
  *
- * OPTIMISATION: mise en cache 10 minutes (l'année scolaire change rarement).
- * Invalidation via revalidateTag("annee-courante") quand setAnneeCourante est appelé.
+ * CACHE: Redis (10 minutes, partagé entre instances blue/green).
+ * Invalidation via invalidateAnneeCourante() quand setAnneeCourante est appelé.
  *
- * Note: unstable_cache détache le contexte requête → auth() échoue →
- * l'extension RLS ne positionne pas SET LOCAL. runWithTenant injecte
- * le contexte via AsyncLocalStorage.
+ * Note: runWithTenant injecte le contexte RLS via AsyncLocalStorage
+ * (Redis cache n'a pas le problème d'unstable_cache qui détache le contexte).
  */
-export const getAnneeCourante = unstable_cache(
-  async (tenantId: string) => {
-    return runWithTenant(tenantId, null, async () => {
+export async function getAnneeCourante(tenantId: string) {
+  return cached(
+    cacheKey(tenantId, "annee-courante"),
+    () => runWithTenant(tenantId, null, async () => {
       const annee = await prisma.anneesScolaires.findFirst({
         where: { tenantId, isCurrent: true },
         select: { id: true, libelle: true, dateDebut: true, dateFin: true, isCurrent: true },
@@ -42,11 +43,10 @@ export const getAnneeCourante = unstable_cache(
       });
 
       return latest ?? null;
-    });
-  },
-  ["annee-courante"],
-  { revalidate: 600, tags: ["annee-courante"] }
-);
+    }),
+    600 // 10 minutes
+  );
+}
 
 /**
  * Retourne le libellé de l'année courante (ex: "2025-2026").
@@ -55,6 +55,14 @@ export const getAnneeCourante = unstable_cache(
 export async function getAnneeCouranteLibelle(tenantId: string): Promise<string | null> {
   const annee = await getAnneeCourante(tenantId);
   return annee?.libelle ?? null;
+}
+
+/**
+ * Invalide le cache de l'année courante pour un tenant donné.
+ */
+export async function invalidateAnneeCourante(tenantId: string): Promise<void> {
+  await cacheDel(cacheKey(tenantId, "annee-courante"));
+  revalidateTag("annee-courante");
 }
 
 /**
@@ -80,6 +88,6 @@ export async function setAnneeCourante(tenantId: string, anneeId: string) {
     }),
   ]);
 
-  // Invalider le cache de l'année courante pour ce tenant
-  revalidateTag("annee-courante");
+  // Invalider le cache Redis + Next.js
+  await invalidateAnneeCourante(tenantId);
 }

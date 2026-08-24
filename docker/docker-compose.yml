@@ -140,6 +140,62 @@ services:
         max-file: "3"
 
   # ============================================================
+  # REDIS — Cache partagé + sessions invalidables + queues
+  # ============================================================
+  # Utilisé pour :
+  #   - Cache des KPIs et données chaudes (TTL 60s-10min)
+  #   - Sessions NextAuth (invalidation sans attendre l'expiration JWT)
+  #   - Queues pour tâches de fond (relances auto, exports, notifications)
+  #
+  # Persistence : AOF (appendonly yes) pour survivre aux redémarrages.
+  # Maxmemory : 256MB avec policy allkeys-lru (évite OOM du VPS).
+  # ============================================================
+  redis:
+    image: redis:7-alpine
+    container_name: ecolemiriam-redis
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - CHOWN
+    mem_limit: 384m
+    pids_limit: 100
+
+    networks:
+      - backend
+
+    env_file:
+      - ../.env.production
+
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD:-ecolemiriam_redis_dev}
+
+    volumes:
+      - redis-data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-ecolemiriam_redis_dev}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================
   # APP — Next.js (standalone, non-root, read-only rootfs)
   # ============================================================
   # Architecture Blue-Green : deux conteneurs (app-blue, app-green),
@@ -177,6 +233,8 @@ services:
 
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
     env_file:
@@ -491,6 +549,7 @@ volumes:
   caddy-data:
   caddy-config:
   monitoring-data:
+  redis-data:
 
 # ============================================================
 # SECRETS (stockés via Docker secrets, jamais dans l'image)

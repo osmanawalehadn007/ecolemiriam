@@ -1,6 +1,6 @@
 import prisma from "@/lib/prisma";
 import { runWithTenant } from "@/lib/prisma";
-import { unstable_cache } from "next/cache";
+import { cached, cacheDel, cacheKey } from "@/lib/redis";
 
 export interface SiteColor {
   base: string;
@@ -22,16 +22,14 @@ function generateSiteColor(index: number): SiteColor {
 }
 
 /**
- * OPTIMISATION: mise en cache 10 minutes — les sites changent rarement
- * et la couleur est dérivée de l'ordre de création (stable).
- *
- * Note: unstable_cache détache le contexte requête → auth() échoue →
- * l'extension RLS ne positionne pas SET LOCAL. runWithTenant injecte
- * le contexte via AsyncLocalStorage.
+ * CACHE: Redis (10 minutes, partagé entre instances blue/green).
+ * Les sites changent rarement et la couleur est dérivée de l'ordre
+ * de création (stable).
  */
-export const getSiteColorMap = unstable_cache(
-  async (tenantId: string): Promise<Record<string, SiteColor>> => {
-    return runWithTenant(tenantId, null, async () => {
+export async function getSiteColorMap(tenantId: string): Promise<Record<string, SiteColor>> {
+  return cached(
+    cacheKey(tenantId, "site-colors"),
+    () => runWithTenant(tenantId, null, async () => {
       const sites = await prisma.site.findMany({
         where: { tenantId, deletedAt: null },
         select: { id: true, createdAt: true },
@@ -43,8 +41,14 @@ export const getSiteColorMap = unstable_cache(
         colors[sites[i].id] = generateSiteColor(i);
       }
       return colors;
-    });
-  },
-  ["site-colors"],
-  { revalidate: 600, tags: ["site-colors"] }
-);
+    }),
+    600 // 10 minutes
+  );
+}
+
+/**
+ * Invalide le cache des couleurs de sites pour un tenant.
+ */
+export async function invalidateSiteColorMap(tenantId: string): Promise<void> {
+  await cacheDel(cacheKey(tenantId, "site-colors"));
+}

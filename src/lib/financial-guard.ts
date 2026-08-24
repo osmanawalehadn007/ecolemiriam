@@ -1,6 +1,6 @@
 import prisma from "@/lib/prisma";
 import { runWithTenant } from "@/lib/prisma";
-import { unstable_cache } from "next/cache";
+import { cached, cacheDel, cacheKey } from "@/lib/redis";
 import type { Session } from "next-auth";
 
 export interface SituationFinanciere {
@@ -246,20 +246,27 @@ export async function checkUserFinancialBlock(userId: string, tenantId: string):
  *
  * Le blocage financier est vérifié à CHAQUE navigation (layout server
  * component). Sans cache, cela fait 2-4 requêtes DB par page pour les
- * PARENT/STUDENT. Avec un cache de 30s, la première navigation paie le
- * coût et les suivantes sont gratuites.
- *
- * Note: unstable_cache détache le contexte requête → auth() échoue →
- * l'extension RLS ne positionne pas SET LOCAL. runWithTenant injecte
- * le contexte via AsyncLocalStorage.
+ * PARENT/STUDENT. Avec un cache Redis de 30s, la première navigation paie le
+ * coût et les suivantes sont gratuites — et le cache est partagé entre
+ * instances blue/green.
  */
-export const checkUserFinancialBlockCached = unstable_cache(
-  async (
-    userId: string,
-    tenantId: string
-  ): Promise<Awaited<ReturnType<typeof checkUserFinancialBlock>>> => {
-    return runWithTenant(tenantId, null, () => checkUserFinancialBlock(userId, tenantId));
-  },
-  ["financial-block"],
-  { revalidate: 30, tags: ["financial-block"] }
-);
+export async function checkUserFinancialBlockCached(
+  userId: string,
+  tenantId: string
+): Promise<Awaited<ReturnType<typeof checkUserFinancialBlock>>> {
+  return cached(
+    cacheKey(tenantId, "financial-block", userId),
+    () => runWithTenant(tenantId, null, () => checkUserFinancialBlock(userId, tenantId)),
+    30 // 30 secondes
+  );
+}
+
+/**
+ * Invalide le cache du blocage financier pour un utilisateur.
+ */
+export async function invalidateFinancialBlock(
+  tenantId: string,
+  userId: string
+): Promise<void> {
+  await cacheDel(cacheKey(tenantId, "financial-block", userId));
+}
