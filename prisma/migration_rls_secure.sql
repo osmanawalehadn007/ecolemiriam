@@ -266,8 +266,9 @@ BEGIN
   --     Le filtrage par site cassait les jointures enseignant → user quand
   --     l'enseignant et son user n'étaient pas sur le même site (crash Prisma
   --     "Field user is required to return data, got null instead").
-  --     On remplace donc les policies automatiques par une policy tenant-only,
-  --     identique à celle de enseignants.
+  --     On remplace donc les policies automatiques par deux policies tenant-only
+  --     (1 permissive + 1 restrictive, conformes à verify_rls.sql),
+  --     identiques à celles de enseignants mais sans filtre par site.
   FOR pol IN SELECT policyname FROM pg_policies
              WHERE schemaname = 'public' AND tablename = 'users'
   LOOP
@@ -275,8 +276,14 @@ BEGIN
   END LOOP;
   EXECUTE 'ALTER TABLE public.users ENABLE ROW LEVEL SECURITY';
   EXECUTE 'ALTER TABLE public.users FORCE ROW LEVEL SECURITY';
-  EXECUTE 'CREATE POLICY tenant_isolation ON public.users
-             FOR ALL TO public
+  -- Policy permissive : USING + WITH CHECK tenant-only (sans filtre site)
+  EXECUTE 'CREATE POLICY rls_access ON public.users AS PERMISSIVE FOR ALL TO public
+             USING (public.app_is_super_admin() OR "tenantId" = public.app_tenant_id())
+             WITH CHECK (public.app_is_super_admin() OR "tenantId" = public.app_tenant_id())';
+  -- Policy restrictive : filet de sécurité combiné en AND avec toute policy
+  -- permissive future. Garantit que seules les lignes du tenant courant sont
+  -- visibles/modifiables, même si une policy permissive plus laxiste est ajoutée.
+  EXECUTE 'CREATE POLICY rls_tenant_guard ON public.users AS RESTRICTIVE FOR ALL TO public
              USING (public.app_is_super_admin() OR "tenantId" = public.app_tenant_id())
              WITH CHECK (public.app_is_super_admin() OR "tenantId" = public.app_tenant_id())';
 END
