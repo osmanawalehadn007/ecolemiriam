@@ -93,6 +93,9 @@ get_service() {
 #   1. Absence de marqueurs de conflit Git dans les fichiers de config
 #   2. `caddy validate` passe (syntaxe Caddyfile correcte)
 # Retourne 0 si OK, 1 si invalide (et affiche l'erreur).
+# IMPORTANT : utilise echo + return 1 (PAS err()) pour que l'appelant
+# puisse afficher son propre message et que les logs de debug ci-dessous
+# soient effectivement imprimés.
 validate_caddy() {
   local caddyfile="${DOCKER_DIR}/caddy/Caddyfile"
   local upstream_simple="${DOCKER_DIR}/caddy/upstream-simple.conf"
@@ -101,8 +104,8 @@ validate_caddy() {
   for f in "$caddyfile" "$UPSTREAM_FILE" "$upstream_simple"; do
     [ -f "$f" ] || continue
     if grep -nE '^<{7} |^>{7} |^={7}$' "$f" 2>/dev/null | grep -q .; then
-      err "Configuration Caddy corrompue : marqueurs de conflit Git dans $f"
-      err "Lancer : git status && git diff pour résoudre, puis recommencer le déploiement."
+      echo -e "${RED}[ERREUR]${NC} Configuration Caddy corrompue : marqueurs de conflit Git dans $f"
+      echo -e "${RED}[ERREUR]${NC} Lancer : git status && git diff pour résoudre, puis recommencer le déploiement."
       return 1
     fi
   done
@@ -112,16 +115,37 @@ validate_caddy() {
   # (inodes différents). On recrée le conteneur Caddy pour forcer la
   # relecture, puis on valide.
   docker restart ecolemiriam-caddy 2>/dev/null
-  sleep 3
 
-  if ! docker exec ecolemiriam-caddy caddy validate --config /etc/caddy/Caddyfile 2>&1 | grep -q "Valid configuration"; then
-    err "Configuration Caddy invalide (caddy validate a échoué)"
-    err "Logs :"
-    docker exec ecolemiriam-caddy caddy validate --config /etc/caddy/Caddyfile 2>&1 | tail -5
+  # Attendre que le conteneur soit prêt à accepter des docker exec
+  # (au lieu d'un sleep 3 fixe qui peut être insuffisant sur un VPS chargé)
+  local wait_caddy=0
+  while [ "$wait_caddy" -lt 30 ]; do
+    if docker exec ecolemiriam-caddy true 2>/dev/null; then
+      break
+    fi
+    sleep 1
+    wait_caddy=$((wait_caddy + 1))
+  done
+  if [ "$wait_caddy" -ge 30 ]; then
+    echo -e "${RED}[ERREUR]${NC} Conteneur Caddy non prêt après 30s (docker exec échoue)"
+    echo "Logs : docker logs ecolemiriam-caddy --tail 20"
     return 1
   fi
 
-  return 0
+  # Lancer caddy validate et capturer la sortie complète
+  local validate_output
+  validate_output=$(docker exec ecolemiriam-caddy caddy validate --config /etc/caddy/Caddyfile 2>&1) || true
+
+  if echo "$validate_output" | grep -q "Valid configuration"; then
+    return 0
+  fi
+
+  # Échec — afficher la sortie complète pour le debug
+  echo -e "${RED}[ERREUR]${NC} Configuration Caddy invalide (caddy validate a échoué)"
+  echo "=== Sortie caddy validate ==="
+  echo "$validate_output" | tail -20
+  echo "============================="
+  return 1
 }
 
 # Met à jour les fichiers upstream de Caddy et recharge
