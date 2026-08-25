@@ -42,8 +42,20 @@ const getDashboardData = unstable_cache(
     const isScoped = scope?.isRestricted && scope.classeIds.length > 0;
     const scopeDenyAll = scope?.isRestricted && scope.classeIds.length === 0;
 
-    const teacherClasseFilter = isScoped
+    // Filtre pour les modèles qui ont un FK classeId vers Classe
+    // (Eleve, Absence.eleve.classeId, Note.eleve.classeId, etc.)
+    const teacherEleveClasseFilter = isScoped
       ? { classeId: { in: scope.classeIds } }
+      : scopeDenyAll
+        ? { id: "__none__" as const }
+        : {};
+
+    // Filtre pour le modèle Classe lui-même : on filtre par `id` (sa PK),
+    // PAS par `classeId` (qui n'existe pas sur Classe — c'est un FK sur les
+    // autres modèles). Bug précédent : teacherClasseFilter utilisait
+    // classeId pour prisma.classe.count() → PrismaClientValidationError.
+    const teacherClasseIdFilter = isScoped
+      ? { id: { in: scope.classeIds } }
       : scopeDenyAll
         ? { id: "__none__" as const }
         : {};
@@ -52,17 +64,13 @@ const getDashboardData = unstable_cache(
       tenantId,
       ...(isScoped || scopeDenyAll ? {} : eleveFilter),
       deletedAt: null,
-      ...(isScoped
-        ? { classeId: { in: scope.classeIds } }
-        : scopeDenyAll
-          ? { id: "__none__" as const }
-          : {}),
+      ...teacherEleveClasseFilter,
     } as Prisma.EleveWhereInput;
 
     const classeWhere = {
       tenantId,
       ...(isScoped || scopeDenyAll ? {} : classeFilter),
-      ...teacherClasseFilter,
+      ...teacherClasseIdFilter,
     } as Prisma.ClasseWhereInput;
 
     const absenceWhere = {
@@ -217,6 +225,18 @@ export default async function DashboardPage() {
   // /login qui créait une boucle de redirection.
   if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session);
+
+  // Les rôles PARENT et STUDENT n'ont pas accès au dashboard administrateur
+  // (les requêtes Prisma groupBy/count sur eleves/absences/etc. ne
+  // correspondent pas à leur périmètre). On les redirige vers les pages
+  // qu'ils peuvent effectivement consulter.
+  const role = session.user.role as Role;
+  if (role === "PARENT") {
+    redirect("/absences");
+  }
+  if (role === "STUDENT") {
+    redirect("/notes");
+  }
 
   const eleveFilter = siteFilterForModel("eleve", session.user);
   const classeFilter = siteFilterForModel("classe", session.user);

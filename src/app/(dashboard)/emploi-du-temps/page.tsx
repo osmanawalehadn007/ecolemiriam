@@ -7,17 +7,27 @@ import { Header } from "@/components/layout/Header";
 import { EmploiDuTempsView } from "@/components/emploi-du-temps/EmploiDuTempsView";
 import { fuzzyFind } from "@/lib/text-match";
 import { getTranslations } from "next-intl/server";
-import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-scope";
+import { siteFilterForModel, personalScopeFilter, mergeFilters, type SessionSiteClaims } from "@/lib/site-scope";
 import { getSitesForUser } from "@/lib/actions/eleve";
 import { getSiteColorMap } from "@/lib/site-colors";
 
 // Les fragments d'isolation sont construits ici, au plus près des requêtes :
 // passés en paramètres, ils n'étaient plus rattachables à leur origine, ni par
 // un relecteur ni par l'analyse statique.
-async function getEmploiData(tenantId: string, claims: SessionSiteClaims) {
+async function getEmploiData(tenantId: string, claims: SessionSiteClaims & { userId?: string; id?: string }) {
+  // Filtre de périmètre personnel pour PARENT/STUDENT : ne retient que les
+  // classes contenant leurs enfants (ou la classe de l'élève lui-même).
+  const personalEleve = personalScopeFilter(claims, null);
+  const hasPersonalScope = Object.keys(personalEleve).length > 0;
+  const classePersonal = hasPersonalScope ? { eleves: { some: personalEleve } } : {};
+  const emploiPersonal = hasPersonalScope ? { classe: { eleves: { some: personalEleve } } } : {};
+
   const [classes, matieres, enseignants, emplois, salles, disponibilites] = await Promise.all([
     prisma.classe.findMany({
-      where: { tenantId, ...siteFilterForModel("classe", claims) },
+      where: mergeFilters(
+        { tenantId, ...siteFilterForModel("classe", claims) },
+        classePersonal
+      ),
       select: {
         id: true,
         nom: true,
@@ -37,7 +47,10 @@ async function getEmploiData(tenantId: string, claims: SessionSiteClaims) {
       orderBy: { user: { name: "asc" } },
     }),
     prisma.emploiTemps.findMany({
-      where: { tenantId, ...siteFilterForModel("emploiTemps", claims) },
+      where: mergeFilters(
+        { tenantId, ...siteFilterForModel("emploiTemps", claims) },
+        emploiPersonal
+      ),
       include: {
         matiere: { select: { nom: true, code: true, couleur: true } },
         classe: { select: { nom: true } },

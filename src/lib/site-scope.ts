@@ -531,6 +531,21 @@ export function eleveScopeFilter(
 }
 
 /**
+ * Filtre de périmètre personnel pour le modèle `Classe` : ne retient que les
+ * classes contenant au moins un enfant du parent (ou la classe de l'élève).
+ *
+ * Retourne `{}` pour les rôles non-relationnels (pas de filtrage supplémentaire).
+ * À combiner avec `siteFilterForModel("classe", …)` via `mergeFilters`.
+ */
+export function classeRelationScopeFilter(
+  claims: SessionSiteClaims & { userId?: string; id?: string }
+): Record<string, unknown> {
+  const personal = personalScopeFilter(claims, null);
+  if (Object.keys(personal).length === 0) return {};
+  return { eleves: { some: personal } };
+}
+
+/**
  * Le `siteId` à inscrire sur un enregistrement créé par cet utilisateur.
  * Renvoie `null` quand aucun site unique ne peut être déduit (direction
  * générale en vue « tous les sites »).

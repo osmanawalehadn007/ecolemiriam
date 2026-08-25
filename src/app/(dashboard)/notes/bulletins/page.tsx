@@ -10,20 +10,30 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, List, Award } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import { siteFilterForModel, personalScopeFilter, mergeFilters } from "@/lib/site-scope";
 import type { Role } from "@prisma/client";
 
 async function getBulletinsData(
   tenantId: string,
-  scope?: { classeIds: string[]; isRestricted: boolean }
+  scope?: { classeIds: string[]; isRestricted: boolean },
+  claims?: { role?: string | null; siteId?: string | null; siteIds?: string[] | null; tenantHasSites?: boolean; userId?: string; id?: string }
 ) {
-  const classeWhere = {
-    tenantId,
-    ...(scope?.isRestricted && scope.classeIds.length > 0
+  // Filtre de périmètre personnel pour PARENT/STUDENT : ne retient que les
+  // classes contenant leurs enfants (ou la classe de l'élève lui-même).
+  const personalClasse = claims ? personalScopeFilter(claims, null) : {};
+  const hasPersonalScope = Object.keys(personalClasse).length > 0;
+  const siteClasseFilter = claims ? siteFilterForModel("classe", claims) : {};
+
+  const classeWhere = mergeFilters(
+    { tenantId },
+    siteClasseFilter,
+    scope?.isRestricted && scope.classeIds.length > 0
       ? { id: { in: scope.classeIds } }
       : scope?.isRestricted
         ? { id: "__none__" }
-        : {}),
-  };
+        : {},
+    hasPersonalScope ? { eleves: { some: personalClasse } } : {}
+  );
 
   const [classes, periodes] = await Promise.all([
     // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
@@ -31,7 +41,7 @@ async function getBulletinsData(
       where: classeWhere,
       include: {
         // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
-        eleves: { where: { statut: "ACTIF" }, select: { id: true, nom: true, prenom: true, matricule: true }, orderBy: { prenom: "asc" } },
+        eleves: { where: { statut: "ACTIF", ...(hasPersonalScope ? personalClasse : {}) }, select: { id: true, nom: true, prenom: true, matricule: true }, orderBy: { prenom: "asc" } },
         profPrincipal: { include: { user: { select: { name: true } } } },
       },
       orderBy: { nom: "asc" },
@@ -59,7 +69,7 @@ export default async function BulletinsPage() {
     ? await getTeacherScope(session.user.tenantId, session.user.id, session.user.role as Role)
     : undefined;
 
-  const { classes, periodes, anneeId } = await getBulletinsData(session.user.tenantId, scope);
+  const { classes, periodes, anneeId } = await getBulletinsData(session.user.tenantId, scope, session.user);
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">

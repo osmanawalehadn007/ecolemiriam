@@ -15,7 +15,7 @@ import { getTranslations } from "next-intl/server";
 import { unstable_cache } from "next/cache";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import type { Role, Prisma } from "@prisma/client";
-import { siteFilterForModel, mergeFilters, type SessionSiteClaims } from "@/lib/site-scope";
+import { siteFilterForModel, eleveScopeFilter, mergeFilters, isRelationScopedRole, type SessionSiteClaims } from "@/lib/site-scope";
 import { getSitesForUserCached } from "@/lib/sites-cached";
 import { getSiteColorMap } from "@/lib/site-colors";
 
@@ -26,6 +26,9 @@ const getNotesData = unstable_cache(
     // Revendications de site réduites au strict nécessaire : elles entrent dans
     // la clé de cache, on n'y met donc rien d'identifiant (ni id, ni e-mail).
     claims: SessionSiteClaims,
+    // userId pour le périmètre personnel PARENT/STUDENT. Vide pour les autres
+    // rôles → pas de fragmentation du cache pour les rôles site-scopés.
+    userId: string,
     classeId?: string,
     scope?: { classeIds: string[]; matiereIds: string[]; isRestricted: boolean }
   ) => {
@@ -45,9 +48,12 @@ const getNotesData = unstable_cache(
     // Le filtre de site s'applique dans tous les cas : auparavant il sautait dès
     // qu'une `classeId` était fournie dans l'URL, ce qui laissait lire les
     // statistiques de notes d'une classe d'un autre site.
+    // eleveScopeFilter combine le filtrage par site ET le périmètre personnel
+    // (lien familial pour PARENT, userId pour STUDENT). Sans cela, un parent
+    // disposant de notes:read voit les statistiques de notes de tous les élèves.
     const noteWhere = mergeFilters(
       { tenantId, ...(classeId ? { classeId } : {}) },
-      siteFilterForModel("note", claims),
+      eleveScopeFilter({ ...claims, userId }, "eleve"),
       scope?.isRestricted && scope.classeIds.length > 0
         ? { eleve: { classeId: { in: scope.classeIds } } }
         : scope?.isRestricted
@@ -131,7 +137,9 @@ export default async function NotesPage({
     : undefined;
 
   // Récupérer les classes et matières (filtrées pour les enseignants)
-  const { classes, matieres, statsNotes } = await getNotesData(tenantId, session.user.siteId ?? null, noteClaims, classeId, scope);
+  // userId pour le périmètre personnel PARENT/STUDENT (cache per-user).
+  const userIdForScope = isRelationScopedRole(session.user.role) ? session.user.id : "";
+  const { classes, matieres, statsNotes } = await getNotesData(tenantId, session.user.siteId ?? null, noteClaims, userIdForScope, classeId, scope);
 
   // Si classe et matière sont sélectionnées, on récupère les évaluations correspondantes
   let evaluations: any[] = [];

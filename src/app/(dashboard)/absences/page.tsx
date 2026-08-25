@@ -11,7 +11,7 @@ import { ClipboardCheck, Plus } from "lucide-react";
 import { startOfDay, endOfDay, subDays } from "date-fns";
 import { getTranslations } from "next-intl/server";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, eleveScopeFilter, mergeFilters } from "@/lib/site-scope";
 
 async function getAbsencesData(
   tenantId: string,
@@ -21,15 +21,15 @@ async function getAbsencesData(
   const today = new Date();
   const sevenDaysAgo = subDays(today, 7);
 
-  const absenceWhere = {
-    tenantId,
-    ...siteFilter,
-    ...(classeFilter?.isRestricted && classeFilter.classeIds.length > 0
+  const absenceWhere = mergeFilters(
+    { tenantId },
+    siteFilter,
+    classeFilter?.isRestricted && classeFilter.classeIds.length > 0
       ? { eleve: { classeId: { in: classeFilter.classeIds } } }
       : classeFilter?.isRestricted
         ? { id: "__none__" }
-        : {}),
-  };
+        : {}
+  );
 
   const [absenceStats, recentesAbsences] = await Promise.all([
     prisma.absence.groupBy({
@@ -77,7 +77,10 @@ export default async function AbsencesPage() {
   if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "absences:read");
 
-  const siteFilter = siteFilterForModel("absence", session.user);
+  // eleveScopeFilter combine le filtrage par site ET le périmètre personnel
+  // (lien familial pour PARENT, userId pour STUDENT). Sans cela, un parent
+  // disposant de absences:read voit toutes les absences du tenant.
+  const siteFilter = eleveScopeFilter(session.user, "eleve");
   const classeFilter = isTeacherRole(session.user.role)
     ? await getTeacherScope(session.user.tenantId, session.user.id, session.user.role)
     : undefined;
