@@ -22,7 +22,9 @@ import {
 } from "date-fns";
 
 type Periode = "today" | "week" | "month" | "semester" | "year";
+export type FinanceType = "all" | "recettes" | "depenses" | "factures";
 
+/** Plage pour une période relative (aujourd'hui, cette semaine, etc.) */
 function getPeriodRange(periode: Periode) {
   const today = new Date();
   switch (periode) {
@@ -46,11 +48,79 @@ function getPeriodRange(periode: Periode) {
   }
 }
 
-async function getFinanceData(tenantId: string, claims: SessionSiteClaims, periode: Periode, activeSite: string) {
+/** Plage pour un mois spécifique (format "YYYY-MM") */
+function getMonthRange(monthParam: string) {
+  const [yearStr, monthStr] = monthParam.split("-");
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10) - 1; // 0-indexed
+  if (isNaN(year) || isNaN(month) || month < 0 || month > 11) return null;
+  return {
+    start: new Date(year, month, 1, 0, 0, 0, 0),
+    end: endOfMonth(new Date(year, month, 1)),
+  };
+}
+
+/** Récupère les mois disponibles dans la DB (factures + dépenses + paiements) */
+async function getAvailableMonths(tenantId: string, claims: SessionSiteClaims): Promise<string[]> {
+  const siteFilter = siteFilterForModel("facture", claims);
+  const depenseFilter = siteFilterForModel("depense", claims);
+
+  const [factureDates, paiementDates, depenseDates] = await Promise.all([
+    prisma.facture.findMany({
+      where: { tenantId, ...siteFilter },
+      select: { createdAt: true },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
+    prisma.paiement.findMany({
+      where: { facture: { tenantId, ...siteFilter } },
+      select: { date: true },
+      orderBy: { date: "desc" },
+      take: 500,
+    }),
+    prisma.depense.findMany({
+      where: { tenantId, ...depenseFilter },
+      select: { date: true },
+      orderBy: { date: "desc" },
+      take: 500,
+    }),
+  ]);
+
+  const months = new Set<string>();
+  for (const f of factureDates) {
+    const d = new Date(f.createdAt);
+    months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  for (const p of paiementDates) {
+    const d = new Date(p.date);
+    months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  for (const d of depenseDates) {
+    const dt = new Date(d.date);
+    months.add(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`);
+  }
+
+  // Toujours inclure le mois courant
+  const now = new Date();
+  months.add(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+
+  return Array.from(months).sort((a, b) => b.localeCompare(a));
+}
+
+async function getFinanceData(
+  tenantId: string,
+  claims: SessionSiteClaims,
+  periode: Periode,
+  activeSite: string,
+  monthRange: { start: Date; end: Date } | null,
+) {
   const siteFilter = siteFilterForModel("facture", claims);
   const depenseFilter = siteFilterForModel("depense", claims);
   const budgetFilter = siteFilterForModel("budget", claims);
-  const { start, end } = getPeriodRange(periode);
+
+  // Si monthRange est fourni, il remplace la période relative
+  const { start, end } = monthRange ?? getPeriodRange(periode);
 
   const [
     totalAgg,
@@ -62,6 +132,8 @@ async function getFinanceData(tenantId: string, claims: SessionSiteClaims, perio
     depenses,
     budgets,
     remisesCaisse,
+    // Factures émises dans la période (pour l'onglet "factures")
+    facturesPeriode,
   ] = await Promise.all([
     // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.paiement.aggregate({
@@ -92,7 +164,7 @@ async function getFinanceData(tenantId: string, claims: SessionSiteClaims, perio
     }),
     prisma.facture.aggregate({
       _sum: { montant: true },
-      where: { tenantId, ...siteFilter },
+      where: { tenantId, ...siteFilter, createdAt: { gte: start, lte: end } },
     }),
     // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.paiement.aggregate({
@@ -141,6 +213,19 @@ async function getFinanceData(tenantId: string, claims: SessionSiteClaims, perio
       take: 100,
     }),
     getRemisesCaisse(activeSite === "all" ? null : activeSite),
+    // Factures émises dans la période
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
+    prisma.facture.findMany({
+      where: { tenantId, ...siteFilter, createdAt: { gte: start, lte: end } },
+      include: {
+        eleve: { select: { nom: true, prenom: true, matricule: true, classe: { select: { nom: true } } } },
+        site: { select: { nom: true } },
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId + siteFilter sur la table racine)
+        paiements: { select: { montant: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
   ]);
 
   return {
@@ -154,6 +239,7 @@ async function getFinanceData(tenantId: string, claims: SessionSiteClaims, perio
     budgets,
     remisesCaisse,
     paiements,
+    facturesPeriode,
     periode,
   };
 }
@@ -161,7 +247,7 @@ async function getFinanceData(tenantId: string, claims: SessionSiteClaims, perio
 export default async function FinancesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ siteId?: string; periode?: string }>;
+  searchParams: Promise<{ siteId?: string; periode?: string; month?: string; type?: string }>;
 }) {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/select-tenant");
@@ -176,7 +262,7 @@ export default async function FinancesPage({
   ]);
 
   const sessionSiteId = (session.user as { siteId?: string | null }).siteId ?? null;
-  const { siteId, periode } = sp;
+  const { siteId, periode, month, type } = sp;
 
   const activeSite = (() => {
     if (!siteId) return sessionSiteId ? sessionSiteId : "all";
@@ -190,6 +276,14 @@ export default async function FinancesPage({
   const validPeriodes: Periode[] = ["today", "week", "month", "semester", "year"];
   const activePeriode = validPeriodes.includes(periode as Periode) ? (periode as Periode) : "month";
 
+  // Mode "mois spécifique" : si month=YYYY-MM est fourni, il override la période
+  const monthRange = month ? getMonthRange(month) : null;
+  const activeMonth: string | null = monthRange ? (month ?? null) : null;
+
+  // Filtre par type
+  const validTypes: FinanceType[] = ["all", "recettes", "depenses", "factures"];
+  const activeType: FinanceType = validTypes.includes(type as FinanceType) ? (type as FinanceType) : "all";
+
   const financeClaims: SessionSiteClaims = {
     role: session.user.role,
     siteId: activeSite === "all" ? null : activeSite,
@@ -197,12 +291,13 @@ export default async function FinancesPage({
     tenantHasSites: (session.user as { tenantHasSites?: boolean }).tenantHasSites ?? false,
   };
 
-  const { totalEncaisse, totalFactures, totalRestant, cashPendingTotal, cashPending, totalDepenses, depenses, budgets, remisesCaisse, paiements } = await getFinanceData(
-    session.user.tenantId,
-    financeClaims,
-    activePeriode,
-    activeSite
-  );
+  // Récupérer les mois disponibles + les données financières en parallèle
+  const [availableMonths, financeData] = await Promise.all([
+    getAvailableMonths(session.user.tenantId, financeClaims),
+    getFinanceData(session.user.tenantId, financeClaims, activePeriode, activeSite, monthRange),
+  ]);
+
+  const { totalEncaisse, totalFactures, totalRestant, cashPendingTotal, cashPending, totalDepenses, depenses, budgets, remisesCaisse, paiements, facturesPeriode } = financeData;
 
   const currentSiteName = activeSite === "all"
     ? tCommon("allSites")
@@ -236,9 +331,13 @@ export default async function FinancesPage({
           depenses={depenses}
           budgets={budgets}
           paiements={paiements}
+          facturesPeriode={facturesPeriode}
           remisesCaisse={remisesCaisse}
           activeSite={activeSite}
           activePeriode={activePeriode}
+          activeMonth={activeMonth}
+          activeType={activeType}
+          availableMonths={availableMonths}
           siteColors={siteColors}
           currentUser={session.user}
           currentSiteName={currentSiteName}

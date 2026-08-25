@@ -2570,6 +2570,23 @@
     "remiseRejected": "Handover rejected",
     "confirmRejectRemise": "Confirm rejection of this handover?",
     "invalidAmount": "Invalid amount",
-    "selectRecipient": "Please select a recipient"
+    "selectRecipient": "Please select a recipient",
+    "historyByMonth": "History by month",
+    "selectMonth": "Select a month",
+    "resetMonth": "Reset",
+    "typeAll": "All",
+    "typeRecettes": "Revenue",
+    "typeDepenses": "Expenses",
+    "typeFactures": "Invoices",
+    "invoicesForPeriod": "Invoices issued (period)",
+    "noInvoicesPeriod": "No invoices issued for this period.",
+    "colNumber": "No.",
+    "colStatus": "Status",
+    "colPaid": "Paid",
+    "colRemaining": "Remaining",
+    "statusPaid": "Paid",
+    "statusPending": "Pending",
+    "statusOverdue": "Overdue",
+    "statusCancelled": "Cancelled"
   }
 }

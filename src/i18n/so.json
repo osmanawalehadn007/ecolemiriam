@@ -2482,6 +2482,23 @@
     "remiseRejected": "Gudbin la diiday",
     "confirmRejectRemise": "Ma xaqiijinaysa diididdan gudbinta?",
     "invalidAmount": "Lacag khaldan",
-    "selectRecipient": "Fadlan dooro qofka heli doona"
+    "selectRecipient": "Fadlan dooro qofka heli doona",
+    "historyByMonth": "Taariikhda bishii",
+    "selectMonth": "Dooro bil",
+    "resetMonth": "Dib u eeg",
+    "typeAll": "Dhammaan",
+    "typeRecettes": "Dakhli",
+    "typeDepenses": "Kharashaad",
+    "typeFactures": "Faaturo",
+    "invoicesForPeriod": "Faaturo la abuuray (muddo)",
+    "noInvoicesPeriod": "Ma jirto faaturo la abuuray muddadan.",
+    "colNumber": "N.",
+    "colStatus": "Xaalad",
+    "colPaid": "La bixiyay",
+    "colRemaining": "Hadhka",
+    "statusPaid": "La bixiyay",
+    "statusPending": "Sugitaan",
+    "statusOverdue": "Daahsoon",
+    "statusCancelled": "La joojiyay"
   }
 }

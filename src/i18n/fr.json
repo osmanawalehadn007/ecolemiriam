@@ -2578,6 +2578,23 @@
     "remiseRejected": "Remise rejetée",
     "confirmRejectRemise": "Confirmer le rejet de cette remise ?",
     "invalidAmount": "Montant invalide",
-    "selectRecipient": "Veuillez sélectionner un destinataire"
+    "selectRecipient": "Veuillez sélectionner un destinataire",
+    "historyByMonth": "Historique par mois",
+    "selectMonth": "Sélectionner un mois",
+    "resetMonth": "Réinitialiser",
+    "typeAll": "Tout",
+    "typeRecettes": "Recettes",
+    "typeDepenses": "Dépenses",
+    "typeFactures": "Factures",
+    "invoicesForPeriod": "Factures émises (période)",
+    "noInvoicesPeriod": "Aucune facture émise pour cette période.",
+    "colNumber": "N°",
+    "colStatus": "Statut",
+    "colPaid": "Payé",
+    "colRemaining": "Restant",
+    "statusPaid": "Payée",
+    "statusPending": "En attente",
+    "statusOverdue": "En retard",
+    "statusCancelled": "Annulée"
   }
 }
