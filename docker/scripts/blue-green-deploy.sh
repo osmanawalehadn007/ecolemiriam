@@ -88,6 +88,30 @@ get_service() {
   echo "app-$1"
 }
 
+# Bootstrap des fichiers upstream si absents (bug Docker mount)
+# Docker crée des répertoires parasites si les fichiers manquent au mount.
+# On s'assure qu'ils existent en tant que fichiers réguliers.
+ensure_upstream_files() {
+  local files=("upstream.conf" "upstream-simple.conf")
+  for f in "${files[@]}"; do
+    local path="${DOCKER_DIR}/caddy/${f}"
+    local example="${path}.example"
+    if [ ! -f "$path" ]; then
+      if [ -d "$path" ]; then
+        warn "Suppression du répertoire parasite ${f} (bug Docker mount)"
+        rm -rf "$path"
+      fi
+      if [ -f "$example" ]; then
+        warn "Création de ${f} depuis ${f}.example"
+        cp "$example" "$path"
+      else
+        warn "Création de ${f} avec défaut blue"
+        echo "reverse_proxy app-blue:3000" > "$path"
+      fi
+    fi
+  done
+}
+
 # Valide la configuration Caddy avant tout reload.
 # Vérifie :
 #   1. Absence de marqueurs de conflit Git dans les fichiers de config
@@ -112,9 +136,9 @@ validate_caddy() {
 
   # 2. Valider la syntaxe via caddy validate
   # Les bind mounts :ro ne reflètent pas les changements après git pull
-  # (inodes différents). On recrée le conteneur Caddy pour forcer la
-  # relecture, puis on valide.
-  docker restart ecolemiriam-caddy 2>/dev/null
+  # (inodes différents). On recharge la config Caddy (zero downtime),
+  # et seulement si ça échoue, on fait un docker restart (fallback).
+  docker exec ecolemiriam-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1 || docker restart ecolemiriam-caddy
 
   # Attendre que le conteneur soit prêt à accepter des docker exec
   # (au lieu d'un sleep 3 fixe qui peut être insuffisant sur un VPS chargé)
@@ -357,7 +381,9 @@ deploy_staging() {
   # Si le Caddyfile est corrompu (marqueurs de conflit, syntaxe invalide),
   # on refuse de démarrer le déploiement — même si on ne touche pas à
   # Caddy dans cette phase, la promotion échouerait ensuite.
-  log "0/6 — Validation de la configuration Caddy..."
+  ensure_upstream_files
+
+  log "0/5 — Validation de la configuration Caddy..."
   if ! validate_caddy; then
     err "Configuration Caddy invalide. Déploiement annulé. Production intacte."
     exit 1
@@ -370,26 +396,26 @@ deploy_staging() {
   echo ""
 
   # Phase 1 : Backup
-  log "1/6 — Backup pré-déploiement (pgBackRest)..."
+  log "1/5 — Backup pré-déploiement (pgBackRest)..."
   docker exec ecolemiriam-pgbackrest pgbackrest --stanza=ecolemiriam --type=incr backup 2>/dev/null || warn "Backup a échoué — continuer"
 
   # Phase 2 : Pull
   if [ "${BUILD_ONLY:-false}" != "true" ]; then
-    log "2/6 — Login GHCR + pull de la nouvelle image..."
+    log "2/5 — Login GHCR + pull de la nouvelle image..."
     ghcr_login
     docker pull "${GHCR_IMAGE}"
   else
-    log "2/6 — Image construite localement (skip pull)"
+    log "2/5 — Image construite localement (skip pull)"
   fi
 
   # Phase 3 : Démarrer le conteneur inactif
-  log "3/6 — Démarrage du conteneur staging ($INACTIVE_SVC)..."
+  log "3/5 — Démarrage du conteneur staging ($INACTIVE_SVC)..."
   docker stop "$INACTIVE_CTR" 2>/dev/null || true
   docker rm "$INACTIVE_CTR" 2>/dev/null || true
   docker compose -f "$COMPOSE_FILE" up -d --no-deps --pull never "$INACTIVE_SVC"
 
   # Phase 4 : Healthcheck
-  log "4/6 — Healthcheck sur le staging ($INACTIVE_CTR)..."
+  log "4/5 — Healthcheck sur le staging ($INACTIVE_CTR)..."
   if ! healthcheck_container "$INACTIVE_CTR" 90; then
     err "Healthcheck échoué sur le staging"
     log "Logs du staging :"
@@ -399,19 +425,8 @@ deploy_staging() {
     exit 1
   fi
 
-  # Phase 5 : Application des policies RLS (N-5)
-  # Les migrations Prisma s'exécutent au démarrage du conteneur (healthcheck
-  # passé = tables créées). On applique ensuite les policies RLS pour
-  # garantir l'isolation multi-tenant au niveau base de données.
-  log "5/6 — Application des policies RLS..."
-  if ! bash "$SCRIPT_DIR/apply-rls.sh"; then
-    err "Application RLS échouée sur le staging"
-    log "Le slot actif ($ACTIVE) n'a PAS été modifié. Production intacte."
-    exit 1
-  fi
-
-  # Phase 6 : Smoke tests
-  log "6/6 — Smoke tests sur le staging..."
+  # Phase 5 : Smoke tests
+  log "5/5 — Smoke tests sur le staging..."
   if ! bash "$SMOKE_TEST" "$INACTIVE_CTR"; then
     err "Smoke tests échoués sur le staging"
     log "Le conteneur staging reste disponible pour investigation :"
@@ -438,6 +453,9 @@ promote_to_production() {
   log "=== Phase PROMOTION — bascule du trafic vers $INACTIVE ==="
   echo ""
 
+  # ── Pré-check : s'assurer que les fichiers upstream existent ──
+  ensure_upstream_files
+
   # Vérifier que le staging tourne encore
   if ! docker ps --format '{{.Names}}' | grep -q "^${INACTIVE_CTR}$"; then
     err "Le conteneur staging ($INACTIVE_CTR) n'est plus en cours d'exécution."
@@ -446,19 +464,29 @@ promote_to_production() {
   fi
 
   # Vérifier que le staging est toujours sain
-  log "1/4 — Vérification santé du staging..."
+  log "1/5 — Vérification santé du staging..."
   if ! healthcheck_container "$INACTIVE_CTR" 30; then
     err "Le staging ($INACTIVE_CTR) ne répond pas. Promotion annulée."
     exit 1
   fi
 
+  # Application des policies RLS (avant la bascule Caddy)
+  # Les deux slots (blue/green) partagent la même DB. Appliquer les policies
+  # RLS pendant le staging modifie le schéma de la DB utilisée par la production.
+  # C'est plus sûr de le faire pendant la promotion, juste avant la bascule.
+  log "2/5 — Application des policies RLS..."
+  if ! bash "$SCRIPT_DIR/apply-rls.sh"; then
+    err "Application RLS échouée — Promotion annulée. Production intacte."
+    exit 1
+  fi
+
   # Bascule Caddy
-  log "2/4 — Bascule Caddy vers $INACTIVE..."
+  log "3/5 — Bascule Caddy vers $INACTIVE..."
   switch_caddy "$INACTIVE"
   sleep 2
 
   # Healthcheck post-bascule
-  log "3/4 — Healthcheck post-bascule..."
+  log "4/5 — Healthcheck post-bascule..."
   POST_SWITCH_OK=false
   for i in $(seq 1 6); do
     if docker exec "$INACTIVE_CTR" curl -sf http://localhost:3000/api/health 2>/dev/null | grep -q '"ok":true'; then
@@ -477,7 +505,7 @@ promote_to_production() {
   log "  → Trafic basculé vers $INACTIVE ✓"
 
   # Grace period + arrêt de l'ancien
-  log "4/4 — Grace period (10s) puis arrêt de l'ancien ($ACTIVE_CTR)..."
+  log "5/5 — Grace period (10s) puis arrêt de l'ancien ($ACTIVE_CTR)..."
   sleep 10
 
   if ! docker exec "$INACTIVE_CTR" curl -sf http://localhost:3000/api/health 2>/dev/null | grep -q '"ok":true'; then
