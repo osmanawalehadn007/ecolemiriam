@@ -185,6 +185,7 @@ export function EleveDetailView({
   matieres = [],
   dispenses = [],
   situationFinanciere,
+  userRole,
 }: {
   eleve: Eleve;
   matieres?: MatiereInfo[];
@@ -200,10 +201,12 @@ export function EleveDetailView({
     exclusionMotif: string | null;
     exclusionDateDebut: Date | null;
   };
+  userRole?: string;
 }) {
   const t = useTranslations("eleveDetail");
   const router = useRouter();
-  const [tab, setTab] = useState("notes");
+  const isAccountant = userRole === "ACCOUNTANT";
+  const [tab, setTab] = useState(isAccountant ? "facturation" : "notes");
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -258,27 +261,29 @@ export function EleveDetailView({
             {t("backToList")}
           </Link>
         </Button>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm" className="gap-2">
-            <Link href={`/eleves/${eleve.id}/modifier`}>
-              <Edit className="h-4 w-4" />
-              {t("editProfile")}
-            </Link>
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            className="gap-2"
-            onClick={() => setShowDeleteConfirm(true)}
-          >
-            <Trash2 className="h-4 w-4" />
-            {t("deleteStudent")}
-          </Button>
-        </div>
+        {!isAccountant && (
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm" className="gap-2">
+              <Link href={`/eleves/${eleve.id}/modifier`}>
+                <Edit className="h-4 w-4" />
+                {t("editProfile")}
+              </Link>
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="gap-2"
+              onClick={() => setShowDeleteConfirm(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              {t("deleteStudent")}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Delete confirmation dialog */}
-      {showDeleteConfirm && (
+      {showDeleteConfirm && !isAccountant && (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="pt-6 space-y-4">
             <div className="flex items-start gap-3">
@@ -357,30 +362,44 @@ export function EleveDetailView({
         </div>
       </Card>
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard
-          label={t("generalAverage")}
-          value={moyenneGenerale ? `${moyenneGenerale}/20` : "—"}
-          sub={t("notesCount", { count: eleve.notes.length })}
-          color={
-            moyenneGenerale
-              ? parseFloat(moyenneGenerale) >= 14
-                ? "text-green-600"
-                : parseFloat(moyenneGenerale) >= 10
-                ? "text-blue-600"
-                : "text-red-600"
-              : undefined
-          }
-        />
-        <StatCard label={t("absences")} value={totalAbsences} sub={t("latesCount", { count: totalRetards })} color="text-orange-600" />
-        <StatCard label={t("incidents")} value={eleve.incidents.length} color={eleve.incidents.length > 0 ? "text-red-600" : "text-green-600"} />
+      {/* KPI strip — comptable: seul le solde dû est pertinent */}
+      <div className={cn("grid gap-4", isAccountant ? "grid-cols-2 sm:grid-cols-2" : "grid-cols-2 sm:grid-cols-4")}>
+        {!isAccountant && (
+          <StatCard
+            label={t("generalAverage")}
+            value={moyenneGenerale ? `${moyenneGenerale}/20` : "—"}
+            sub={t("notesCount", { count: eleve.notes.length })}
+            color={
+              moyenneGenerale
+                ? parseFloat(moyenneGenerale) >= 14
+                  ? "text-green-600"
+                  : parseFloat(moyenneGenerale) >= 10
+                  ? "text-blue-600"
+                  : "text-red-600"
+                : undefined
+            }
+          />
+        )}
+        {!isAccountant && (
+          <StatCard label={t("absences")} value={totalAbsences} sub={t("latesCount", { count: totalRetards })} color="text-orange-600" />
+        )}
+        {!isAccountant && (
+          <StatCard label={t("incidents")} value={eleve.incidents.length} color={eleve.incidents.length > 0 ? "text-red-600" : "text-green-600"} />
+        )}
         <StatCard
           label={t("balanceDue")}
           value={`${(totalDu - totalPaye).toLocaleString()} FDJ`}
           sub={`${t("paid")}: ${totalPaye.toLocaleString()} FDJ`}
           color={totalDu - totalPaye > 0 ? "text-red-600" : "text-green-600"}
         />
+        {isAccountant && (
+          <StatCard
+            label={t("totalBilled")}
+            value={`${totalDu.toLocaleString()} FDJ`}
+            sub={`${eleve.factures.length} ${t("invoiceCount", { count: eleve.factures.length })}`}
+            color="text-blue-600"
+          />
+        )}
       </div>
 
       {/* Parent / tuteur */}
@@ -411,33 +430,43 @@ export function EleveDetailView({
         </Card>
       )}
 
-      {/* Tabs */}
+      {/* Tabs — comptable: seul l'onglet facturation est visible */}
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="notes" className="gap-1.5">
-            <BookOpen className="h-3.5 w-3.5" />
-            {t("tabNotes")}
-          </TabsTrigger>
-          <TabsTrigger value="absences" className="gap-1.5">
-            <CalendarX className="h-3.5 w-3.5" />
-            {t("tabAbsences")}
-          </TabsTrigger>
-          <TabsTrigger value="discipline" className="gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            {t("tabDiscipline")}
-          </TabsTrigger>
+          {!isAccountant && (
+            <TabsTrigger value="notes" className="gap-1.5">
+              <BookOpen className="h-3.5 w-3.5" />
+              {t("tabNotes")}
+            </TabsTrigger>
+          )}
+          {!isAccountant && (
+            <TabsTrigger value="absences" className="gap-1.5">
+              <CalendarX className="h-3.5 w-3.5" />
+              {t("tabAbsences")}
+            </TabsTrigger>
+          )}
+          {!isAccountant && (
+            <TabsTrigger value="discipline" className="gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {t("tabDiscipline")}
+            </TabsTrigger>
+          )}
           <TabsTrigger value="facturation" className="gap-1.5">
             <CreditCard className="h-3.5 w-3.5" />
             {t("tabBilling")}
           </TabsTrigger>
-          <TabsTrigger value="parcours" className="gap-1.5">
-            <TrendingUp className="h-3.5 w-3.5" />
-            {t("tabParcours")}
-          </TabsTrigger>
-          <TabsTrigger value="dispenses" className="gap-1.5">
-            <ShieldOff className="h-3.5 w-3.5" />
-            {t("tabDispenses")}
-          </TabsTrigger>
+          {!isAccountant && (
+            <TabsTrigger value="parcours" className="gap-1.5">
+              <TrendingUp className="h-3.5 w-3.5" />
+              {t("tabParcours")}
+            </TabsTrigger>
+          )}
+          {!isAccountant && (
+            <TabsTrigger value="dispenses" className="gap-1.5">
+              <ShieldOff className="h-3.5 w-3.5" />
+              {t("tabDispenses")}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* ─ Notes ─ */}

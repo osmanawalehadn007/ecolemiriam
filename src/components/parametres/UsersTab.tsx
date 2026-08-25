@@ -7,13 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Trash2, Power, Phone, Edit3, Check, X, Building2, MapPin, AlertTriangle, Search, Shield, GraduationCap, Briefcase, Users as UsersIcon, BookOpen, Users as UsersClass } from "lucide-react";
+import { Loader2, Plus, Trash2, Power, Phone, Edit3, Check, X, Building2, MapPin, AlertTriangle, Search, Shield, GraduationCap, Briefcase, Users as UsersIcon, BookOpen, Users as UsersClass, Upload } from "lucide-react";
 import { createUser, toggleUserActive, deleteUser, updateUserPhone, assignUserSites, getUserSites, getMatieresForAffectation, getClassesForAffectation, type UserFormData } from "@/lib/actions/parametres";
 import { addUserToTenant } from "@/lib/actions/user-tenant";
 import { useTranslations } from "next-intl";
 import type { AvailableTenant } from "@/auth.config";
 import type { Role } from "@prisma/client";
 import { cn } from "@/lib/utils";
+import { ImportEnseignantsDialog } from "./ImportEnseignantsDialog";
 
 interface UserItem {
   id: string;
@@ -95,6 +96,7 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
   const [phoneValue, setPhoneValue] = useState("");
   const [activeCategory, setActiveCategory] = useState<UserCategory>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showImportEnseignants, setShowImportEnseignants] = useState(false);
 
   const filteredUsers = users.filter((u) => {
     const matchesCategory =
@@ -388,11 +390,25 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
               {t("addToTenant")}
             </Button>
           )}
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowImportEnseignants(true)}>
+            <Upload className="h-4 w-4" />
+            {t("importEnseignants")}
+          </Button>
           <Button size="sm" className="gap-2" onClick={() => showForm ? setShowForm(false) : openWizard()}>
             <Plus className="h-4 w-4" />
             {t("addUser")}
           </Button>
         </div>
+      )}
+
+      {showImportEnseignants && canManage && (
+        <ImportEnseignantsDialog
+          onClose={() => setShowImportEnseignants(false)}
+          onImported={() => {
+            // Recharger la page pour récupérer les nouveaux utilisateurs
+            window.location.reload();
+          }}
+        />
       )}
 
       {/* Modal: Ajouter un user à un autre tenant */}

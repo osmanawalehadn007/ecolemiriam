@@ -16,7 +16,20 @@ const { auth } = NextAuth(authConfig);
  * le middleware retournait avant toute vérification de session. La racine est
  * traitée séparément, en égalité stricte.
  */
-const PUBLIC_PREFIXES = ["/login", "/register", "/api/auth", "/api/health", "/_next", "/select-tenant"];
+const PUBLIC_PREFIXES = [
+  "/login",
+  "/register",
+  "/api/auth",
+  "/api/health",
+  "/_next",
+  "/select-tenant",
+  // Routes de vérification email et (re)définition de mot de passe :
+  // accessibles sans session (l'utilisateur n'est pas encore connecté)
+  "/verify-email",
+  "/set-password",
+  "/forgot-password",
+  "/reset-password",
+];
 
 /** Chemins publics en correspondance exacte. */
 const PUBLIC_EXACT = new Set(["/", "/offline"]);

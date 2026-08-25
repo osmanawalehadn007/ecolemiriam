@@ -15,8 +15,9 @@ export default async function NouvelleFacturePage({
   if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "finance:write");
 
+  const anneeActuelle = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
   const siteFilter = siteFilterForModel("eleve", session.user);
-  const [eleves, classes] = await Promise.all([
+  const [eleves, classes, tarifs] = await Promise.all([
     prisma.eleve.findMany({
       where: { tenantId: session.user.tenantId, ...siteFilter, statut: "ACTIF" },
       select: {
@@ -24,14 +25,17 @@ export default async function NouvelleFacturePage({
         nom: true,
         prenom: true,
         matricule: true,
-        classe: { select: { id: true, nom: true } },
+        classe: { select: { id: true, nom: true, niveau: true } },
       },
       orderBy: [{ nom: "asc" }],
     }),
     prisma.classe.findMany({
       where: { tenantId: session.user.tenantId, ...siteFilterForModel("classe", session.user) },
-      select: { id: true, nom: true },
+      select: { id: true, nom: true, niveau: true },
       orderBy: { nom: "asc" },
+    }),
+    prisma.tarifNiveau.findMany({
+      where: { tenantId: session.user.tenantId, annee: anneeActuelle, actif: true },
     }),
   ]);
 
@@ -46,7 +50,7 @@ export default async function NouvelleFacturePage({
         userAvatar={session.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <FactureForm eleves={eleves} classes={classes} eleveIdPreselected={params.eleveId} />
+        <FactureForm eleves={eleves} classes={classes} tarifs={tarifs} eleveIdPreselected={params.eleveId} />
       </div>
     </div>
   );

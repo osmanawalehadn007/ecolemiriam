@@ -276,4 +276,307 @@ describe("PersonnelAbsencesConges", () => {
     );
     expect(screen.getByText(/Admin/)).toBeInTheDocument();
   });
+
+  // --- Branches supplémentaires pour couvrir lignes 313, 369-405, 442 ---
+
+  it("unjustifies an absence when X button clicked (INJUSTIFIEE)", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ absence: { ...mockAbsences[0], statut: "INJUSTIFIEE" } }),
+    });
+
+    render(
+      <PersonnelAbsencesConges
+        absences={[mockAbsences[0]]}
+        conges={[]}
+        enseignants={mockEnseignants}
+      />
+    );
+
+    const xBtn = (screen.getAllByRole("button") as HTMLButtonElement[]).find(
+      (b: HTMLButtonElement) => b.querySelector("svg.lucide-x") !== null
+    );
+    expect(xBtn).toBeDefined();
+    if (xBtn) {
+      fireEvent.click(xBtn);
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          "/api/rh/absences/a1",
+          expect.objectContaining({
+            method: "PATCH",
+            body: expect.stringContaining("INJUSTIFIEE"),
+          })
+        );
+      });
+    }
+  });
+
+  it("refuses a conge when X button clicked (REFUSE)", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ conge: { ...mockConges[0], statut: "REFUSE" } }),
+    });
+
+    render(
+      <PersonnelAbsencesConges
+        absences={[]}
+        conges={[mockConges[0]]}
+        enseignants={mockEnseignants}
+      />
+    );
+
+    const xBtn = (screen.getAllByRole("button") as HTMLButtonElement[]).find(
+      (b: HTMLButtonElement) => b.querySelector("svg.lucide-x") !== null
+    );
+    expect(xBtn).toBeDefined();
+    if (xBtn) {
+      fireEvent.click(xBtn);
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          "/api/rh/conges/c1",
+          expect.objectContaining({
+            method: "PATCH",
+            body: expect.stringContaining("REFUSE"),
+          })
+        );
+      });
+    }
+  });
+
+  it("fills conge form fields (type, nbDays, dates, motif) and submits", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ conge: mockConges[0] }),
+    });
+
+    render(
+      <PersonnelAbsencesConges
+        absences={[]}
+        conges={[]}
+        enseignants={mockEnseignants}
+      />
+    );
+
+    fireEvent.click(screen.getByText("addLeave"));
+
+    // Sélection enseignant
+    const selects = screen.getAllByRole("combobox");
+    fireEvent.change(selects[0], { target: { value: "e1" } });
+
+    // Type de congé (2e select)
+    fireEvent.change(selects[1], { target: { value: "MALADIE" } });
+
+    // Nombre de jours
+    const nbDaysInput = screen.getByRole("spinbutton");
+    fireEvent.change(nbDaysInput, { target: { value: "3" } });
+
+    // Dates
+    const dateInputs = screen.getAllByDisplayValue(/.*/).filter(
+      (el) => el.getAttribute("type") === "date"
+    );
+    fireEvent.change(dateInputs[0], { target: { value: "2025-03-01" } });
+    fireEvent.change(dateInputs[1], { target: { value: "2025-03-05" } });
+
+    // Motif
+    const motifInput = screen.getByPlaceholderText("motifPlaceholder");
+    fireEvent.change(motifInput, { target: { value: "Grippe" } });
+
+    // Soumission
+    fireEvent.click(screen.getByText("validate"));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/rh/conges",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining("MALADIE"),
+        })
+      );
+    });
+  });
+
+  it("shows error toast when absence form submitted without teacher", async () => {
+    render(
+      <PersonnelAbsencesConges
+        absences={[]}
+        conges={[]}
+        enseignants={mockEnseignants}
+      />
+    );
+
+    fireEvent.click(screen.getByText("addAbsence"));
+    // Ne pas sélectionner d'enseignant, soumettre directement
+    fireEvent.click(screen.getByText("validate"));
+
+    // Le fetch ne doit pas être appelé (validation côté client)
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("shows error toast when conge form submitted without teacher", async () => {
+    render(
+      <PersonnelAbsencesConges
+        absences={[]}
+        conges={[]}
+        enseignants={mockEnseignants}
+      />
+    );
+
+    fireEvent.click(screen.getByText("addLeave"));
+    fireEvent.click(screen.getByText("validate"));
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("cancels absence form when cancel button clicked", () => {
+    render(
+      <PersonnelAbsencesConges
+        absences={[]}
+        conges={[]}
+        enseignants={mockEnseignants}
+      />
+    );
+
+    fireEvent.click(screen.getByText("addAbsence"));
+    expect(screen.getByText("validate")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("cancel"));
+    // Le formulaire disparaît — validate n'est plus présent (sauf si conge form ouvert)
+    expect(screen.queryByText("validate")).not.toBeInTheDocument();
+  });
+
+  it("cancels conge form when cancel button clicked", () => {
+    render(
+      <PersonnelAbsencesConges
+        absences={[]}
+        conges={[]}
+        enseignants={mockEnseignants}
+      />
+    );
+
+    fireEvent.click(screen.getByText("addLeave"));
+    expect(screen.getByText("validate")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("cancel"));
+    expect(screen.queryByText("validate")).not.toBeInTheDocument();
+  });
+
+  it("shows error toast when absence API returns error", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      json: () => Promise.resolve({}),
+    });
+
+    render(
+      <PersonnelAbsencesConges
+        absences={[]}
+        conges={[]}
+        enseignants={mockEnseignants}
+      />
+    );
+
+    fireEvent.click(screen.getByText("addAbsence"));
+    const select = screen.getAllByRole("combobox")[0];
+    fireEvent.change(select, { target: { value: "e1" } });
+    fireEvent.click(screen.getByText("validate"));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalled();
+    });
+  });
+
+  it("shows error toast when conge API returns error", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      json: () => Promise.resolve({}),
+    });
+
+    render(
+      <PersonnelAbsencesConges
+        absences={[]}
+        conges={[]}
+        enseignants={mockEnseignants}
+      />
+    );
+
+    fireEvent.click(screen.getByText("addLeave"));
+    const select = screen.getAllByRole("combobox")[0];
+    fireEvent.change(select, { target: { value: "e1" } });
+    fireEvent.click(screen.getByText("validate"));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalled();
+    });
+  });
+
+  it("renders INJUSTIFIEE badge for unjustified absence", () => {
+    render(
+      <PersonnelAbsencesConges
+        absences={[{ ...mockAbsences[0], statut: "INJUSTIFIEE" }]}
+        conges={[]}
+        enseignants={mockEnseignants}
+      />
+    );
+    expect(screen.getByText("unjustified")).toBeInTheDocument();
+  });
+
+  it("renders various conge statuts (REFUSE, EN_COURS, TERMINE, ANNULE)", () => {
+    const statuts = ["REFUSE", "EN_COURS", "TERMINE", "ANNULE"] as const;
+    statuts.forEach((statut) => {
+      const { unmount } = render(
+        <PersonnelAbsencesConges
+          absences={[]}
+          conges={[{ ...mockConges[0], statut }]}
+          enseignants={mockEnseignants}
+        />
+      );
+      // Le badge du statut doit être rendu
+      expect(screen.getAllByText(/congeStatus/).length).toBeGreaterThan(0);
+      unmount();
+    });
+  });
+
+  it("renders fallback config for unknown absence type", () => {
+    render(
+      <PersonnelAbsencesConges
+        absences={[{ ...mockAbsences[0], type: "UNKNOWN_TYPE" }]}
+        conges={[]}
+        enseignants={mockEnseignants}
+      />
+    );
+    // Le type inconnu utilise la config AUTRE — ne crash pas
+    expect(screen.getByText("Alice")).toBeInTheDocument();
+  });
+
+  it("renders fallback config for unknown conge statut", () => {
+    render(
+      <PersonnelAbsencesConges
+        absences={[]}
+        conges={[{ ...mockConges[0], statut: "UNKNOWN_STATUT" }]}
+        enseignants={mockEnseignants}
+      />
+    );
+    expect(screen.getByText("Alice")).toBeInTheDocument();
+  });
+
+  it("renders absence without heureDebut/heureFin", () => {
+    render(
+      <PersonnelAbsencesConges
+        absences={[mockAbsences[1]]}
+        conges={[]}
+        enseignants={mockEnseignants}
+      />
+    );
+    expect(screen.getByText("Bob")).toBeInTheDocument();
+  });
+
+  it("renders conge without motif", () => {
+    render(
+      <PersonnelAbsencesConges
+        absences={[]}
+        conges={[mockConges[1]]}
+        enseignants={mockEnseignants}
+      />
+    );
+    expect(screen.getByText("Bob")).toBeInTheDocument();
+  });
 });

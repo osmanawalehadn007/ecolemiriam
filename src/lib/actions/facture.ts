@@ -13,6 +13,7 @@ const FactureSchema = z.object({
   libelle: z.string().min(1, "Le libellé est requis"),
   montant: z.number().min(0.01, "Le montant doit être positif"),
   devise: z.string().default("DJF"),
+  mois: z.string().optional().nullable(),
 });
 
 export type FactureFormData = z.infer<typeof FactureSchema>;
@@ -45,6 +46,7 @@ export async function getFacturesForTenant(filters?: { statut?: string; eleveId?
       eleve: { select: { id: true, nom: true, prenom: true, matricule: true, classeId: true, classe: { select: { nom: true } } } },
       // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur facture)
       paiements: { include: { enregistrePar: { select: { id: true, name: true } } } },
+      relances: { select: { id: true, niveau: true, envoyeeLe: true } },
       createdBy: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -118,6 +120,7 @@ export async function createFacture(data: FactureFormData) {
       devise: values.devise || "DJF",
       statut: "EN_ATTENTE",
       echeance: endOfDay(new Date()),
+      mois: values.mois || null,
       createdById: session.user.id,
     },
   });

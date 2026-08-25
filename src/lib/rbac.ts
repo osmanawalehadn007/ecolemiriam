@@ -101,10 +101,11 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "eleves:read", "absences:read", "messages:read", "messages:write",
   ],
 
-  // Comptable — finance & paie
+  // Comptable — finance, paie & admissions (procédure jusqu'à ADMIS, INSCRIT réservé au directeur)
   ACCOUNTANT: [
     "finance:*", "rh:*", "eleves:read", "parents:read", "inventaire:*",
     "analytics:read", "messages:*", "rapports:read",
+    "admissions:read", "admissions:write",
   ],
 
   // Parent — consultation de son périmètre (lecture seule + messagerie)

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition, useRef, useCallback, useMemo } from "react";
+import { useState, useTransition, useRef, useCallback, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Trash2, Loader2, Clock, Printer, GripVertical, Sparkles, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Plus, Trash2, Loader2, Clock, Printer, GripVertical, Sparkles, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, School } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SmartSuggestPanel } from "./SmartSuggestPanel";
@@ -23,7 +23,7 @@ const ALL_SLOTS = [
 
 const SLOT_HEIGHT = 48;
 
-interface Classe { id: string; nom: string; niveau: string }
+interface Classe { id: string; nom: string; niveau: string; structure: { id: string; nom: string; type: string } | null }
 interface Matiere { id: string; nom: string; code: string; couleur: string | null; coefficient: number }
 interface Enseignant { id: string; user: { name: string | null } }
 interface Salle { id: string; nom: string; capacite: number; type: string | null }
@@ -334,6 +334,61 @@ export function EmploiDuTempsView({
   const [dragOverSlot, setDragOverSlot] = useState<{ jour: Jour; time: string } | null>(null);
   const dragOffsetRef = useRef(0);
 
+  // État des accordéons : catégories (structures) et niveaux dépliés.
+  // La catégorie de la classe sélectionnée est automatiquement dépliée.
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
+  const [expandedLevels, setExpandedLevels] = useState<Set<string>>(new Set());
+
+  // Hiérarchie : catégorie (structure) → niveau → classes.
+  // Les classes sans structure sont regroupées sous "— Hors catégorie —".
+  const hierarchy = useMemo(() => {
+    const map = new Map<string, { id: string; nom: string; type: string; niveaux: Map<string, Classe[]> }>();
+    for (const c of classes) {
+      const catKey = c.structure?.id ?? "__none__";
+      const catNom = c.structure?.nom ?? t("noCategory");
+      const catType = c.structure?.type ?? "";
+      if (!map.has(catKey)) {
+        map.set(catKey, { id: catKey, nom: catNom, type: catType, niveaux: new Map() });
+      }
+      const cat = map.get(catKey)!;
+      if (!cat.niveaux.has(c.niveau)) cat.niveaux.set(c.niveau, []);
+      cat.niveaux.get(c.niveau)!.push(c);
+    }
+    // Tri des catégories par type (MATERNELLE < PRIMAIRE < COLLEGE < LYCEE), puis par nom
+    const typeOrder: Record<string, number> = { MATERNELLE: 0, PRIMAIRE: 1, COLLEGE: 2, LYCEE: 3 };
+    return [...map.values()].sort((a, b) => {
+      const ta = typeOrder[a.type] ?? 99;
+      const tb = typeOrder[b.type] ?? 99;
+      if (ta !== tb) return ta - tb;
+      return a.nom.localeCompare(b.nom);
+    });
+  }, [classes, t]);
+
+  // Déplie automatiquement la catégorie + niveau de la classe sélectionnée
+  useEffect(() => {
+    if (!selectedClasse) return;
+    const catKey = selectedClasse.structure?.id ?? "__none__";
+    const levelKey = `${catKey}::${selectedClasse.niveau}`;
+    setExpandedCats((prev) => (prev.has(catKey) ? prev : new Set(prev).add(catKey)));
+    setExpandedLevels((prev) => (prev.has(levelKey) ? prev : new Set(prev).add(levelKey)));
+  }, [selectedClasse]);
+
+  function toggleCat(key: string) {
+    setExpandedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleLevel(key: string) {
+    setExpandedLevels((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
   // Mémoïsé : recalculé à chaque rendu, ce tableau changeait d'identité en
   // permanence et invalidait le `useCallback` de déplacement de créneau, qui
   // en dépend — la mémoïsation ne servait donc plus à rien.
@@ -607,23 +662,86 @@ export function EmploiDuTempsView({
         }
       `}</style>
 
-      {/* Classe selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4 print:hidden">
-        <div className="flex gap-2 flex-wrap">
-          {classes.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setSelectedClasse(c)}
-              className={cn(
-                "px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                selectedClasse?.id === c.id
-                  ? "bg-primary text-white shadow-md"
-                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-              )}
-            >
-              {c.nom}
-            </button>
-          ))}
+      {/* Sélecteur de classes — hiérarchie Catégorie → Niveau → Classe (accordéons) */}
+      <div className="flex flex-col sm:flex-row sm:items-start gap-4 print:hidden">
+        <div className="flex-1 min-w-0 space-y-1.5 max-h-[420px] overflow-y-auto scrollbar-thin pr-1">
+          {hierarchy.length === 0 && (
+            <p className="text-sm text-gray-400 italic py-4 text-center">{t("noClasses")}</p>
+          )}
+          {hierarchy.map((cat) => {
+            const catExpanded = expandedCats.has(cat.id);
+            const catClassCount = [...cat.niveaux.values()].reduce((s, cs) => s + cs.length, 0);
+            const catHasSelected = selectedClasse && (selectedClasse.structure?.id ?? "__none__") === cat.id;
+            return (
+              <div key={cat.id} className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                {/* Niveau 1 : Catégorie (structure pédagogique) */}
+                <button
+                  onClick={() => toggleCat(cat.id)}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2.5 text-sm font-semibold transition-colors",
+                    catHasSelected
+                      ? "bg-primary/10 dark:bg-primary/20 text-primary"
+                      : "bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  )}
+                >
+                  {catExpanded ? <ChevronDown className="w-4 h-4 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 flex-shrink-0" />}
+                  <School className="w-4 h-4 flex-shrink-0 opacity-70" />
+                  <span className="truncate">{cat.nom}</span>
+                  <span className="ml-auto text-xs font-normal text-gray-400 flex-shrink-0">
+                    {t("classCount", { count: catClassCount })}
+                  </span>
+                </button>
+                {catExpanded && (
+                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {[...cat.niveaux.entries()]
+                      .sort((a, b) => a[0].localeCompare(b[0], "fr"))
+                      .map(([niveau, niveauClasses]) => {
+                        const levelKey = `${cat.id}::${niveau}`;
+                        const levelExpanded = expandedLevels.has(levelKey);
+                        const levelHasSelected = selectedClasse && selectedClasse.niveau === niveau && (selectedClasse.structure?.id ?? "__none__") === cat.id;
+                        return (
+                          <div key={levelKey} className="bg-white dark:bg-gray-900">
+                            {/* Niveau 2 : Niveau */}
+                            <button
+                              onClick={() => toggleLevel(levelKey)}
+                              className={cn(
+                                "w-full flex items-center gap-2 pl-8 pr-3 py-2 text-sm transition-colors",
+                                levelHasSelected
+                                  ? "text-primary font-medium"
+                                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/40"
+                              )}
+                            >
+                              {levelExpanded ? <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" />}
+                              <span className="truncate">{niveau}</span>
+                              <span className="ml-auto text-xs text-gray-400 flex-shrink-0">{niveauClasses.length}</span>
+                            </button>
+                            {levelExpanded && (
+                              /* Niveau 3 : Classes */
+                              <div className="flex flex-wrap gap-2 pl-12 pr-3 pb-3 pt-1">
+                                {niveauClasses.map((c) => (
+                                  <button
+                                    key={c.id}
+                                    onClick={() => setSelectedClasse(c)}
+                                    className={cn(
+                                      "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                                      selectedClasse?.id === c.id
+                                        ? "bg-primary text-white shadow-md"
+                                        : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                    )}
+                                  >
+                                    {c.nom}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
         <div className="ml-auto flex items-center gap-3">
           {selectedClasse && (

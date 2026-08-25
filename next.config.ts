@@ -11,6 +11,15 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // Désactiver le cache webpack en dev pour éviter la corruption récurrente
+  // du fichier .pack.gz qui provoque des erreurs 500 sur /api/auth/csrf
+  // après plusieurs compilations à la volée.
+  ...(isProd ? {} : {
+    webpack: (config: any) => {
+      config.cache = false;
+      return config;
+    },
+  }),
   experimental: {
     serverActions: {
       // VPS uniquement : plus de netlify.app / vercel.app / pages.dev.

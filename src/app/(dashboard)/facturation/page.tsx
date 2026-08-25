@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { Header } from "@/components/layout/Header";
-import { FacturesTable } from "@/components/facturation/FacturesTable";
 import { FacturationActions } from "@/components/facturation/FacturationActions";
+import { FacturesViewToggleClient } from "@/components/facturation/FacturesViewToggleClient";
 import { getFacturesForTenant } from "@/lib/actions/facture";
 import { getTranslations } from "next-intl/server";
 import { guardPage } from "@/lib/guard-page";
@@ -15,13 +15,6 @@ export default async function FacturationPage() {
 
   const factures = await getFacturesForTenant();
 
-  const stats = {
-    total: factures.length,
-    enAttente: factures.filter((f) => f.statut === "EN_ATTENTE").length,
-    payees: factures.filter((f) => f.statut === "PAYEE").length,
-    enRetard: factures.filter((f) => f.statut === "EN_RETARD").length,
-  };
-
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <Header
@@ -32,7 +25,7 @@ export default async function FacturationPage() {
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin space-y-4">
         <FacturationActions currentYear="2025-2026" />
-        <FacturesTable factures={factures} />
+        <FacturesViewToggleClient factures={factures} />
       </div>
     </div>
   );

@@ -1,8 +1,9 @@
 import { test, expect } from "./fixtures";
 
-// Helper : ouvre la page /eleves et clique sur le premier onglet de groupe
-// scolaire (Primaire / Collège / Lycée) pour révéler le tableau des élèves.
-// Le composant ElevesTable ne rend <table> qu'après sélection d'un groupe.
+// Helper : ouvre la page /eleves, clique sur le premier onglet de groupe
+// scolaire (Primaire / Collège / Lycée), puis sur la première classe pour
+// révéler le tableau des élèves.
+// Le composant ElevesTable ne rend <table> qu'après sélection groupe + classe.
 async function openElevesTable(page: import("@playwright/test").Page) {
   await page.goto("/eleves");
   await expect(page.locator("text=Élèves").first()).toBeVisible({ timeout: 30000 });
@@ -10,6 +11,11 @@ async function openElevesTable(page: import("@playwright/test").Page) {
   const groupTab = page.locator("div.flex.items-center.gap-1.px-4.pt-3.border-b button").first();
   await expect(groupTab).toBeVisible({ timeout: 30000 });
   await groupTab.click();
+  // Après clic sur le groupe, des boutons de classe apparaissent dans un bloc
+  // "px-4 py-3 border-b bg-muted/20". Cliquer sur le premier bouton de classe.
+  const classBtn = page.locator("div.px-4.py-3.border-b button").first();
+  await expect(classBtn).toBeVisible({ timeout: 30000 });
+  await classBtn.click();
   // Le tableau devrait maintenant apparaître
   await expect(page.locator("table tbody tr").first()).toBeVisible({ timeout: 30000 });
 }

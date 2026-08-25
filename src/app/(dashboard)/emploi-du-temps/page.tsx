@@ -18,8 +18,13 @@ async function getEmploiData(tenantId: string, claims: SessionSiteClaims) {
   const [classes, matieres, enseignants, emplois, salles, disponibilites] = await Promise.all([
     prisma.classe.findMany({
       where: { tenantId, ...siteFilterForModel("classe", claims) },
-      select: { id: true, nom: true, niveau: true },
-      orderBy: { nom: "asc" },
+      select: {
+        id: true,
+        nom: true,
+        niveau: true,
+        structure: { select: { id: true, nom: true, type: true } },
+      },
+      orderBy: [{ structure: { type: "asc" } }, { niveau: "asc" }, { nom: "asc" }],
     }),
     prisma.matiere.findMany({
       where: { tenantId, ...siteFilterForModel("matiere", claims) },

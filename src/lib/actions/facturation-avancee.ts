@@ -37,6 +37,31 @@ export async function getTarifsForTenant() {
   });
 }
 
+export async function getTarifForEleve(eleveId: string, annee?: string) {
+  const session = await auth();
+  if (!session?.user?.tenantId) return null;
+  const denied = checkPermission(session.user.role, "finance:read");
+  if (denied) return null;
+
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId
+  const eleve = await prisma.eleve.findFirst({
+    where: { id: eleveId, tenantId: session.user.tenantId },
+    select: { classe: { select: { niveau: true } } },
+  });
+  if (!eleve?.classe?.niveau) return null;
+
+  const anneeScolaire = annee ?? `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+  const tarif = await prisma.tarifNiveau.findFirst({
+    where: {
+      tenantId: session.user.tenantId,
+      niveau: { equals: eleve.classe.niveau, mode: "insensitive" },
+      annee: anneeScolaire,
+      actif: true,
+    },
+  });
+  return tarif;
+}
+
 export async function createTarif(data: TarifFormData) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
@@ -81,6 +106,41 @@ export async function deleteTarif(tarifId: string) {
   });
 
   revalidatePath("/parametres");
+  revalidatePath("/parametres/tarifs");
+  return { success: true };
+}
+
+export async function updateTarif(tarifId: string, data: Partial<TarifFormData>) {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
+
+  const parsed = TarifSchema.partial().safeParse(data);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
+  }
+
+  const v = parsed.data;
+  // eslint-disable-next-line ecolemiriam/require-tenant-id -- ID vérifié par le caller avec tenantId
+  await prisma.tarifNiveau.update({
+    where: { id: tarifId },
+    data: {
+      ...(v.niveau && { niveau: v.niveau }),
+      ...(v.annee && { annee: v.annee }),
+      ...(v.mensualite !== undefined && { mensualite: v.mensualite }),
+      ...(v.fraisInscription !== undefined && { fraisInscription: v.fraisInscription }),
+      ...(v.fraisRenouvellement !== undefined && { fraisRenouvellement: v.fraisRenouvellement }),
+      ...(v.fraisCantine !== undefined && { fraisCantine: v.fraisCantine ?? null }),
+      ...(v.fraisTransport !== undefined && { fraisTransport: v.fraisTransport ?? null }),
+      ...(v.devise && { devise: v.devise }),
+      ...(v.nbMois !== undefined && { nbMois: v.nbMois }),
+      ...(v.siteId !== undefined && { siteId: v.siteId || null }),
+    },
+  });
+
+  revalidatePath("/parametres");
+  revalidatePath("/parametres/tarifs");
   return { success: true };
 }
 
@@ -104,6 +164,7 @@ export async function genererMensualites(params: {
 
   const moisNoms = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
   const moisNom = moisNoms[mois - 1] ?? `Mois ${mois}`;
+  const moisKey = `${annee.split("-")[0]}-${String(mois).padStart(2, "0")}`;
 
   // Récupérer tous les élèves actifs avec leur classe (pour le niveau)
   // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId : le caller a déjà vérifié l'accès
@@ -172,6 +233,7 @@ export async function genererMensualites(params: {
         devise: tarif.devise,
         statut: "EN_ATTENTE",
         echeance,
+        mois: moisKey,
         createdById: session.user.id,
       },
     });

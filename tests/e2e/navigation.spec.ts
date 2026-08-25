@@ -15,26 +15,19 @@ test.describe("Bulletins", () => {
     await page.goto("/notes/bulletins");
     // La page s'affiche avec des onglets (Génération / Liste / Bilan annuel)
     await expect(page.locator("text=Bulletins").first()).toBeVisible({ timeout: 30000 });
-    // Sélectionner une classe et une période pour révéler le bouton "Générer"
-    // (BulletinsManager ne montre le workflow qu'après ces deux sélections)
-    const classeSelect = page.locator("select").first();
-    const periodeSelect = page.locator("select").nth(1);
-    // Cliquer sur une période dans la sidebar si disponible, sinon utiliser les selects
-    const periodeBtn = page.locator("button:has-text(/Période|Trimestre|Semestre/)").first();
-    if (await periodeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+    // BulletinsManager utilise des boutons dans la sidebar (pas des <select>).
+    // 1. Cliquer sur la première période (card "Période" → boutons)
+    const periodeBtn = page.locator("div.space-y-1 button:has-text(/.+/)").first();
+    if (await periodeBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
       await periodeBtn.click();
     }
-    // Sélectionner la première classe disponible
-    if (await classeSelect.isVisible({ timeout: 5000 }).catch(() => false)) {
-      const firstOption = await classeSelect.locator("option").nth(1).textContent();
-      if (firstOption) await classeSelect.selectOption({ label: firstOption });
+    // 2. Cliquer sur la première classe (card "Classes" → boutons)
+    //    Les boutons de classe contiennent un nom + un compte d'élèves
+    const classeBtn = page.locator("div.space-y-1 button .text-left p").first();
+    if (await classeBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
+      await classeBtn.click();
     }
-    // Sélectionner la première période disponible
-    if (await periodeSelect.isVisible({ timeout: 5000 }).catch(() => false)) {
-      const firstPeriode = await periodeSelect.locator("option").nth(1).textContent();
-      if (firstPeriode) await periodeSelect.selectOption({ label: firstPeriode });
-    }
-    // Le bouton "Générer" devrait maintenant être visible
+    // Le bouton "Générer" devrait maintenant être visible dans le workflow
     await expect(page.locator("text=Générer").first()).toBeVisible({ timeout: 30000 });
   });
 });

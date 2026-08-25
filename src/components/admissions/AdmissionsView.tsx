@@ -205,9 +205,11 @@ function CandidatureForm({
 function CandidatureCard({
   candidature,
   onUpdate,
+  userRole,
 }: {
   candidature: Candidature;
   onUpdate: (updated: Candidature) => void;
+  userRole?: string;
 }) {
   const t = useTranslations("admissions");
   const [expanded, setExpanded] = useState(false);
@@ -233,6 +235,8 @@ function CandidatureCard({
   };
 
   // Actions disponibles selon le statut
+  // L'inscription finale (INSCRIT) est réservée au directeur (TENANT_ADMIN) et super-admin
+  const canConfirmEnrollment = userRole === "TENANT_ADMIN" || userRole === "SUPER_ADMIN";
   const actions: { label: string; statut: StatutCandidature; variant?: string }[] = [];
   if (candidature.statut === "SOUMISE") {
     actions.push({ label: t("summonExam"), statut: "EN_EXAMEN" });
@@ -242,7 +246,7 @@ function CandidatureCard({
     actions.push({ label: t("admit"), statut: "ADMIS" });
     actions.push({ label: t("reject"), statut: "REFUSE", variant: "destructive" });
   }
-  if (candidature.statut === "ADMIS") {
+  if (candidature.statut === "ADMIS" && canConfirmEnrollment) {
     actions.push({ label: t("confirmEnrollment"), statut: "INSCRIT" });
   }
 
@@ -332,9 +336,10 @@ function CandidatureCard({
 
 interface AdmissionsViewProps {
   candidatures: Candidature[];
+  userRole?: string;
 }
 
-export function AdmissionsView({ candidatures: initial }: AdmissionsViewProps) {
+export function AdmissionsView({ candidatures: initial, userRole }: AdmissionsViewProps) {
   const t = useTranslations("admissions");
   const [candidatures, setCandidatures] = useState<Candidature[]>(initial);
   const [search, setSearch] = useState("");
@@ -453,7 +458,7 @@ export function AdmissionsView({ candidatures: initial }: AdmissionsViewProps) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((c) => (
-            <CandidatureCard key={c.id} candidature={c} onUpdate={handleUpdate} />
+            <CandidatureCard key={c.id} candidature={c} onUpdate={handleUpdate} userRole={userRole} />
           ))}
         </div>
       )}

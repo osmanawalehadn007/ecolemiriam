@@ -1,5 +1,4 @@
-import prisma from "@/lib/prisma";
-import { runWithTenant } from "@/lib/prisma";
+import { runWithRlsBatch } from "@/lib/prisma";
 import { cached, cacheDel, cacheKey } from "@/lib/redis";
 import type { Role } from "@prisma/client";
 
@@ -35,9 +34,9 @@ export async function getTeacherScope(
 
   return cached(
     cacheKey(tenantId, "teacher-scope", userId),
-    () => runWithTenant(tenantId, null, async () => {
+    () => runWithRlsBatch(tenantId, null, async (tx) => {
       // eslint-disable-next-line ecolemiriam/require-site-filter -- teacher lookup by userId+tenantId, site scoping is caller's responsibility
-      const enseignant = await prisma.enseignant.findFirst({
+      const enseignant = await tx.enseignant.findFirst({
         where: { userId, tenantId },
         select: { id: true },
       });
@@ -48,22 +47,22 @@ export async function getTeacherScope(
 
       /* eslint-disable ecolemiriam/require-site-filter -- teacher scope resolution, site scoping is caller's responsibility */
       const [emploiEntries, principalClasses, affectations, matieres] = await Promise.all([
-        prisma.emploiTemps.findMany({
+        tx.emploiTemps.findMany({
           where: { enseignantId: enseignant.id, tenantId },
           select: { classeId: true, matiereId: true },
           distinct: ["classeId", "matiereId"],
         }),
-        prisma.classe.findMany({
+        tx.classe.findMany({
           where: { profPrincipalId: enseignant.id, tenantId },
           select: { id: true },
         }),
         // Nouveau : affectations explicites via EnseignantAffectation
-        prisma.enseignantAffectation.findMany({
+        tx.enseignantAffectation.findMany({
           where: { enseignantId: enseignant.id, tenantId },
           select: { classeId: true, matiereId: true },
         }),
         // Nouveau : matières liées via EnseignantMatiere
-        prisma.enseignantMatiere.findMany({
+        tx.enseignantMatiere.findMany({
           where: { enseignantId: enseignant.id, tenantId },
           select: { matiereId: true },
         }),
