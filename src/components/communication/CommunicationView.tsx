@@ -261,10 +261,11 @@ function ComposeModal({
 
 // ─── Carte notification ───────────────────────────────────────────────────────
 
-function NotifCard({ notif, onSend, onDelete }: {
+function NotifCard({ notif, onSend, onDelete, canSend }: {
   notif: Notification;
   onSend: (id: string) => void;
   onDelete: (id: string) => void;
+  canSend: boolean;
 }) {
   const t = useTranslations("communication");
   const [expanded, setExpanded] = useState(false);
@@ -336,7 +337,7 @@ function NotifCard({ notif, onSend, onDelete }: {
               <span className="text-xs text-gray-400">
                 {t("byAuthor", { name: notif.envoyePar?.name ?? t("system"), date: formatDate(notif.createdAt) })}
               </span>
-              {notif.statut === "BROUILLON" && (
+              {notif.statut === "BROUILLON" && canSend && (
                 <div className="flex gap-1.5">
                   <Button size="sm" className="h-6 text-xs gap-1 px-2" onClick={() => onSend(notif.id)}>
                     <Send className="w-3 h-3" /> {t("sendBtn")}
@@ -514,7 +515,7 @@ export function CommunicationView({ notifications: initial, classes, userRole }:
       ) : (
         <div className="space-y-3">
           {filtered.map((n) => (
-            <NotifCard key={n.id} notif={n} onSend={handleSend} onDelete={handleDelete} />
+            <NotifCard key={n.id} notif={n} onSend={handleSend} onDelete={handleDelete} canSend={canSend} />
           ))}
         </div>
       )}

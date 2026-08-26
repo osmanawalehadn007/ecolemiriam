@@ -4,11 +4,16 @@ import prisma from "@/lib/prisma";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { roleHasPermission } from "@/lib/rbac";
+import type { Role } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+  }
+  if (!roleHasPermission(session.user.role as Role, "vie-scolaire:write")) {
+    return NextResponse.json({ error: "Permission insuffisante" }, { status: 403 });
   }
 
   const body = await req.json();

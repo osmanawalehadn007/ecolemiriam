@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
+import { hasPermission } from "@/lib/client-permissions";
 import { useTranslations } from "next-intl";
 import type { SiteColor } from "@/lib/site-colors";
 
@@ -322,11 +323,12 @@ const FALLBACK: SiteColor = {
   text: "#374151",
 };
 
-function CoursCard({ cours, siteColors, onSelect, onDelete }: {
+function CoursCard({ cours, siteColors, onSelect, onDelete, canWrite }: {
   cours: Cours;
   siteColors: Record<string, SiteColor>;
   onSelect: (c: Cours) => void;
   onDelete: (id: string) => void;
+  canWrite: boolean;
 }) {
   const t = useTranslations("cours");
   const nConfig = NIVEAU_CONFIG[cours.niveau];
@@ -404,10 +406,12 @@ function CoursCard({ cours, siteColors, onSelect, onDelete }: {
             {cours.auteurNom ?? "—"} · {formatDate(cours.createdAt)}
           </span>
           <div className="flex gap-1.5" onClick={e => e.stopPropagation()}>
+            {canWrite && (
             <Button size="sm" variant="ghost" className="h-6 text-xs px-2 text-red-500 hover:text-red-600"
               onClick={() => onDelete(cours.id)}>
               <Trash2 className="w-3 h-3" />
             </Button>
+            )}
             <Button size="sm" className="h-6 text-xs px-2 gap-1" onClick={() => onSelect(cours)}>
               {t("open")} <ChevronRight className="w-3 h-3" />
             </Button>
@@ -420,9 +424,10 @@ function CoursCard({ cours, siteColors, onSelect, onDelete }: {
 
 // ─── Vue détail cours ───────────────────────────────────────────────────────────
 
-function CoursDetail({ cours: initial, onBack }: {
+function CoursDetail({ cours: initial, onBack, canWrite }: {
   cours: Cours;
   onBack: () => void;
+  canWrite: boolean;
 }) {
   const t = useTranslations("cours");
   const [cours, setCours] = useState<Cours & { contenus: ContenuCours[] }>({
@@ -482,6 +487,7 @@ function CoursDetail({ cours: initial, onBack }: {
           {cours.description && <p className="text-sm text-gray-500 mt-1">{cours.description}</p>}
         </div>
         <div className="flex gap-2 flex-shrink-0">
+          {canWrite && (
           <Button
             onClick={handlePublish}
             disabled={publishing}
@@ -491,9 +497,12 @@ function CoursDetail({ cours: initial, onBack }: {
             {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
             {cours.statut === "PUBLIE" ? t("unpublish") : t("publish")}
           </Button>
+          )}
+          {canWrite && (
           <Button onClick={() => setShowAddContenu(true)} className="gap-2">
             <Plus className="w-4 h-4" /> {t("addContentBtn")}
           </Button>
+          )}
         </div>
       </div>
 
@@ -532,9 +541,11 @@ function CoursDetail({ cours: initial, onBack }: {
             <div className="text-center py-12">
               <Layers className="w-10 h-10 text-gray-300 mx-auto mb-3" />
               <p className="text-sm text-gray-500 mb-3">{t("noContent")}</p>
+              {canWrite && (
               <Button onClick={() => setShowAddContenu(true)} className="gap-2" size="sm">
                 <Plus className="w-3.5 h-3.5" /> {t("addFirstChapter")}
               </Button>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -575,11 +586,14 @@ function CoursDetail({ cours: initial, onBack }: {
 export function CoursView({
   siteColors,
   activeSite,
+  userRole,
 }: {
   siteColors: Record<string, SiteColor>;
   activeSite: string;
+  userRole?: string;
 }) {
   const t = useTranslations("cours");
+  const canWrite = hasPermission(userRole, "cours:write");
   const [cours, setCours] = useState<Cours[]>([]);
   const [selected, setSelected] = useState<Cours | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -640,7 +654,7 @@ export function CoursView({
   };
 
   if (selected) {
-    return <CoursDetail cours={selected} onBack={() => setSelected(null)} />;
+    return <CoursDetail cours={selected} onBack={() => setSelected(null)} canWrite={canWrite} />;
   }
 
   return (
@@ -658,9 +672,11 @@ export function CoursView({
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t("title")}</h2>
           <p className="text-sm text-gray-500">{t("publishedCourses", { count: stats.publies, s: stats.publies !== 1 ? "s" : "" })}</p>
         </div>
+        {canWrite && (
         <Button onClick={() => setShowCreate(true)} className="gap-2">
           <Plus className="w-4 h-4" /> {t("newCourse")}
         </Button>
+        )}
       </div>
 
       {/* Stats */}
@@ -732,7 +748,7 @@ export function CoursView({
             <p className="text-sm text-gray-500 mb-3">
               {search ? t("noCoursesSearch") : t("noCourses")}
             </p>
-            {!search && (
+            {!search && canWrite && (
               <Button onClick={() => setShowCreate(true)} className="gap-2" size="sm">
                 <Plus className="w-3.5 h-3.5" /> {t("createFirstCourse")}
               </Button>
@@ -742,7 +758,7 @@ export function CoursView({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map(c => (
-            <CoursCard key={c.id} cours={c} siteColors={siteColors} onSelect={handleSelect} onDelete={handleDelete} />
+            <CoursCard key={c.id} cours={c} siteColors={siteColors} onSelect={handleSelect} onDelete={handleDelete} canWrite={canWrite} />
           ))}
         </div>
       )}

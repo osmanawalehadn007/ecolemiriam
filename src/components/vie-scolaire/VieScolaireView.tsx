@@ -202,7 +202,7 @@ function CreateIncidentModal({
   );
 }
 
-function IncidentCard({ incident, onUpdate }: { incident: Incident; onUpdate: (i: Incident) => void }) {
+function IncidentCard({ incident, onUpdate, canWrite }: { incident: Incident; onUpdate: (i: Incident) => void; canWrite: boolean }) {
   const t = useTranslations("vieScolaire");
   const [expanded, setExpanded] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -283,12 +283,12 @@ function IncidentCard({ incident, onUpdate }: { incident: Incident; onUpdate: (i
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {incident.statut === "OUVERT" && (
+            {canWrite && incident.statut === "OUVERT" && (
               <Button size="sm" variant="outline" className="text-xs" onClick={() => updateStatut("EN_TRAITEMENT")} disabled={isPending}>
                 {t("process")}
               </Button>
             )}
-            {incident.statut === "EN_TRAITEMENT" && (
+            {canWrite && incident.statut === "EN_TRAITEMENT" && (
               <Button size="sm" variant="outline" className="text-xs text-green-700 border-green-200" onClick={() => updateStatut("RESOLU")} disabled={isPending}>
                 {t("resolve")}
               </Button>
@@ -447,7 +447,7 @@ export function VieScolaireView({
       ) : (
         <div className="space-y-3">
           {filtered.map((inc) => (
-            <IncidentCard key={inc.id} incident={inc} onUpdate={updateIncident} />
+            <IncidentCard key={inc.id} incident={inc} onUpdate={updateIncident} canWrite={canWrite} />
           ))}
         </div>
       )}

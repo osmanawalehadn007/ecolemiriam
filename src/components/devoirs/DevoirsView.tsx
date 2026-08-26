@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Clock, BookOpen, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+import { hasPermission } from "@/lib/client-permissions";
 
 interface Devoir {
   id: string;
@@ -22,6 +23,7 @@ interface Devoir {
 
 interface Props {
   devoirs: Devoir[];
+  userRole?: string;
 }
 
 const STATUT_COLORS: Record<string, string> = {
@@ -31,15 +33,18 @@ const STATUT_COLORS: Record<string, string> = {
   CORRIGE: "bg-purple-100 text-purple-700",
 };
 
-export function DevoirsView({ devoirs }: Props) {
+export function DevoirsView({ devoirs, userRole }: Props) {
+  const canWrite = hasPermission(userRole, "cahier-texte:write");
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
+        {canWrite && (
         <Button asChild size="sm" className="gap-1">
           <Link href="/cahier-de-texte">
             <Plus className="w-4 h-4" /> Nouveau devoir
           </Link>
         </Button>
+        )}
       </div>
 
       {devoirs.length === 0 ? (

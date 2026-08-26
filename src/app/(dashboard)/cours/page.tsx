@@ -61,7 +61,7 @@ export default async function CoursPage({
           activeSiteId={activeSite}
           className="mb-2"
         />
-        <CoursView siteColors={siteColors} activeSite={activeSite} />
+        <CoursView siteColors={siteColors} activeSite={activeSite} userRole={session.user.role} />
       </div>
     </div>
   );

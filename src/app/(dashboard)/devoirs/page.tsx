@@ -52,7 +52,7 @@ export default async function DevoirsPage() {
         userAvatar={session.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <DevoirsView devoirs={devoirs} />
+        <DevoirsView devoirs={devoirs} userRole={session.user.role} />
       </div>
     </div>
   );
