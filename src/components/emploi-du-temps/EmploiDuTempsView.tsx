@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Trash2, Loader2, Clock, Printer, GripVertical, Sparkles, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, School } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { hasPermission } from "@/lib/client-permissions";
 import { SmartSuggestPanel } from "./SmartSuggestPanel";
 import { useTranslations } from "next-intl";
 
@@ -314,6 +315,7 @@ export function EmploiDuTempsView({
   matiereToEnseignants,
   salles,
   disponibilites,
+  userRole,
 }: {
   classes: Classe[];
   matieres: Matiere[];
@@ -323,8 +325,10 @@ export function EmploiDuTempsView({
   salles: Salle[];
   disponibilites: Disponibilite[];
   tenantId: string;
+  userRole?: string;
 }) {
   const t = useTranslations("emploi");
+  const canWrite = hasPermission(userRole, "emploi-du-temps:write");
   const [emplois, setEmplois] = useState<EmploiCreneau[]>(initial);
   const [selectedClasse, setSelectedClasse] = useState<Classe | null>(classes[0] ?? null);
   const [showAdd, setShowAdd] = useState(false);
@@ -759,6 +763,7 @@ export function EmploiDuTempsView({
             <Printer className="w-4 h-4" />
             {t("print")}
           </Button>
+          {canWrite && (
           <Button
             onClick={() => setShowSuggest(true)}
             disabled={!selectedClasse}
@@ -768,6 +773,8 @@ export function EmploiDuTempsView({
             <Sparkles className="w-4 h-4" />
             {t("optimize")}
           </Button>
+          )}
+          {canWrite && (
           <Button
             onClick={() => setShowAdd(true)}
             disabled={!selectedClasse}
@@ -777,6 +784,7 @@ export function EmploiDuTempsView({
             <Plus className="w-4 h-4" />
             {t("addSlotBtn")}
           </Button>
+          )}
         </div>
       </div>
 

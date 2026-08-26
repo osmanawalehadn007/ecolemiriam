@@ -21,7 +21,7 @@ export default async function InventairePage() {
         userAvatar={session!.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <InventaireView />
+        <InventaireView userRole={session!.user.role} />
       </div>
     </div>
   );

@@ -65,7 +65,7 @@ export default async function ParentsPage() {
         userAvatar={session.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <ParentsView parents={parents} tenantId={session.user.tenantId} />
+        <ParentsView parents={parents} tenantId={session.user.tenantId} userRole={session.user.role} />
       </div>
     </div>
   );

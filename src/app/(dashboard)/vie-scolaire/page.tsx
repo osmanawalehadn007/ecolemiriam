@@ -97,6 +97,7 @@ export default async function VieScolairePage() {
           classes={classes}
           currentUserId={session!.user.id}
           tenantId={session!.user.tenantId!}
+          userRole={session!.user.role}
         />
       </div>
     </div>

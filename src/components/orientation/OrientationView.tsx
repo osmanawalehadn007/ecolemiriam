@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, getInitials, calculerMoyenne } from "@/lib/utils";
+import { hasPermission } from "@/lib/client-permissions";
 import { useTranslations } from "next-intl";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -105,7 +106,8 @@ function FiliereScoreBar({ score }: { score: ScoreFiliere }) {
 function FicheOrientationEleve({
   eleveId,
   onBack,
-}: { eleveId: string; onBack: () => void }) {
+  canWrite,
+}: { eleveId: string; onBack: () => void; canWrite: boolean }) {
   const t = useTranslations("orientation");
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -311,10 +313,12 @@ function FicheOrientationEleve({
                 />
               </div>
 
+              {canWrite && (
               <Button onClick={handleSauvegarder} disabled={isPending} className="w-full gap-2">
                 {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                 {t("saveOrientation")}
               </Button>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -336,8 +340,9 @@ function mapFiliereToRecom(key: FiliereSlug): TypeRecom {
 
 // ─── Vue principale ───────────────────────────────────────────────────────────
 
-export function OrientationView() {
+export function OrientationView({ userRole }: { userRole?: string } = {}) {
   const t = useTranslations("orientation");
+  const canWrite = hasPermission(userRole, "orientation:write");
   const [eleves, setEleves] = useState<EleveResume[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -377,7 +382,7 @@ export function OrientationView() {
   }, [filtered]);
 
   if (selectedId) {
-    return <FicheOrientationEleve eleveId={selectedId} onBack={() => setSelectedId(null)} />;
+    return <FicheOrientationEleve eleveId={selectedId} onBack={() => setSelectedId(null)} canWrite={canWrite} />;
   }
 
   if (loading) return (

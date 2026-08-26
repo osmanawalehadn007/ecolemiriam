@@ -144,6 +144,7 @@ export default async function EmploiDuTempsPage() {
           salles={salles}
           disponibilites={disponibilites}
           tenantId={session.user.tenantId}
+          userRole={session.user.role}
         />
       </div>
     </div>

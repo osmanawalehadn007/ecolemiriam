@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate, timeAgo } from "@/lib/utils";
+import { hasPermission } from "@/lib/client-permissions";
 import { useTranslations } from "next-intl";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -358,10 +359,12 @@ function NotifCard({ notif, onSend, onDelete }: {
 interface CommunicationViewProps {
   notifications: Notification[];
   classes: Classe[];
+  userRole?: string;
 }
 
-export function CommunicationView({ notifications: initial, classes }: CommunicationViewProps) {
+export function CommunicationView({ notifications: initial, classes, userRole }: CommunicationViewProps) {
   const t = useTranslations("communication");
+  const canSend = hasPermission(userRole, "communication:send");
   const [notifs, setNotifs] = useState<Notification[]>(initial);
   const [showCompose, setShowCompose] = useState(false);
   const [filtreStatut, setFiltreStatut] = useState<Statut | "TOUS">("TOUS");
@@ -430,9 +433,11 @@ export function CommunicationView({ notifications: initial, classes }: Communica
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t("schoolCommunication")}</h2>
           <p className="text-sm text-gray-500">{t("notificationsSent", { count: stats.envoyees })}</p>
         </div>
+        {canSend && (
         <Button onClick={() => setShowCompose(true)} className="gap-2">
           <Plus className="w-4 h-4" /> {t("newMessageBtn")}
         </Button>
+        )}
       </div>
 
       {/* Stats */}
@@ -499,9 +504,11 @@ export function CommunicationView({ notifications: initial, classes }: Communica
           <CardContent className="py-16 text-center">
             <Megaphone className="w-10 h-10 text-gray-300 mx-auto mb-3" />
             <p className="text-sm text-gray-500">{t("noNotifications")}</p>
+            {canSend && (
             <Button onClick={() => setShowCompose(true)} className="mt-3 gap-2" size="sm">
               <Plus className="w-3.5 h-3.5" /> {t("createFirst")}
             </Button>
+            )}
           </CardContent>
         </Card>
       ) : (

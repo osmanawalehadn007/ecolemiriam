@@ -41,27 +41,47 @@ export function generateSecurePassword(length = 16): string {
 }
 
 /**
+ * Règles de robustesse affichées à l'utilisateur (réutilisable côté client/serveur).
+ */
+export const PASSWORD_REQUIREMENTS_HINT =
+  "Le mot de passe doit obligatoirement contenir au moins 8 caractères et inclure " +
+  "au moins 3 des 4 catégories suivantes : minuscules (a-z), majuscules (A-Z), " +
+  "chiffres (0-9) et caractères spéciaux (!@#$%…).";
+
+/**
  * Valide la robustesse d'un mot de passe.
- * @returns null si valide, sinon un message d'erreur.
+ * @returns null si valide, sinon un message d'erreur détaillant les exigences.
  */
 export function validatePasswordStrength(password: string): string | null {
-  if (password.length < 8) return "Le mot de passe doit faire au moins 8 caractères";
-  if (password.length > 128) return "Le mot de passe est trop long";
+  if (password.length < 8) {
+    return "Le mot de passe est trop court : il doit obligatoirement contenir au moins 8 caractères.";
+  }
+  if (password.length > 128) return "Le mot de passe est trop long (128 caractères maximum).";
 
-  let categories = 0;
-  if (/[a-z]/.test(password)) categories++;
-  if (/[A-Z]/.test(password)) categories++;
-  if (/[0-9]/.test(password)) categories++;
-  if (/[^a-zA-Z0-9]/.test(password)) categories++;
+  const hasLower = /[a-z]/.test(password);
+  const hasUpper = /[A-Z]/.test(password);
+  const hasDigit = /[0-9]/.test(password);
+  const hasSpecial = /[^a-zA-Z0-9]/.test(password);
+  const categories = [hasLower, hasUpper, hasDigit, hasSpecial].filter(Boolean).length;
 
   if (categories < 3) {
-    return "Le mot de passe doit contenir au moins 3 des 4 catégories : minuscules, majuscules, chiffres, caractères spéciaux";
+    const manquantes: string[] = [];
+    if (!hasLower) manquantes.push("une minuscule (a-z)");
+    if (!hasUpper) manquantes.push("une majuscule (A-Z)");
+    if (!hasDigit) manquantes.push("un chiffre (0-9)");
+    if (!hasSpecial) manquantes.push("un caractère spécial (!@#$%…)");
+
+    return (
+      "Le mot de passe doit obligatoirement inclure au moins 3 des 4 catégories " +
+      "suivantes : minuscules (a-z), majuscules (A-Z), chiffres (0-9), caractères spéciaux (!@#$%…). " +
+      `Il manque actuellement : ${manquantes.join(", ")}.`
+    );
   }
 
   // Détecter les mots de passe courants faibles
   const common = ["password", "123456", "admin", "ecolemiriam", "miriam", "00000000"];
   if (common.some((c) => password.toLowerCase().includes(c))) {
-    return "Ce mot de passe est trop commun";
+    return "Ce mot de passe est trop commun. Choisissez un mot de passe plus original.";
   }
 
   return null;

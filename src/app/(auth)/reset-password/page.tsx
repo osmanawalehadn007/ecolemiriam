@@ -35,11 +35,33 @@ function ResetPasswordForm() {
     setValidationError("");
 
     if (password.length < 8) {
-      setValidationError("Le mot de passe doit faire au moins 8 caractères");
+      setValidationError(
+        "Le mot de passe est trop court : il doit obligatoirement contenir au moins 8 caractères."
+      );
       return;
     }
     if (password !== confirmPassword) {
       setValidationError("Les mots de passe ne correspondent pas");
+      return;
+    }
+
+    // Vérifier la robustesse côté client
+    const hasLower = /[a-z]/.test(password);
+    const hasUpper = /[A-Z]/.test(password);
+    const hasDigit = /[0-9]/.test(password);
+    const hasSpecial = /[^a-zA-Z0-9]/.test(password);
+    const categories = [hasLower, hasUpper, hasDigit, hasSpecial].filter(Boolean).length;
+    if (categories < 3) {
+      const manquantes: string[] = [];
+      if (!hasLower) manquantes.push("une minuscule (a-z)");
+      if (!hasUpper) manquantes.push("une majuscule (A-Z)");
+      if (!hasDigit) manquantes.push("un chiffre (0-9)");
+      if (!hasSpecial) manquantes.push("un caractère spécial (!@#$%…)");
+      setValidationError(
+        "Le mot de passe doit obligatoirement inclure au moins 3 des 4 catégories " +
+          "suivantes : minuscules (a-z), majuscules (A-Z), chiffres (0-9), caractères spéciaux (!@#$%…). " +
+          `Il manque actuellement : ${manquantes.join(", ")}.`,
+      );
       return;
     }
 
@@ -181,6 +203,11 @@ function ResetPasswordForm() {
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Le mot de passe doit obligatoirement contenir au moins 8 caractères et
+              inclure au moins 3 des 4 catégories : minuscules (a-z), majuscules (A-Z),
+              chiffres (0-9) et caractères spéciaux (!@#$%…).
+            </p>
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium" htmlFor="confirmPassword">

@@ -53,7 +53,7 @@ export default async function CommunicationPage() {
         userAvatar={session!.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <CommunicationView notifications={notifications} classes={classes} />
+        <CommunicationView notifications={notifications} classes={classes} userRole={session!.user.role} />
       </div>
     </div>
   );
