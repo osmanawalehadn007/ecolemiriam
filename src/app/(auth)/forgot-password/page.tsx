@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, MailCheck, ArrowLeft, KeyRound } from "lucide-react";
+import { TurnstileWidget } from "@/components/security/TurnstileWidget";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -22,7 +24,7 @@ export default function ForgotPasswordPage() {
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, turnstileToken }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -95,6 +97,14 @@ export default function ForgotPasswordPage() {
               />
             </div>
             {err && <p className="text-xs text-destructive">{err}</p>}
+            {/* Widget Turnstile (anti-bot) — invisible si pas de site key */}
+            <TurnstileWidget
+              action="forgot-password"
+              onToken={setTurnstileToken}
+              onExpire={() => setTurnstileToken(null)}
+              onError={() => setTurnstileToken(null)}
+              className="flex justify-center"
+            />
             <Button type="submit" className="w-full" disabled={sending}>
               {sending ? (
                 <>

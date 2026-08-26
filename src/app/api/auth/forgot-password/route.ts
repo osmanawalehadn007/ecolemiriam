@@ -15,10 +15,12 @@ import { z } from "zod";
 import prismaBase from "@/lib/prisma-base";
 import { sendPasswordResetEmail } from "@/lib/security/password-reset";
 import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
+import { verifyTurnstileToken } from "@/lib/security/turnstile";
 import { auditFire } from "@/lib/audit";
 
 const ForgotSchema = z.object({
   email: z.string().email("Email invalide"),
+  turnstileToken: z.string().optional(),
 });
 
 export async function POST(req: Request) {
@@ -38,7 +40,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Email invalide" }, { status: 400 });
     }
 
-    const { email } = parsed.data;
+    const { email, turnstileToken } = parsed.data;
+
+    // ── Vérification Turnstile (anti-bot) ──────────────────────────────
+    const turnstileResult = await verifyTurnstileToken(turnstileToken, req);
+    if (!turnstileResult.success) {
+      auditFire({
+        action: "auth:forgot-password",
+        verdict: "DENIED",
+        reason: "Vérification Turnstile échouée",
+        metadata: { email, errorCodes: turnstileResult.errorCodes },
+      });
+      return NextResponse.json(
+        { error: "Vérification anti-bot échouée. Veuillez réessayer." },
+        { status: 403 }
+      );
+    }
 
     // Anti-énumération : on ne révèle pas si l'email existe.
     // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- pré-login : lookup par email

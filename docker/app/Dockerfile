@@ -55,6 +55,10 @@ ENV NODE_ENV=production
 # URL factice pour permettre à PrismaClient de se construire pendant next build
 # (Prisma ne se connecte pas au build — l'URL réelle est injectée au runtime via env_file)
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build?schema=public"
+# Turnstile site key (publique) — baked-in au build time car NEXT_PUBLIC_*
+# Le secret (TURNSTILE_SECRET) est injecté au runtime via .env.production
+ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY=""
+ENV NEXT_PUBLIC_TURNSTILE_SITE_KEY=$NEXT_PUBLIC_TURNSTILE_SITE_KEY
 
 # Build Next.js standalone — prisma generate est déjà inclus dans "npm run build"
 # (package.json: "build": "prisma generate && next build")

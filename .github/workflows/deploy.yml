@@ -141,6 +141,8 @@ jobs:
           no-cache: true
           provenance: true
           sbom: true
+          build-args: |
+            NEXT_PUBLIC_TURNSTILE_SITE_KEY=${{ secrets.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
 
   # ============================================================
   # JOB 3 : Déploiement en STAGING (slot inactif) + smoke tests

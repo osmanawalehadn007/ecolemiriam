@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Eye, EyeOff, Loader2, Shield, MailWarning, KeyRound } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { TurnstileWidget } from "@/components/security/TurnstileWidget";
 
 const LoginSchema = z.object({
   email: z.string().email("Email invalide"),
@@ -31,6 +32,7 @@ function LoginForm() {
   const [emailNotVerified, setEmailNotVerified] = useState(false);
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const t = useTranslations("login");
 
   // Vérifier si l'utilisateur a 2FA activée (après saisie email + password)
@@ -105,6 +107,7 @@ function LoginForm() {
           email: form.email,
           password: form.password,
           totp: need2FA ? totp : undefined,
+          turnstileToken: turnstileToken ?? undefined,
           redirect: false,
         });
       } catch (err) {
@@ -295,6 +298,15 @@ function LoginForm() {
             )}
           </div>
         )}
+
+        {/* Widget Turnstile (anti-bot) — invisible si pas de site key */}
+        <TurnstileWidget
+          action="login"
+          onToken={setTurnstileToken}
+          onExpire={() => setTurnstileToken(null)}
+          onError={() => setTurnstileToken(null)}
+          className="flex justify-center"
+        />
 
         <Button
           type="submit"

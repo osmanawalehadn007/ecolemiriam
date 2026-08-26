@@ -9,11 +9,44 @@ import { deriveClaims, CLAIMS_VERSION } from "@/lib/tenant-claims";
 import { auditFire } from "@/lib/audit";
 import { verifyTOTP } from "@/lib/security/totp";
 import { registerAuthFetcher } from "@/lib/prisma-rls";
+import { checkLoginLockout, recordLoginFailure, recordLoginSuccess } from "@/lib/security/login-attempts";
+import { verifyTurnstileToken } from "@/lib/security/turnstile";
+
+/**
+ * Extrait l'IP du client depuis la requête NextAuth.
+ *
+ * En production derrière Cloudflare Tunnel, `cf-connecting-ip` est la source
+ * de vérité (non spoofable). En dev, on se rabat sur `x-forwarded-for`.
+ * Le paramètre `request` passé à `authorize` est l'objet `Request` entrant.
+ */
+function getAuthorizeIP(request: unknown): string {
+  try {
+    const headers = (request as { headers?: Headers } | undefined)?.headers;
+    if (headers && typeof headers.get === "function") {
+      const cfIP = headers.get("cf-connecting-ip");
+      if (cfIP && process.env.NODE_ENV === "production") return cfIP.trim();
+
+      const forwarded = headers.get("x-forwarded-for");
+      if (forwarded) {
+        const ip = forwarded.split(",")[0].trim();
+        if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip) || /^[a-f0-9:]+$/i.test(ip)) {
+          return ip;
+        }
+      }
+      const real = headers.get("x-real-ip");
+      if (real) return real.trim();
+    }
+  } catch {
+    // ignore — fallback ci-dessous
+  }
+  return "unknown";
+}
 
 const LoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   totp: z.string().optional(), // code 2FA (6 chiffres) si activé
+  turnstileToken: z.string().optional(), // token Cloudflare Turnstile (anti-bot)
 });
 
 export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
@@ -87,12 +120,48 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Mot de passe", type: "password" },
         totp: { label: "Code 2FA", type: "text" },
+        turnstileToken: { label: "Turnstile Token", type: "text" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const parsed = LoginSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
-        const { email, password, totp } = parsed.data;
+        const { email, password, totp, turnstileToken } = parsed.data;
+
+        // ── Lockout progressif par IP ────────────────────────────────────
+        // Bloque les tentatives de brute-force : après 5/10/15/20 échecs,
+        // l'IP est verrouillée pour 1min/5min/15min/1h.
+        const ip = getAuthorizeIP(request);
+        const lockout = checkLoginLockout(ip);
+        if (lockout.locked) {
+          auditFire({
+            action: "auth:login",
+            verdict: "DENIED",
+            resource: "user",
+            reason: "IP verrouillée (lockout progressif)",
+            metadata: { email, ip, remainingMs: lockout.remainingMs, failures: lockout.failures },
+          });
+          return null;
+        }
+
+        // ── Vérification Turnstile (anti-bot) ────────────────────────────
+        // Si TURNSTILE_SECRET est configuré, le token doit être valide.
+        // Mode dégradé : sans secret, la vérification est ignorée.
+        const turnstileResult = await verifyTurnstileToken(
+          turnstileToken,
+          request as unknown as Request
+        );
+        if (!turnstileResult.success) {
+          recordLoginFailure(ip);
+          auditFire({
+            action: "auth:login",
+            verdict: "DENIED",
+            resource: "user",
+            reason: "Vérification Turnstile échouée",
+            metadata: { email, ip, errorCodes: turnstileResult.errorCodes },
+          });
+          return null;
+        }
 
         // eslint-disable-next-line ecolemiriam/require-site-filter -- login: no session exists yet, user must be looked up across all sites
         // Recherche insensible à la casse : l'email est stocké avec une
@@ -120,6 +189,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           // et "mot de passe incorrect". Sans cela, la différence de temps
           // permet à un attaquant de distinguer les emails valides.
           await bcrypt.compare(password, "$2a$12$dummyHashToPreventTimingAttackXXXXXXXXXXXXXXXXXXXX");
+          recordLoginFailure(ip);
           auditFire({
             action: "auth:login",
             verdict: "DENIED",
@@ -133,6 +203,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
 
         const passwordMatch = await bcrypt.compare(password, user.password);
         if (!passwordMatch) {
+          recordLoginFailure(ip);
           auditFire({
             userId: user.id,
             action: "auth:login",
@@ -184,6 +255,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           }
 
           if (!verifyTOTP(totp, user.mfaSecret)) {
+            recordLoginFailure(ip);
             auditFire({
               userId: user.id,
               action: "auth:login",
@@ -218,6 +290,9 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           });
           return null;
         }
+
+        // ── Succès : réinitialiser le compteur d'échecs de l'IP ──────────
+        recordLoginSuccess(ip);
 
         return {
           id: user.id,

@@ -3,8 +3,9 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { authConfig } from "@/auth.config";
 import { checkCSRF } from "@/lib/security/csrf";
-import { globalRateLimit } from "@/lib/security/global-rate-limit";
+import { globalRateLimit, getRealIP } from "@/lib/security/global-rate-limit";
 import { applySecurityHeaders } from "@/lib/security/headers";
+import { checkBotBlock, recordPublicRequest } from "@/lib/security/bot-detection";
 
 const { auth } = NextAuth(authConfig);
 
@@ -48,6 +49,31 @@ export default auth(async function middleware(req: NextRequest) {
   // ── Headers de sécurité durcis sur TOUTES les réponses ──────────────────
   const response = NextResponse.next();
   applySecurityHeaders(response, pathname);
+
+  // ── Détection de patterns bot sur les routes publiques sensibles ────────
+  // Bloque les IPs qui font trop de requêtes sur /login, /register,
+  // /forgot-password, /reset-password, /api/auth/* en peu de temps.
+  // 30 req/min → blocage 15 min ; 60 req/min → blocage 1h.
+  const ip = getRealIP(req);
+  const botCheck = checkBotBlock(ip);
+  if (botCheck.blocked) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "Accès temporairement bloqué pour activité suspecte." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil(botCheck.remainingMs / 1000)) },
+        }
+      );
+    }
+    // Pour les pages, rediriger vers une page de blocage
+    const blockedUrl = new URL("/acces-bloque", req.url);
+    blockedUrl.searchParams.set("reason", "bot");
+    blockedUrl.searchParams.set("retry", String(Math.ceil(botCheck.remainingMs / 1000)));
+    return NextResponse.redirect(blockedUrl);
+  }
+  // Enregistrer la requête pour la détection de pattern
+  recordPublicRequest(ip, pathname);
 
   if (isPublic(pathname)) {
     return response;
