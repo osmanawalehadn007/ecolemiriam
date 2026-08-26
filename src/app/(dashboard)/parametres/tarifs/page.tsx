@@ -30,7 +30,7 @@ export default async function TarifsPage() {
         userAvatar={session.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <TarifsManager tarifs={tarifs} sites={sites} />
+        <TarifsManager tarifs={tarifs} sites={sites} userRole={session.user.role} />
       </div>
     </div>
   );

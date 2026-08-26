@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, getInitials, formatCurrency } from "@/lib/utils";
+import { hasPermission } from "@/lib/client-permissions";
 import { useTranslations } from "next-intl";
 import { PersonnelAbsencesConges } from "./PersonnelAbsencesConges";
 import { GererAffectations } from "@/components/enseignants/GererAffectations";
@@ -111,12 +112,14 @@ function EnseignantRHCard({
   classes,
   matieres,
   canManageAffectations,
+  canWriteRH,
 }: {
   enseignant: EnseignantRH;
   onUpdate: (id: string, ficheRH: FicheRH) => void;
   classes: { id: string; nom: string; niveau: string; siteId?: string | null }[];
   matieres: { id: string; nom: string; code: string }[];
   canManageAffectations: boolean;
+  canWriteRH: boolean;
 }) {
   const t = useTranslations("rh");
   const tCommon = useTranslations("common");
@@ -362,6 +365,7 @@ function EnseignantRHCard({
           {expanded && (
             <div className="mt-2 space-y-2">
               {/* Bouton éditer la fiche RH */}
+              {canWriteRH && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -371,6 +375,7 @@ function EnseignantRHCard({
                 <Edit2 className="w-3.5 h-3.5" />
                 {ficheRH ? t("editFicheRH") : t("createFicheRH")}
               </Button>
+              )}
 
               {/* Formulaire d'édition de la fiche RH */}
               {editingFiche && (
@@ -564,6 +569,7 @@ interface RHViewProps {
   classes?: { id: string; nom: string; niveau: string; siteId?: string | null }[];
   matieres?: { id: string; nom: string; code: string }[];
   canManageAffectations?: boolean;
+  userRole?: string;
 }
 
 export function RHView({
@@ -573,8 +579,10 @@ export function RHView({
   classes = [],
   matieres = [],
   canManageAffectations = false,
+  userRole,
 }: RHViewProps) {
   const t = useTranslations("rh");
+  const canWriteRH = hasPermission(userRole, "rh:write");
   const [enseignants, setEnseignants] = useState<EnseignantRH[]>(initial);
   const [search, setSearch] = useState("");
   const [filtreContrat, setFiltreContrat] = useState<TypeContrat | "TOUS">("TOUS");
@@ -614,12 +622,14 @@ export function RHView({
     <div className="space-y-6">
       {/* Header actions */}
       <div className="flex justify-end">
+        {canWriteRH && (
         <a href="/parametres">
           <Button size="sm" className="gap-2">
             <Users className="h-4 w-4" />
             {t("addTeacher")}
           </Button>
         </a>
+        )}
       </div>
 
       {/* Stats */}
@@ -785,6 +795,7 @@ export function RHView({
                   classes={classes}
                   matieres={matieres}
                   canManageAffectations={canManageAffectations}
+                  canWriteRH={canWriteRH}
                 />
               ))}
             </div>

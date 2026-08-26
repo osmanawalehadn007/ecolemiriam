@@ -123,6 +123,7 @@ export default async function RHPage() {
           classes={classes}
           matieres={matieres}
           canManageAffectations={["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT"].includes(session!.user.role)}
+          userRole={session!.user.role}
         />
       </div>
     </div>

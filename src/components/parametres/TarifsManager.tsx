@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
+import { hasPermission } from "@/lib/client-permissions";
 import {
   createTarif, updateTarif, deleteTarif,
   type TarifFormData,
@@ -46,11 +47,14 @@ function formatMoney(amount: number, devise: string) {
 export function TarifsManager({
   tarifs: initial,
   sites,
+  userRole,
 }: {
   tarifs: Tarif[];
   sites: Site[];
+  userRole?: string;
 }) {
   const t = useTranslations("parametres");
+  const canWrite = hasPermission(userRole, "finance:write");
   const [tarifs, setTarifs] = useState<Tarif[]>(initial);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -75,10 +79,12 @@ export function TarifsManager({
           </h2>
           <p className="text-sm text-muted-foreground">{t("tarifsDescription")}</p>
         </div>
+        {canWrite && (
         <Button onClick={() => { setShowForm(true); setEditingId(null); }} className="gap-2">
           <Plus className="h-4 w-4" />
           {t("tarifAdd")}
         </Button>
+        )}
       </div>
 
       {/* Form */}
@@ -106,6 +112,7 @@ export function TarifsManager({
               sites={sites}
               onEdit={() => { setEditingId(tarif.id); setShowForm(true); }}
               onDeleted={() => handleDeleted(tarif.id)}
+              canWrite={canWrite}
             />
           ))}
         </div>
@@ -299,11 +306,13 @@ function TarifCard({
   sites,
   onEdit,
   onDeleted,
+  canWrite,
 }: {
   tarif: Tarif;
   sites: Site[];
   onEdit: () => void;
   onDeleted: () => void;
+  canWrite: boolean;
 }) {
   const t = useTranslations("parametres");
   const [isPending, startTransition] = useTransition();
@@ -364,19 +373,21 @@ function TarifCard({
           </p>
         </div>
         <div className="flex gap-1 flex-shrink-0">
+          {canWrite && (
           <Button variant="ghost" size="sm" onClick={onEdit} className="gap-1">
             <Edit2 className="h-3.5 w-3.5" />
           </Button>
-          {confirmDelete ? (
+          )}
+          {canWrite && confirmDelete ? (
             <Button variant="destructive" size="sm" onClick={handleDelete} disabled={isPending} className="gap-1">
               {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
               {t("tarifConfirmDelete")}
             </Button>
-          ) : (
+          ) : canWrite ? (
             <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(true)} className="gap-1">
               <Trash2 className="h-3.5 w-3.5 text-destructive" />
             </Button>
-          )}
+          ) : null}
         </div>
       </div>
     </Card>
