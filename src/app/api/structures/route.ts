@@ -4,7 +4,7 @@ import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import type { StructureType } from "@prisma/client";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, siteIdForCreate, requireSiteIdForCreate } from "@/lib/site-scope";
 
 const STRUCTURE_TYPES: StructureType[] = ["MATERNELLE", "PRIMAIRE", "COLLEGE", "LYCEE"];
 
@@ -46,12 +46,19 @@ export async function POST(req: NextRequest) {
     const denied = checkPermission(session.user.role, "structures:write");
     if (denied) return denied;
 
+    // Un site doit être sélectionné pour créer une structure : la structure
+    // sera rattachée à ce site spécifique (siteId non-null).
+    const siteError = requireSiteIdForCreate(session.user);
+    if (siteError) return NextResponse.json({ error: siteError }, { status: 400 });
+
     const json = await req.json();
     const { types } = CreateSchema.parse(json);
 
     const tenantId = session.user.tenantId;
+    const siteId = siteIdForCreate(session.user); // non-null grâce au check ci-dessus
 
-    // Récupérer les structures déjà existantes pour ne pas les recréer
+    // Récupérer les structures déjà existantes pour ce site (ou partagées)
+    // pour ne pas les recréer.
     const existing = await prisma.structure.findMany({
       where: { tenantId, ...siteFilterForModel("structure", session.user) },
       select: { type: true },
@@ -62,6 +69,7 @@ export async function POST(req: NextRequest) {
       .filter((type) => !existingTypes.has(type))
       .map((type) => ({
         tenantId,
+        siteId,
         type,
         nom: typeLabel(type),
         actif: true,

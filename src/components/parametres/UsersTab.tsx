@@ -15,6 +15,7 @@ import type { AvailableTenant } from "@/auth.config";
 import type { Role } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import { ImportEnseignantsDialog } from "./ImportEnseignantsDialog";
+import { ImportPersonnelDialog } from "./ImportPersonnelDialog";
 
 interface UserItem {
   id: string;
@@ -97,6 +98,7 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
   const [activeCategory, setActiveCategory] = useState<UserCategory>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showImportEnseignants, setShowImportEnseignants] = useState(false);
+  const [showImportPersonnel, setShowImportPersonnel] = useState(false);
 
   const filteredUsers = users.filter((u) => {
     const matchesCategory =
@@ -394,6 +396,10 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
             <Upload className="h-4 w-4" />
             {t("importEnseignants")}
           </Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowImportPersonnel(true)}>
+            <Upload className="h-4 w-4" />
+            {t("importPersonnel")}
+          </Button>
           <Button size="sm" className="gap-2" onClick={() => showForm ? setShowForm(false) : openWizard()}>
             <Plus className="h-4 w-4" />
             {t("addUser")}
@@ -406,6 +412,15 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
           onClose={() => setShowImportEnseignants(false)}
           onImported={() => {
             // Recharger la page pour récupérer les nouveaux utilisateurs
+            window.location.reload();
+          }}
+        />
+      )}
+
+      {showImportPersonnel && canManage && (
+        <ImportPersonnelDialog
+          onClose={() => setShowImportPersonnel(false)}
+          onImported={() => {
             window.location.reload();
           }}
         />

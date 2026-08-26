@@ -33,6 +33,7 @@ export interface ParsedRow {
   matiere?: string;
   site: string;
   tempsPlein: boolean; // true = temps plein, false = temps partiel
+  classe?: string; // nom de la classe (ex: "1ère A", "PS/MS")
 }
 
 /**
@@ -217,13 +218,16 @@ export async function parseEnseignantsWorkbook(
         "Aucun en-tête reconnu dans la première ligne. " +
         "Vérifiez que la ligne 1 contient bien les noms de colonnes " +
         "(Nom, Email, Site d'affectation, Temps...). " +
-        "Si la ligne 1 est un titre, supprimez-la et réessayez."
+        "Si la ligne 1 est un titre, supprimez-la et réessayez. " +
+        "Vous pouvez télécharger le modèle vierge depuis l'écran d'import pour voir le format attendu."
       );
     }
     const headersList = profiles.map((p) => p.header).filter(Boolean).join(", ") || "(vides)";
     throw new Error(
-      `Aucune colonne reconnue. En-têtes attendus : nom, email, site d'affectation, temps. ` +
-      `Colonnes trouvées : ${headersList}`
+      `Le fichier et les en-têtes ne correspondent pas au format attendu. ` +
+      `En-têtes attendus : Nom, Email, Site d'affectation, Temps, Téléphone, Matière, Classe. ` +
+      `Colonnes trouvées : ${headersList}. ` +
+      `Téléchargez le modèle d'exemple depuis l'écran d'import, remplissez-le avec vos données, puis réessayez.`
     );
   }
 
@@ -321,6 +325,7 @@ export async function parseEnseignantsWorkbook(
       matiere: get("matiere"),
       site,
       tempsPlein,
+      classe: get("classe"),
     });
   }
 
@@ -340,6 +345,8 @@ export type Verdict =
   | "MATIERE_INCONNUE"
   /** Le site indiqué n'existe pas dans l'établissement. */
   | "SITE_INCONNU"
+  /** La classe indiquée n'existe pas — sera créée automatiquement. */
+  | "CLASSE_A_CREER"
   /** La même adresse email apparaît plusieurs fois dans le fichier. */
   | "DOUBLON_FICHIER"
   /** Ligne inexploitable en l'état. */
@@ -364,6 +371,14 @@ export interface SiteExistant {
   nom: string;
 }
 
+export interface ClasseExistante {
+  id: string;
+  nom: string;
+  niveau: string;
+  siteId: string;
+  annee: string;
+}
+
 export interface LignePlan {
   ligne: number;
   nom: string;
@@ -372,13 +387,17 @@ export interface LignePlan {
   matiere?: string;
   site: string;
   tempsPlein: boolean;
+  classe?: string;
   verdict: Verdict;
   message: string;
   /** Action appliquée si l'utilisateur ne change rien. */
   action: Action;
-  /** IDs résolus côté serveur (matière, site) — remplis lors de l'analyse. */
+  /** IDs résolus côté serveur (matière, site, classe) — remplis lors de l'analyse. */
   matiereId?: string;
   siteId?: string;
+  classeId?: string;
+  /** Indique si la classe doit être créée (n'existe pas encore). */
+  classeACreer?: boolean;
 }
 
 export interface PlanImport {
@@ -409,6 +428,7 @@ export function analyzeImport(
   matieres: MatiereExistante[],
   sites: SiteExistant[],
   hash: string,
+  classes: ClasseExistante[] = [],
 ): PlanImport {
   // Index pour la recherche (insensible à la casse)
   const matiereByNom = new Map<string, MatiereExistante>();
@@ -420,8 +440,17 @@ export function analyzeImport(
     siteByNom.set(s.nom.toLowerCase().trim(), s);
   }
 
+  // Index des classes par (nom normalisé + siteId)
+  // Normalisation : lowercased + sans espaces superflus
+  const normalizeNom = (s: string) => s.toLowerCase().trim().replace(/\s+/g, "");
+  const classeByNomSite = new Map<string, ClasseExistante>();
+  for (const c of classes) {
+    classeByNomSite.set(`${normalizeNom(c.nom)}|${c.siteId}`, c);
+  }
+
   const matieresInconnuesSet = new Set<string>();
   const sitesInconnusSet = new Set<string>();
+  const classesACreerSet = new Set<string>();
 
   // Lignes d'erreur du parsing
   const lignesErreur: LignePlan[] = erreurs.map((e) => ({
@@ -476,14 +505,34 @@ export function analyzeImport(
       matiereId = matiere.id;
     }
 
-    // 4. Tout est bon → nouveau
+    // 4. Classe : chercher une correspondance dans les classes existantes
+    let classeId: string | undefined;
+    let classeACreer = false;
+    if (r.classe) {
+      const key = `${normalizeNom(r.classe)}|${site.id}`;
+      const existing = classeByNomSite.get(key);
+      if (existing) {
+        classeId = existing.id;
+      } else {
+        // La classe n'existe pas — elle sera créée pendant l'import
+        classeACreer = true;
+        classesACreerSet.add(r.classe);
+      }
+    }
+
+    // 5. Tout est bon → nouveau
+    const message = classeACreer
+      ? `Nouvel enseignant — sera créé${r.classe ? ` et lié à la classe « ${r.classe} » (à créer)` : ""}`
+      : `Nouvel enseignant — sera créé${classeId ? ` et lié à la classe « ${r.classe} »` : ""}`;
     return {
       ...r,
-      verdict: "NOUVEAU",
-      message: "Nouvel enseignant — sera créé",
+      verdict: classeACreer ? "CLASSE_A_CREER" : "NOUVEAU",
+      message,
       action: "CREER",
       matiereId,
       siteId: site.id,
+      classeId,
+      classeACreer,
     };
   });
 

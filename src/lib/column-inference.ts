@@ -50,7 +50,8 @@ export type TargetField =
   | "telephone"
   | "matiere"
   | "site"
-  | "tempsPlein";
+  | "tempsPlein"
+  | "classe";
 
 /** Résultat de l'inférence : mapping field → index de colonne. */
 export type ColumnMapping = Partial<Record<TargetField, number>>;
@@ -160,6 +161,22 @@ function looksLikeSubject(value: string): boolean {
   return letters >= v.length * 0.5;
 }
 
+/** Une valeur ressemble-t-elle à un nom de classe ? */
+function looksLikeClassName(value: string): boolean {
+  const v = value.trim();
+  if (v.length < 2) return false;
+  if (looksLikeEmail(v)) return false;
+  if (looksLikePhone(v)) return false;
+  if (looksLikeDate(v)) return false;
+  if (looksLikeContractType(v)) return false;
+  // Un nom de classe contient souvent des chiffres + lettres :
+  // "1ère A", "CM2", "PS/MS", "Terminale S", "6ème1"
+  // On accepte les chiffres (contrairement à looksLikeName/looksLikeSite)
+  if (/[<>{}[\]\\@]/.test(v)) return false;
+  const letters = (v.match(/[a-zA-ZÀ-ÿ]/g) || []).length;
+  return letters >= v.length * 0.3;
+}
+
 // ------------------------------------------------------------
 // Scoring des données
 // ------------------------------------------------------------
@@ -178,6 +195,7 @@ function scoreData(samples: string[], type: TargetField): { score: number; reaso
     type === "nom" ? looksLikeName :
     type === "site" ? looksLikeSite :
     type === "matiere" ? looksLikeSubject :
+    type === "classe" ? looksLikeClassName :
     () => false;
 
   const matches = samples.filter(detector).length;
@@ -214,6 +232,15 @@ function scoreData(samples: string[], type: TargetField): { score: number; reaso
     return { score: ratio, reason: `${matches}/${samples.length} sont des types de contrat` };
   }
 
+  if (type === "classe") {
+    // Un nom de classe contient souvent des chiffres ou des abréviations de niveau
+    const hasNiveauKeyword = samples.some((s) =>
+      /ème|ere|ère|cm|cp|ce|ps|ms|gs|crèche|creche|garderie|terminale|seconde|première|premiere/i.test(s)
+    );
+    if (hasNiveauKeyword) return { score: Math.max(ratio, 0.8), reason: `Contient des mots-clés niveau (${matches}/${samples.length})` };
+    return { score: ratio, reason: `${matches}/${samples.length} ressemblent à des classes` };
+  }
+
   return { score: ratio, reason: `${matches}/${samples.length} correspondent` };
 }
 
@@ -246,6 +273,10 @@ const HEADER_PATTERNS: Record<TargetField, { exact: string[]; contains: string[]
   tempsPlein: {
     exact: ["temps", "contrat", "plein", "partiel", "type", "statut", "regime", "régime"],
     contains: ["temps plein", "temps partiel", "type de contrat", "type contrat", "nature du contrat", "full time", "part time", "full-time", "part-time"],
+  },
+  classe: {
+    exact: ["classe", "class", "niveau", "grade", "section", "groupe"],
+    contains: ["classe enseignée", "classe principale", "niveau enseigné", "class taught", "class name", "nom de la classe"],
   },
 };
 
@@ -282,6 +313,7 @@ function scoreHeader(header: string, type: TargetField): { score: number; reason
     matiere: [],
     site: ["site web", "site internet", "website"],
     tempsPlein: ["type de salle", "type d'établissement", "type etablissement"],
+    classe: [],
   };
 
   for (const p of patterns.exact) {
@@ -323,7 +355,7 @@ export function inferColumnMapping(
 ): { mapping: ColumnMapping; details: ColumnScore[] } {
   // Calculer tous les scores
   const allScores: ColumnScore[] = [];
-  const fields: TargetField[] = ["nom", "email", "telephone", "matiere", "site", "tempsPlein"];
+  const fields: TargetField[] = ["nom", "email", "telephone", "matiere", "site", "tempsPlein", "classe"];
 
   for (const profile of profiles) {
     for (const field of fields) {

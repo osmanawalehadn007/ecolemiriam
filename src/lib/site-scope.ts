@@ -412,7 +412,6 @@ export const SITE_PATHS: Record<string, SitePath> = {
  */
 const SHARED_NULL_MODELS = new Set([
   "matiere",
-  "structure",
   "disponibiliteEnseignant",
   "indisponibiliteEnseignant",
   // Tarif applicable à tous les sites faute de site précisé.

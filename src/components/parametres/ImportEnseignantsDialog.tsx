@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Loader2, Upload, FileSpreadsheet, CheckCircle2, AlertTriangle,
-  X, ArrowLeft, Ban, RefreshCw, Plus, Info,
+  X, ArrowLeft, Ban, RefreshCw, Plus, Info, Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
@@ -23,7 +23,7 @@ type Action = "CREER" | "IGNORER";
 
 type Verdict =
   | "NOUVEAU" | "EMAIL_EXISTANT" | "MATIERE_INCONNUE" | "SITE_INCONNU"
-  | "DOUBLON_FICHIER" | "ERREUR";
+  | "CLASSE_A_CREER" | "DOUBLON_FICHIER" | "ERREUR";
 
 interface LignePlan {
   ligne: number;
@@ -33,11 +33,14 @@ interface LignePlan {
   matiere?: string;
   site: string;
   tempsPlein: boolean;
+  classe?: string;
   verdict: Verdict;
   message: string;
   action: Action;
   matiereId?: string;
   siteId?: string;
+  classeId?: string;
+  classeACreer?: boolean;
 }
 
 interface PlanImport {
@@ -69,6 +72,7 @@ const VERDICT_STYLE: Record<Verdict, { label: string; classe: string }> = {
   EMAIL_EXISTANT: { label: "Email connu", classe: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300" },
   MATIERE_INCONNUE: { label: "Matière inconnue", classe: "bg-orange-100 text-orange-900 dark:bg-orange-950 dark:text-orange-300" },
   SITE_INCONNU: { label: "Site inconnu", classe: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300" },
+  CLASSE_A_CREER: { label: "Classe à créer", classe: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300" },
   DOUBLON_FICHIER: { label: "Doublon fichier", classe: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300" },
   ERREUR: { label: "Non importable", classe: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300" },
 };
@@ -209,6 +213,17 @@ export function ImportEnseignantsDialog({ onClose, onImported }: ImportEnseignan
                     {t("phaseInfoDesc")}
                   </p>
                 </div>
+              </div>
+
+              {/* Bouton de téléchargement du modèle */}
+              <div className="flex justify-end">
+                <a
+                  href="/api/import/enseignants/template"
+                  className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {t("downloadTemplate")}
+                </a>
               </div>
 
               <div

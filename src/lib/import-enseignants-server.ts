@@ -15,6 +15,7 @@ import {
   type FicheExistante,
   type MatiereExistante,
   type SiteExistant,
+  type ClasseExistante,
   type PlanImport,
   type ParsedRow,
 } from "@/lib/import-enseignants";
@@ -44,7 +45,7 @@ export async function preparerPlan(
 ): Promise<ContextePlan> {
   // Charger le contexte de l'établissement en premier — il sert à l'inférence
   // de colonnes (reconnaissance des sites et matières par leurs valeurs).
-  const [matieres, sites] = await Promise.all([
+  const [matieres, sites, classes] = await Promise.all([
     prisma.matiere.findMany({
       where: mergeFilters({ tenantId: acteur.tenantId }, siteFilterForModel("matiere", acteur)),
       select: { id: true, nom: true, code: true },
@@ -53,6 +54,11 @@ export async function preparerPlan(
     prisma.site.findMany({
       where: { tenantId: acteur.tenantId },
       select: { id: true, nom: true },
+    }),
+    // Charger les classes pour la résolution enseignant ↔ classe
+    prisma.classe.findMany({
+      where: mergeFilters({ tenantId: acteur.tenantId }, siteFilterForModel("classe", acteur)),
+      select: { id: true, nom: true, niveau: true, siteId: true, annee: true },
     }),
   ]);
 
@@ -96,7 +102,15 @@ export async function preparerPlan(
     nom: s.nom,
   }));
 
-  const plan = analyzeImport(rows, erreurs, emailsExistants, matieresCtx, sitesCtx, hash);
+  const classesCtx: ClasseExistante[] = classes.map((c) => ({
+    id: c.id,
+    nom: c.nom,
+    niveau: c.niveau,
+    siteId: c.siteId ?? "",
+    annee: c.annee,
+  }));
+
+  const plan = analyzeImport(rows, erreurs, emailsExistants, matieresCtx, sitesCtx, hash, classesCtx);
 
   if (importPrecedent) {
     let par: string | null = null;

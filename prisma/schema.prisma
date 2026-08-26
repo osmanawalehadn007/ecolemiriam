@@ -544,7 +544,11 @@ model Structure {
 
   @@index([tenantId])
   @@index([siteId])
-  @@unique([tenantId, type])
+  // L'unicité (tenantId, siteId, type) est assurée par un index partiel créé
+  // via migration SQL. Les structures ne sont JAMAIS partagées entre sites :
+  // chaque site possède ses propres structures, et il est impossible d'avoir
+  // deux structures du même type sur le même site.
+  // Voir : prisma/migrations/fix_structure_unique_per_site.sql
   @@map("structures")
 }
 

@@ -12,6 +12,40 @@ import { preparerPlan } from "@/lib/import-enseignants-server";
 import type { Action, LignePlan } from "@/lib/import-enseignants";
 
 /**
+ * Infère le niveau scolaire à partir du nom de la classe.
+ * Ex: "1ère A" → "1", "PS/MS" → "Maternelle", "5ème C" → "5"
+ */
+function inferNiveauFromClasseName(nom: string): string {
+  const lower = nom.toLowerCase().trim();
+  // Maternelle / Garderie
+  if (/^(ps|petite section)/.test(lower) || /^(ms|moyenne section)/.test(lower) ||
+      /^(gs|grande section)/.test(lower) || /crèche|creche|garderie/.test(lower)) {
+    return "Maternelle";
+  }
+  // Primaire (1ère à 5ème dans le système djiboutien)
+  const primaireMatch = lower.match(/(\d+)\s*(?:ère|ere|e|ème|eme)/);
+  if (primaireMatch) {
+    const num = parseInt(primaireMatch[1]);
+    if (num >= 1 && num <= 5) return String(num);
+    if (num >= 6 && num <= 9) return String(num); // Collège
+    if (num === 10) return "10"; // 2nde
+    if (num === 11) return "11"; // 1ère
+    if (num === 12) return "12"; // Terminale
+  }
+  // CP, CE1, CE2, CM1, CM2
+  if (/^cp\b/.test(lower)) return "CP";
+  if (/^ce1\b/.test(lower)) return "CE1";
+  if (/^ce2\b/.test(lower)) return "CE2";
+  if (/^cm1\b/.test(lower)) return "CM1";
+  if (/^cm2\b/.test(lower)) return "CM2";
+  // 6ème à 9ème (collège)
+  if (/^6/.test(lower)) return "6";
+  if (/^5/.test(lower)) return "5";
+  // Fallback
+  return nom;
+}
+
+/**
  * POST /api/import/enseignants — seconde étape : appliquer le plan.
  *
  * Le client renvoie le fichier prévisualisé, son empreinte, et les décisions
@@ -183,6 +217,55 @@ export async function POST(req: NextRequest) {
           }).catch(() => {
             // Si l'affectation existe déjà, on ignore
           });
+        }
+
+        // 4b. Résoudre ou créer la classe, puis affecter l'enseignant
+        let classeId = l.classeId;
+        if (l.classe && l.siteId) {
+          if (!classeId) {
+            // La classe n'existe pas — la créer
+            try {
+              const niveau = inferNiveauFromClasseName(l.classe);
+              const currentYear = "2026-2027";
+              const newClasse = await prisma.classe.create({
+                data: {
+                  tenantId,
+                  siteId: l.siteId,
+                  nom: l.classe,
+                  niveau,
+                  annee: currentYear,
+                  effectifMax: 40,
+                },
+              });
+              classeId = newClasse.id;
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Erreur création classe";
+              erreursCreation.push(`Ligne ${l.ligne} (${l.nom}) — création classe « ${l.classe} » : ${msg}`);
+            }
+          }
+
+          // Créer l'affectation enseignant ↔ classe
+          if (classeId) {
+            try {
+              // Au primaire : pas de matière (matiereId null)
+              // Au collège/lycée : matière obligatoire — on prend la 1ère si disponible
+              const matiereForAffectation = l.matiereId || null;
+              await prisma.enseignantAffectation.create({
+                data: {
+                  tenantId,
+                  enseignantId: enseignant.id,
+                  classeId,
+                  matiereId: matiereForAffectation,
+                },
+              });
+            } catch (err) {
+              // Si l'affectation existe déjà (unique constraint), on ignore
+              const msg = err instanceof Error ? err.message : "";
+              if (!msg.includes("Already exists") && !msg.includes("unique")) {
+                console.warn(`[import/enseignants] Affectation classe échouée pour ${l.nom}:`, msg);
+              }
+            }
+          }
         }
 
         // 5. Envoyer l'email de vérification (non bloquant)
