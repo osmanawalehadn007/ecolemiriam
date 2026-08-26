@@ -22,6 +22,7 @@ import type { SiteColor } from "@/lib/site-colors";
 import { DepensesSection } from "./DepensesSection";
 import { BudgetSection } from "./BudgetSection";
 import { RemiseCaisseSection } from "./RemiseCaisseSection";
+import { hasPermission } from "@/lib/client-permissions";
 
 type Periode = "today" | "week" | "month" | "semester" | "year";
 type FinanceType = "all" | "recettes" | "depenses" | "factures";
@@ -171,6 +172,7 @@ export function FinanceView({
   const tCommon = useTranslations("common");
   const router = useRouter();
   const searchParams = useSearchParams();
+  const canWriteFinance = hasPermission(currentUser.role, "finance:write");
   const currency = paiements[0]?.devise ?? facturesPeriode[0]?.devise ?? "DJF";
   const siteColor = activeSite === "all" ? undefined : siteColors[activeSite];
 
@@ -556,12 +558,16 @@ export function FinanceView({
                         <td className="py-2 pr-2 text-muted-foreground">{p.enregistrePar?.name ?? "—"}</td>
                         <td className="py-2 text-right">
                           <div className="flex justify-end gap-2">
-                            <Button size="sm" variant="outline" onClick={() => { setDepotId(p.id); setDepotDate(todayInputValue()); }}>
-                              {t("depositAction")}
-                            </Button>
-                            <Button size="sm" variant="secondary" onClick={() => recuperer(p.id)}>
-                              {t("recoverAction")}
-                            </Button>
+                            {canWriteFinance && (
+                              <Button size="sm" variant="outline" onClick={() => { setDepotId(p.id); setDepotDate(todayInputValue()); }}>
+                                {t("depositAction")}
+                              </Button>
+                            )}
+                            {canWriteFinance && (
+                              <Button size="sm" variant="secondary" onClick={() => recuperer(p.id)}>
+                                {t("recoverAction")}
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>

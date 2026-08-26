@@ -325,12 +325,6 @@ function LoginForm() {
           )}
         </Button>
 
-        <div className="text-center text-sm text-muted-foreground">
-          {t("title") === "Sign In" ? "Don't have an account? " : "Pas de compte ? "}
-          <Link href="/register" className="font-medium text-primary hover:underline">
-            {t("title") === "Sign In" ? "Create one" : "Créer un compte"}
-          </Link>
-        </div>
       </form>
     </div>
   );

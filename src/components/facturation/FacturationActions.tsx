@@ -19,6 +19,7 @@ import {
   getExclusionsForTenant,
 } from "@/lib/actions/facturation-avancee";
 import { PaiementParNumero } from "./PaiementParNumero";
+import { hasPermission } from "@/lib/client-permissions";
 
 interface FactureEnRetard {
   id: string;
@@ -44,8 +45,9 @@ interface ExclusionItem {
 
 const MOIS_NOMS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
-export function FacturationActions({ currentYear = "2025-2026" }: { currentYear?: string }) {
+export function FacturationActions({ currentYear = "2025-2026", userRole }: { currentYear?: string; userRole?: string }) {
   const t = useTranslations("facturation");
+  const canWrite = hasPermission(userRole, "finance:write");
   const [isPending, setIsPending] = useState(false);
   const [showGenModal, setShowGenModal] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
@@ -148,22 +150,28 @@ export function FacturationActions({ currentYear = "2025-2026" }: { currentYear?
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="default" className="gap-2" onClick={() => setShowGenModal(!showGenModal)}>
-          <Zap className="h-4 w-4" />
-          {t("generateMonthly")}
-        </Button>
-        <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowPayModal(!showPayModal)}>
-          <Banknote className="h-4 w-4" />
-          {t("payByInvoiceNumber")}
-        </Button>
+        {canWrite && (
+          <Button size="sm" variant="default" className="gap-2" onClick={() => setShowGenModal(!showGenModal)}>
+            <Zap className="h-4 w-4" />
+            {t("generateMonthly")}
+          </Button>
+        )}
+        {canWrite && (
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowPayModal(!showPayModal)}>
+            <Banknote className="h-4 w-4" />
+            {t("payByInvoiceNumber")}
+          </Button>
+        )}
         <Button size="sm" variant="outline" className="gap-2" onClick={handleDetecterRetard} disabled={loadingRetard}>
           {loadingRetard ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
           {t("detectOverdue")}
         </Button>
-        <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowExcluModal(!showExcluModal)}>
-          <Ban className="h-4 w-4" />
-          {t("exclusions")} ({exclusions.length})
-        </Button>
+        {canWrite && (
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowExcluModal(!showExcluModal)}>
+            <Ban className="h-4 w-4" />
+            {t("exclusions")} ({exclusions.length})
+          </Button>
+        )}
       </div>
 
       {/* Modal: Paiement par numéro */}

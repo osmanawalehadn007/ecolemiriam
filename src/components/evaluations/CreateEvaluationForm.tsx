@@ -11,18 +11,22 @@ import { PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { hasPermission } from "@/lib/client-permissions";
 
 interface Props {
   classes: { id: string; nom: string }[];
   matieres: { id: string; nom: string }[];
   periodes: { id: string; nom: string }[];
+  userRole?: string;
 }
 
-export function CreateEvaluationForm({ classes, matieres, periodes }: Props) {
+export function CreateEvaluationForm({ classes, matieres, periodes, userRole }: Props) {
   const t = useTranslations("evaluations");
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const canWrite = hasPermission(userRole, "evaluations:write");
+  if (!canWrite) return null;
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
+import { hasPermission } from "@/lib/client-permissions";
 
 interface FactureMensuelle {
   id: string;
@@ -35,6 +36,7 @@ interface FactureMensuelle {
 
 interface FacturesMonthlyViewProps {
   factures: FactureMensuelle[];
+  userRole?: string;
 }
 
 const MOIS_NOMS = [
@@ -56,8 +58,9 @@ function getMonthLabel(moisKey: string): string {
   return moisKey;
 }
 
-export function FacturesMonthlyView({ factures }: FacturesMonthlyViewProps) {
+export function FacturesMonthlyView({ factures, userRole }: FacturesMonthlyViewProps) {
   const t = useTranslations("facturation");
+  const canWriteFinance = hasPermission(userRole, "finance:write");
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<"ALL" | "PAYEE" | "EN_ATTENTE" | "EN_RETARD" | "RELANCEE">("ALL");
 
@@ -274,12 +277,14 @@ export function FacturesMonthlyView({ factures }: FacturesMonthlyViewProps) {
                           <Download className="h-3 w-3" />
                           {t("export")}
                         </Button>
-                        <Button asChild variant="ghost" size="sm" className="gap-1 text-xs h-7">
-                          <Link href="/facturation/nouvelle">
-                            <Plus className="h-3 w-3" />
-                            {t("newInvoice")}
-                          </Link>
-                        </Button>
+                        {canWriteFinance && (
+                          <Button asChild variant="ghost" size="sm" className="gap-1 text-xs h-7">
+                            <Link href="/facturation/nouvelle">
+                              <Plus className="h-3 w-3" />
+                              {t("newInvoice")}
+                            </Link>
+                          </Button>
+                        )}
                       </div>
                     </div>
 

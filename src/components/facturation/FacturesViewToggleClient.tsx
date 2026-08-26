@@ -9,7 +9,7 @@ import { FacturesMonthlyView } from "./FacturesMonthlyView";
 
 type FactureItem = Awaited<ReturnType<typeof import("@/lib/actions/facture").getFacturesForTenant>>[number];
 
-export function FacturesViewToggleClient({ factures }: { factures: FactureItem[] }) {
+export function FacturesViewToggleClient({ factures, userRole }: { factures: FactureItem[]; userRole?: string }) {
   const t = useTranslations("facturation");
   const [view, setView] = useState<"list" | "monthly">("list");
 
@@ -47,7 +47,7 @@ export function FacturesViewToggleClient({ factures }: { factures: FactureItem[]
       {view === "list" ? (
         <FacturesTable factures={factures} />
       ) : (
-        <FacturesMonthlyView factures={factures} />
+        <FacturesMonthlyView factures={factures} userRole={userRole} />
       )}
     </div>
   );

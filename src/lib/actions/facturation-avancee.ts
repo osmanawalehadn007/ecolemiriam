@@ -184,65 +184,88 @@ export async function genererMensualites(params: {
     tarifMap.set(t.niveau.toLowerCase(), t);
   }
 
-  let count = 0;
-  let skipped = 0;
+  const libelle = `Scolarité ${moisNom} ${annee}`;
+  const echeance = new Date(parseInt(annee.split("-")[0]), mois, 0);
 
-  for (const eleve of eleves) {
+  // ── OPTIMISATION : 3 requêtes batch au lieu de 3×N requêtes dans une boucle
+  // Avant : pour 880 élèves → 880 findFirst + 880 count + 880 create = 2640 requêtes
+  // Après : 1 findMany + 1 count + 1 createMany = 3 requêtes
+
+  // 1. Filtrer les élèves qui ont un tarif → éviter les requêtes inutiles
+  const elevesAvecTarif = eleves.filter((e) => {
+    const niveau = e.classe?.niveau ?? "Inconnu";
+    return tarifMap.has(niveau.toLowerCase());
+  });
+
+  // 2. Batch : vérifier quelles factures existent déjà (1 seule requête)
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
+  const existingFactures = await prisma.facture.findMany({
+    where: {
+      tenantId,
+      eleveId: { in: elevesAvecTarif.map((e) => e.id) },
+      libelle,
+    },
+    select: { eleveId: true },
+  });
+  const existingSet = new Set(existingFactures.map((f) => f.eleveId));
+
+  // 3. Construire les données à insérer (en mémoire, 0 requête)
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- count global pour numérotation séquentielle
+  const baseCount = await prisma.facture.count({ where: { tenantId } });
+  const anneePrefix = annee.split("-")[0];
+
+  const toCreate: Array<{
+    tenantId: string;
+    eleveId: string;
+    numero: string;
+    libelle: string;
+    montant: number;
+    devise: string;
+    statut: "EN_ATTENTE";
+    echeance: Date;
+    mois: string;
+    siteId: string | null;
+    createdById: string;
+  }> = [];
+
+  let seq = baseCount + 1;
+  for (const eleve of elevesAvecTarif) {
+    if (existingSet.has(eleve.id)) continue;
+
     const niveau = eleve.classe?.niveau ?? "Inconnu";
-    const tarif = tarifMap.get(niveau.toLowerCase());
-    if (!tarif) {
-      skipped++;
-      continue;
-    }
+    const tarif = tarifMap.get(niveau.toLowerCase())!;
 
-    // Vérifier si une facture existe déjà pour cet élève et ce mois
-    const libelle = `Scolarité ${moisNom} ${annee}`;
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
-    const existing = await prisma.facture.findFirst({
-      where: {
-        tenantId,
-        eleveId: eleve.id,
-        libelle,
-      },
-      select: { id: true },
-    });
-    if (existing) {
-      skipped++;
-      continue;
-    }
-
-    // Calculer le montant total
     let montant = tarif.mensualite;
     if (inclureCantine && tarif.fraisCantine) montant += tarif.fraisCantine;
     if (inclureTransport && tarif.fraisTransport) montant += tarif.fraisTransport;
 
-    // Échéance = fin du mois
-    const echeance = new Date(parseInt(annee.split("-")[0]), mois, 0);
-
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
-    const factureCount = await prisma.facture.count({ where: { tenantId } });
-    const numero = `FAC-${annee.split("-")[0]}-${String(factureCount + 1).padStart(5, "0")}`;
-
-    await prisma.facture.create({
-      data: {
-        tenantId,
-        eleveId: eleve.id,
-        numero,
-        libelle,
-        montant,
-        devise: tarif.devise,
-        statut: "EN_ATTENTE",
-        echeance,
-        mois: moisKey,
-        createdById: session.user.id,
-      },
+    toCreate.push({
+      tenantId,
+      eleveId: eleve.id,
+      numero: `FAC-${anneePrefix}-${String(seq).padStart(5, "0")}`,
+      libelle,
+      montant,
+      devise: tarif.devise,
+      statut: "EN_ATTENTE",
+      echeance,
+      mois: moisKey,
+      siteId: eleve.siteId ?? null,
+      createdById: session.user.id,
     });
-    count++;
+    seq++;
   }
+
+  // 4. Bulk insert (1 seule requête)
+  if (toCreate.length > 0) {
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- bulk insert, tenantId dans chaque ligne
+    await prisma.facture.createMany({ data: toCreate });
+  }
+
+  const skipped = eleves.length - toCreate.length;
 
   revalidatePath("/facturation");
   revalidateTag("dashboard-data");
-  return { success: true, generated: count, skipped };
+  return { success: true, generated: toCreate.length, skipped };
 }
 
 // ============================================================
@@ -270,57 +293,92 @@ export async function genererFraisInscription(params: {
     tarifMap.set(t.niveau.toLowerCase(), t);
   }
 
-  let count = 0;
-  let skipped = 0;
+  const libelle = type === "INSCRIPTION"
+    ? `Frais d'inscription ${annee}`
+    : `Frais de renouvellement ${annee}`;
+  const echeance = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 jours
 
-  for (const eleveId of eleveIds) {
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId : le caller a déjà vérifié l'accès
-    const eleve = await prisma.eleve.findFirst({
-      where: { id: eleveId, tenantId },
-      include: { classe: { select: { niveau: true } } },
-    });
-    if (!eleve) { skipped++; continue; }
+  // ── OPTIMISATION : 3 requêtes batch au lieu de 4×N requêtes dans une boucle
+  // Avant : pour N élèves → N findFirst(eleve) + N findFirst(facture) + N count + N create = 4N
+  // Après : 1 findMany(eleves) + 1 findMany(factures) + 1 count + 1 createMany = 4
+
+  // 1. Batch : charger tous les élèves en 1 requête
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId : le caller a déjà vérifié l'accès
+  const eleves = await prisma.eleve.findMany({
+    where: { id: { in: eleveIds }, tenantId },
+    include: { classe: { select: { niveau: true } } },
+  });
+
+  // 2. Filtrer ceux qui ont un tarif
+  const elevesAvecTarif = eleves.filter((e) => {
+    const niveau = e.classe?.niveau ?? "Inconnu";
+    return tarifMap.has(niveau.toLowerCase());
+  });
+
+  // 3. Batch : vérifier les factures déjà existantes (1 requête)
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
+  const existingFactures = await prisma.facture.findMany({
+    where: {
+      tenantId,
+      eleveId: { in: elevesAvecTarif.map((e) => e.id) },
+      libelle,
+    },
+    select: { eleveId: true },
+  });
+  const existingSet = new Set(existingFactures.map((f) => f.eleveId));
+
+  // 4. Numérotation séquentielle (1 count au lieu de N)
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- count global pour numérotation séquentielle
+  const baseCount = await prisma.facture.count({ where: { tenantId } });
+  const anneePrefix = annee.split("-")[0];
+
+  const toCreate: Array<{
+    tenantId: string;
+    eleveId: string;
+    numero: string;
+    libelle: string;
+    montant: number;
+    devise: string;
+    statut: "EN_ATTENTE";
+    echeance: Date;
+    siteId: string | null;
+    createdById: string;
+  }> = [];
+
+  let seq = baseCount + 1;
+  for (const eleve of elevesAvecTarif) {
+    if (existingSet.has(eleve.id)) continue;
 
     const niveau = eleve.classe?.niveau ?? "Inconnu";
-    const tarif = tarifMap.get(niveau.toLowerCase());
-    if (!tarif) { skipped++; continue; }
-
-    const libelle = type === "INSCRIPTION"
-      ? `Frais d'inscription ${annee}`
-      : `Frais de renouvellement ${annee}`;
-
-    // Vérifier si déjà facturé
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
-    const existing = await prisma.facture.findFirst({
-      where: { tenantId, eleveId, libelle },
-      select: { id: true },
-    });
-    if (existing) { skipped++; continue; }
-
+    const tarif = tarifMap.get(niveau.toLowerCase())!;
     const montant = type === "INSCRIPTION" ? tarif.fraisInscription : tarif.fraisRenouvellement;
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
-    const factureCount = await prisma.facture.count({ where: { tenantId } });
-    const numero = `FAC-${annee.split("-")[0]}-${String(factureCount + 1).padStart(5, "0")}`;
 
-    await prisma.facture.create({
-      data: {
-        tenantId,
-        eleveId,
-        numero,
-        libelle,
-        montant,
-        devise: tarif.devise,
-        statut: "EN_ATTENTE",
-        echeance: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 jours
-        createdById: session.user.id,
-      },
+    toCreate.push({
+      tenantId,
+      eleveId: eleve.id,
+      numero: `FAC-${anneePrefix}-${String(seq).padStart(5, "0")}`,
+      libelle,
+      montant,
+      devise: tarif.devise,
+      statut: "EN_ATTENTE",
+      echeance,
+      siteId: eleve.siteId ?? null,
+      createdById: session.user.id,
     });
-    count++;
+    seq++;
   }
+
+  // 5. Bulk insert (1 requête)
+  if (toCreate.length > 0) {
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- bulk insert, tenantId dans chaque ligne
+    await prisma.facture.createMany({ data: toCreate });
+  }
+
+  const skipped = eleveIds.length - toCreate.length;
 
   revalidatePath("/facturation");
   revalidateTag("dashboard-data");
-  return { success: true, generated: count, skipped };
+  return { success: true, generated: toCreate.length, skipped };
 }
 
 // ============================================================

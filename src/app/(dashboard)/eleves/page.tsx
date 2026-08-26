@@ -15,6 +15,7 @@ import { getTranslations } from "next-intl/server";
 import { unstable_cache } from "next/cache";
 import { ImportElevesButton } from "@/components/eleves/ImportElevesButton";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { roleHasPermission } from "@/lib/rbac";
 import { getSitesForUserCached } from "@/lib/sites-cached";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { getSiteColorMap } from "@/lib/site-colors";
@@ -311,6 +312,10 @@ export default async function ElevesPage({
       : "Aucun site";
   const currentSiteColor = currentSiteId ? siteColors[currentSiteId] : undefined;
 
+  // Le bouton "Ajouter un élève" et l'import Excel nécessitent eleves:write.
+  // Les comptables (ACCOUNTANT) n'ont que eleves:read — ils inscrivent via /admissions.
+  const canWriteEleves = roleHasPermission(session.user.role as Role, "eleves:write");
+
   // Filtrer la liste des classes pour les enseignants (ne montrer que leurs classes)
   const filteredClasseNoms = scope?.isRestricted
     ? classeNoms.filter((c: { id: string; nom: string; siteNom: string | null }) =>
@@ -335,13 +340,17 @@ export default async function ElevesPage({
           <ElevesStats stats={stats} />
           <div className="flex gap-2">
             <ElevesActions q={q} classeId={classeId} statut={statut} />
-            <ImportElevesButton sites={sites} currentSiteId={currentSiteId} tenantHasSites={tenantHasSites} />
-            <Button asChild size="sm" className="gap-2">
-              <Link href="/eleves/nouveau">
-                <Plus className="h-4 w-4" />
-                {t("register")}
-              </Link>
-            </Button>
+            {canWriteEleves && (
+              <ImportElevesButton sites={sites} currentSiteId={currentSiteId} tenantHasSites={tenantHasSites} />
+            )}
+            {canWriteEleves && (
+              <Button asChild size="sm" className="gap-2">
+                <Link href="/eleves/nouveau">
+                  <Plus className="h-4 w-4" />
+                  {t("register")}
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
 

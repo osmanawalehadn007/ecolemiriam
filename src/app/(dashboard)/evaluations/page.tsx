@@ -139,7 +139,7 @@ export default async function EvaluationsPage({
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">{t("title")}</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">{t("subtitle")}</p>
         </div>
-        <CreateEvaluationForm classes={classes} matieres={matieres} periodes={periodes} />
+        <CreateEvaluationForm classes={classes} matieres={matieres} periodes={periodes} userRole={session.user.role} />
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border overflow-hidden">

@@ -224,12 +224,19 @@ function CandidatureCard({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ statut }),
         });
-        if (!res.ok) throw new Error();
-        const { candidature: updated } = await res.json();
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error ?? "Échec");
+        }
+        const { candidature: updated, eleveCreeId } = await res.json();
         onUpdate(updated);
-        toast.success(t("statusUpdated", { status: t(STATUT_CONFIG[statut].labelKey) }));
-      } catch {
-        toast.error(t("updateError"));
+        if (statut === "INSCRIT" && eleveCreeId) {
+          toast.success(`${t("statusUpdated", { status: t(STATUT_CONFIG[statut].labelKey) })} — ${t("studentCreated")}`);
+        } else {
+          toast.success(t("statusUpdated", { status: t(STATUT_CONFIG[statut].labelKey) }));
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : t("updateError"));
       }
     });
   };

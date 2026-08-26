@@ -20,6 +20,7 @@ import {
 import { DispenseMatiereManager } from "./DispenseMatiereManager";
 import { useTranslations } from "next-intl";
 import { deleteEleve } from "@/lib/actions/eleve";
+import { hasPermission } from "@/lib/client-permissions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -206,6 +207,8 @@ export function EleveDetailView({
   const t = useTranslations("eleveDetail");
   const router = useRouter();
   const isAccountant = userRole === "ACCOUNTANT";
+  const canWriteEleves = hasPermission(userRole, "eleves:write");
+  const canWriteFinance = hasPermission(userRole, "finance:write");
   const [tab, setTab] = useState(isAccountant ? "facturation" : "notes");
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -261,7 +264,7 @@ export function EleveDetailView({
             {t("backToList")}
           </Link>
         </Button>
-        {!isAccountant && (
+        {canWriteEleves && (
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline" size="sm" className="gap-2">
               <Link href={`/eleves/${eleve.id}/modifier`}>
@@ -283,7 +286,7 @@ export function EleveDetailView({
       </div>
 
       {/* Delete confirmation dialog */}
-      {showDeleteConfirm && !isAccountant && (
+      {showDeleteConfirm && canWriteEleves && (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="pt-6 space-y-4">
             <div className="flex items-start gap-3">
@@ -633,12 +636,14 @@ export function EleveDetailView({
         <TabsContent value="facturation" className="mt-4">
           {/* Actions rapides */}
           <div className="flex flex-wrap gap-2 mb-4">
-            <Button asChild size="sm" variant="default" className="gap-2">
-              <Link href={`/facturation/nouvelle?eleveId=${eleve.id}`}>
-                <Plus className="h-4 w-4" />
-                {t("createInvoice")}
-              </Link>
-            </Button>
+            {canWriteFinance && (
+              <Button asChild size="sm" variant="default" className="gap-2">
+                <Link href={`/facturation/nouvelle?eleveId=${eleve.id}`}>
+                  <Plus className="h-4 w-4" />
+                  {t("createInvoice")}
+                </Link>
+              </Button>
+            )}
             <Button asChild size="sm" variant="outline" className="gap-2">
               <Link href="/facturation">
                 <FileText className="h-4 w-4" />

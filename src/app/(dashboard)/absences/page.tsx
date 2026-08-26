@@ -12,6 +12,8 @@ import { startOfDay, endOfDay, subDays } from "date-fns";
 import { getTranslations } from "next-intl/server";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import { siteFilterForModel, eleveScopeFilter, mergeFilters } from "@/lib/site-scope";
+import { roleHasPermission } from "@/lib/rbac";
+import type { Role } from "@prisma/client";
 
 async function getAbsencesData(
   tenantId: string,
@@ -86,6 +88,7 @@ export default async function AbsencesPage() {
     : undefined;
 
   const data = await getAbsencesData(session.user.tenantId, siteFilter, classeFilter);
+  const canWriteAbsences = roleHasPermission(session.user.role as Role, "absences:write");
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -105,18 +108,22 @@ export default async function AbsencesPage() {
             nonJustifiees={data.absencesNonJustifiees}
           />
           <div className="flex gap-2">
-            <Button asChild size="sm" variant="outline" className="gap-2">
-              <Link href="/absences/appel">
-                <ClipboardCheck className="h-4 w-4" />
-                {t("call")}
-              </Link>
-            </Button>
-            <Button asChild size="sm" className="gap-2">
-              <Link href="/absences">
-                <Plus className="h-4 w-4" />
-                {t("addAbsence")}
-              </Link>
-            </Button>
+            {canWriteAbsences && (
+              <Button asChild size="sm" variant="outline" className="gap-2">
+                <Link href="/absences/appel">
+                  <ClipboardCheck className="h-4 w-4" />
+                  {t("call")}
+                </Link>
+              </Button>
+            )}
+            {canWriteAbsences && (
+              <Button asChild size="sm" className="gap-2">
+                <Link href="/absences">
+                  <Plus className="h-4 w-4" />
+                  {t("addAbsence")}
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
 

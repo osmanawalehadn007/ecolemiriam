@@ -24,8 +24,8 @@ export default async function FacturationPage() {
         userAvatar={session!.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin space-y-4">
-        <FacturationActions currentYear="2025-2026" />
-        <FacturesViewToggleClient factures={factures} />
+        <FacturationActions currentYear="2025-2026" userRole={session!.user.role} />
+        <FacturesViewToggleClient factures={factures} userRole={session!.user.role} />
       </div>
     </div>
   );

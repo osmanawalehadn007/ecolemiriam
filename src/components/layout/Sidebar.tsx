@@ -35,6 +35,10 @@ import {
   Banknote,
   Backpack,
   Tag,
+  RefreshCw,
+  IdCard,
+  FileCheck,
+  ArrowRightLeft,
   type LucideIcon,
 } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
@@ -66,6 +70,9 @@ const navGroups: NavGroup[] = [
     groupKey: "groupPedagogie",
     items: [
       { labelKey: "eleves", icon: Users, href: "/eleves", color: "text-violet-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "TEACHER", "CLASS_TEACHER", "COUNSELOR", "NURSE", "ACCOUNTANT", "PARENT"] },
+      { labelKey: "transfertClasse", icon: ArrowRightLeft, href: "/eleves/transfert", color: "text-violet-400", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY"] },
+      { labelKey: "cartesScolaires", icon: IdCard, href: "/eleves/cartes", color: "text-violet-400", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY"] },
+      { labelKey: "attestations", icon: FileCheck, href: "/eleves/attestations", color: "text-violet-400", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY"] },
       { labelKey: "notes", icon: BookOpen, href: "/notes", color: "text-green-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "TEACHER", "CLASS_TEACHER", "PARENT", "STUDENT"] },
       { labelKey: "examens", icon: GraduationCap, href: "/examens", color: "text-yellow-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "TEACHER", "CLASS_TEACHER"] },
       { labelKey: "cahierTexte", icon: BookOpen, href: "/cahier-de-texte", color: "text-teal-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "TEACHER", "CLASS_TEACHER"] },
@@ -89,6 +96,7 @@ const navGroups: NavGroup[] = [
     groupKey: "groupGestion",
     items: [
       { labelKey: "admissions", icon: UserPlus, href: "/admissions", color: "text-teal-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "ACCOUNTANT"] },
+      { labelKey: "reinscription", icon: RefreshCw, href: "/reinscription", color: "text-cyan-400", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "ACCOUNTANT"] },
       { labelKey: "facturation", icon: Receipt, href: "/facturation", color: "text-emerald-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT", "SECRETARY"] },
       { labelKey: "finances", icon: Banknote, href: "/finances", color: "text-emerald-600", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT", "SECRETARY"] },
       { labelKey: "rh", icon: Briefcase, href: "/rh", color: "text-amber-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT", "SECRETARY"] },
