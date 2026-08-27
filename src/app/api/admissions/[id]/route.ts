@@ -86,26 +86,59 @@ export async function PATCH(
     });
 
     if (!factureExistante) {
-      // Récupérer le tarif d'inscription pour le niveau/site/année
-      // eslint-disable-next-line ecolemiriam/require-site-filter -- recherche tarif par niveau, pas par site obligatoire
+      // Les tarifs (TarifNiveau) sont indexés par NIVEAU pédagogique
+      // ("Terminale", "CM2"…), alors que `classeVoulue` contient le NOM de la
+      // classe ("Terminale A", sélectionné dans la liste). On résout d'abord le
+      // niveau depuis la classe correspondante ; à défaut (candidature publique
+      // en texte libre) on retombe sur `classeVoulue` tel quel.
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par nom de classe, borné au tenant + site de la candidature
+      const classeVisee = await prisma.classe.findFirst({
+        where: {
+          tenantId: session.user.tenantId,
+          nom: candidature.classeVoulue,
+          ...(candidature.siteId ? { siteId: candidature.siteId } : {}),
+        },
+        select: { niveau: true },
+      });
+      const niveauTarif = classeVisee?.niveau ?? candidature.classeVoulue;
+
+      // Récupérer le tarif d'inscription pour le niveau/année, en privilégiant
+      // le tarif spécifique au site mais en acceptant le tarif partagé
+      // (siteId null) — sans quoi un tarif commun à tous les sites serait ignoré
+      // et la facture tomberait à 0.
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- recherche tarif par niveau, filtre site tolérant (site OU partagé)
       const tarif = await prisma.tarifNiveau.findFirst({
         where: {
           tenantId: session.user.tenantId,
-          niveau: candidature.classeVoulue,
+          niveau: niveauTarif,
           annee: candidature.annee,
           actif: true,
-          ...(candidature.siteId ? { siteId: candidature.siteId } : {}),
+          OR: [{ siteId: candidature.siteId ?? null }, { siteId: null }],
         },
+        orderBy: { siteId: "desc" }, // privilégier le tarif spécifique au site
       });
+
+      // Garde-fou : sans tarif configuré (ou tarif à 0), la facture serait vide
+      // et l'encaissement impossible. On bloque l'admission avec un message
+      // explicite plutôt que de créer une facture inexploitable.
+      const fraisInscription = tarif?.fraisInscription ?? 0;
+      const mensualite = tarif?.mensualite ?? 0;
+      const montantTotal = fraisInscription + mensualite;
+      const devise = tarif?.devise ?? "DJF";
+
+      if (!tarif || montantTotal <= 0) {
+        return NextResponse.json(
+          {
+            error: `Aucun tarif actif n'est configuré pour le niveau « ${niveauTarif} » (année ${candidature.annee}). Renseignez les frais d'inscription et la mensualité dans Paramètres → Tarifs avant d'admettre ce candidat.`,
+          },
+          { status: 400 }
+        );
+      }
 
       // La facture d'inscription inclut : frais d'inscription + une mensualité de
       // scolarité. Le mois facturé est choisi par l'utilisateur au moment de
       // l'admission ; à défaut on applique la règle par date (septembre en
       // août/septembre, sinon le mois en cours).
-      const fraisInscription = tarif?.fraisInscription ?? 0;
-      const mensualite = tarif?.mensualite ?? 0;
-      const montantTotal = fraisInscription + mensualite;
-      const devise = tarif?.devise ?? "DJF";
       const moisScolarite = data.moisScolarite ?? moisScolariteDefaut();
       const moisLabel = formatMoisScolarite(moisScolarite);
 
