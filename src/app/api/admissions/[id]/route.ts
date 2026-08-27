@@ -247,11 +247,38 @@ export async function PATCH(
         });
       }
 
-      // 2. Créer l'élève
+      // 2a. Résoudre la classe choisie pour rattacher l'élève à sa structure.
+      //     `candidature.classeVoulue` contient le NOM de la classe (sélectionné
+      //     dans la liste). On cherche d'abord la classe du bon nom / site /
+      //     année ; à défaut (année qui diffère) on retombe sur nom + site.
+      //     Sans cette résolution, l'élève naissait sans aucune classe.
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par nom de classe, borné au tenant + site de la candidature
+      const classeVisee =
+        (await tx.classe.findFirst({
+          where: {
+            tenantId,
+            nom: candidature.classeVoulue,
+            annee: candidature.annee,
+            ...(candidature.siteId ? { siteId: candidature.siteId } : {}),
+          },
+          select: { id: true },
+        })) ??
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- même lookup, sans contrainte d'année
+        (await tx.classe.findFirst({
+          where: {
+            tenantId,
+            nom: candidature.classeVoulue,
+            ...(candidature.siteId ? { siteId: candidature.siteId } : {}),
+          },
+          select: { id: true },
+        }));
+
+      // 2b. Créer l'élève, rattaché à sa classe
       const eleve = await tx.eleve.create({
         data: {
           tenantId,
           siteId: candidature.siteId,
+          classeId: classeVisee?.id ?? null,
           matricule: matricule!,
           nom: candidature.nom,
           prenom: candidature.prenom,
