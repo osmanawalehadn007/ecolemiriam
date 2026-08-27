@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { sendPaymentWhatsApp } from "@/lib/notifications/whatsapp";
 import { checkPermission } from "@/lib/rbac";
+import { audit } from "@/lib/audit";
 import { z } from "zod";
 
 // ============================================================
@@ -166,25 +167,41 @@ export async function genererMensualites(params: {
   const moisNom = moisNoms[mois - 1] ?? `Mois ${mois}`;
   const moisKey = `${annee.split("-")[0]}-${String(mois).padStart(2, "0")}`;
 
-  // Récupérer tous les élèves actifs avec leur classe (pour le niveau)
+  // Récupérer tous les élèves actifs avec leur classe (pour le niveau) et siteId
   // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId : le caller a déjà vérifié l'accès
   const eleves = await prisma.eleve.findMany({
     where: { tenantId, statut: "ACTIF" },
     include: { classe: { select: { niveau: true, nom: true } } },
+    select: { id: true, siteId: true, classe: { select: { niveau: true, nom: true } } },
   });
 
   // Récupérer les tarifs par niveau
+  // Indexation à deux niveaux : tarifs site-spécifique (prioritaires) + tarifs globaux
   const tarifs = await prisma.tarifNiveau.findMany({
     where: { tenantId, annee, actif: true },
   });
-
-  // Indexer les tarifs par niveau
-  const tarifMap = new Map<string, typeof tarifs[0]>();
+  const tarifByNiveauSite = new Map<string, typeof tarifs[0]>();
+  const tarifByNiveauGlobal = new Map<string, typeof tarifs[0]>();
   for (const t of tarifs) {
-    tarifMap.set(t.niveau.toLowerCase(), t);
+    if (t.siteId) {
+      tarifByNiveauSite.set(`${t.niveau.toLowerCase()}|${t.siteId}`, t);
+    } else {
+      tarifByNiveauGlobal.set(t.niveau.toLowerCase(), t);
+    }
+  }
+  // Lookup : tarif site-spécifique en priorité, fallback sur global
+  function findTarif(niveau: string, siteId: string | null) {
+    const key = `${niveau.toLowerCase()}|${siteId}`;
+    return tarifByNiveauSite.get(key) ?? tarifByNiveauGlobal.get(niveau.toLowerCase());
   }
 
-  const libelle = `Scolarité ${moisNom} ${annee}`;
+  // Septembre = premier mois de l'année scolaire : la facture inclut
+  // les frais de réinscription (= frais d'inscription du niveau) en plus
+  // de la mensualité. Ex: niveau 1 → 7000 + 2000 = 9000 FDJ en septembre.
+  const isSeptembre = mois === 9;
+  const libelle = isSeptembre
+    ? `Scolarité ${moisNom} ${annee} + Frais de réinscription`
+    : `Scolarité ${moisNom} ${annee}`;
   const echeance = new Date(parseInt(annee.split("-")[0]), mois, 0);
 
   // ── OPTIMISATION : 3 requêtes batch au lieu de 3×N requêtes dans une boucle
@@ -194,7 +211,7 @@ export async function genererMensualites(params: {
   // 1. Filtrer les élèves qui ont un tarif → éviter les requêtes inutiles
   const elevesAvecTarif = eleves.filter((e) => {
     const niveau = e.classe?.niveau ?? "Inconnu";
-    return tarifMap.has(niveau.toLowerCase());
+    return findTarif(niveau, e.siteId ?? null) !== undefined;
   });
 
   // 2. Batch : vérifier quelles factures existent déjà (1 seule requête)
@@ -233,9 +250,13 @@ export async function genererMensualites(params: {
     if (existingSet.has(eleve.id)) continue;
 
     const niveau = eleve.classe?.niveau ?? "Inconnu";
-    const tarif = tarifMap.get(niveau.toLowerCase())!;
+    const tarif = findTarif(niveau, eleve.siteId ?? null)!;
 
     let montant = tarif.mensualite;
+    // Septembre : ajouter les frais de réinscription (= frais d'inscription)
+    if (isSeptembre && tarif.fraisRenouvellement > 0) {
+      montant += tarif.fraisRenouvellement;
+    }
     if (inclureCantine && tarif.fraisCantine) montant += tarif.fraisCantine;
     if (inclureTransport && tarif.fraisTransport) montant += tarif.fraisTransport;
 
@@ -269,6 +290,183 @@ export async function genererMensualites(params: {
 }
 
 // ============================================================
+// GÉNÉRATION ANNUELLE COMPLETE (Septembre → Juin, 10 mois)
+// ============================================================
+//
+// Génère d'un coup toutes les factures de l'année scolaire pour tous
+// les élèves actifs. Le mois de Septembre est spécial : il inclut la
+// mensualité + les frais de réinscription (= frais d'inscription du
+// niveau). Les 9 autres mois (Octobre → Juin) ne contiennent que la
+// mensualité.
+//
+// Mois scolaires : 9, 10, 11, 12, 1, 2, 3, 4, 5, 6
+
+const MOIS_SCOLAIRES = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6];
+
+export async function genererFacturesAnnuelles(params: {
+  annee: string; // "2026-2027"
+  inclureCantine?: boolean;
+  inclureTransport?: boolean;
+}) {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
+
+  const tenantId = session.user.tenantId;
+  const { annee, inclureCantine = false, inclureTransport = false } = params;
+
+  const moisNoms = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+
+  // Récupérer tous les élèves actifs
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId : le caller a déjà vérifié l'accès
+  const eleves = await prisma.eleve.findMany({
+    where: { tenantId, statut: "ACTIF" },
+    include: { classe: { select: { niveau: true, nom: true } } },
+    select: { id: true, siteId: true, classe: { select: { niveau: true, nom: true } } },
+  });
+
+  // Tarifs par niveau (site-spécifique prioritaire + global fallback)
+  const tarifs = await prisma.tarifNiveau.findMany({
+    where: { tenantId, annee, actif: true },
+  });
+  const tarifByNiveauSite = new Map<string, typeof tarifs[0]>();
+  const tarifByNiveauGlobal = new Map<string, typeof tarifs[0]>();
+  for (const t of tarifs) {
+    if (t.siteId) {
+      tarifByNiveauSite.set(`${t.niveau.toLowerCase()}|${t.siteId}`, t);
+    } else {
+      tarifByNiveauGlobal.set(t.niveau.toLowerCase(), t);
+    }
+  }
+  function findTarif(niveau: string, siteId: string | null) {
+    const key = `${niveau.toLowerCase()}|${siteId}`;
+    return tarifByNiveauSite.get(key) ?? tarifByNiveauGlobal.get(niveau.toLowerCase());
+  }
+
+  const elevesAvecTarif = eleves.filter((e) => {
+    const niveau = e.classe?.niveau ?? "Inconnu";
+    return findTarif(niveau, e.siteId ?? null) !== undefined;
+  });
+
+  // Vérifier toutes les factures existantes pour cette année (tous mois confondus)
+  const anneeStart = annee.split("-")[0];
+  const anneeEnd = annee.split("-")[1] ?? anneeStart;
+  const moisKeys = MOIS_SCOLAIRES.map((m) => {
+    // Septembre → Décembre appartiennent à la première année
+    // Janvier → Juin appartiennent à la deuxième année
+    const yearPart = m >= 9 ? anneeStart : anneeEnd;
+    return `${yearPart}-${String(m).padStart(2, "0")}`;
+  });
+
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
+  const existingFactures = await prisma.facture.findMany({
+    where: {
+      tenantId,
+      eleveId: { in: elevesAvecTarif.map((e) => e.id) },
+      mois: { in: moisKeys },
+    },
+    select: { eleveId: true, mois: true, libelle: true },
+  });
+  // Clé de dédoublonnage : eleveId + mois
+  const existingSet = new Set(existingFactures.map((f) => `${f.eleveId}|${f.mois}`));
+
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- count global pour numérotation séquentielle
+  const baseCount = await prisma.facture.count({ where: { tenantId } });
+
+  const toCreate: Array<{
+    tenantId: string;
+    eleveId: string;
+    numero: string;
+    libelle: string;
+    montant: number;
+    devise: string;
+    statut: "EN_ATTENTE";
+    echeance: Date;
+    mois: string;
+    siteId: string | null;
+    createdById: string;
+  }> = [];
+
+  let seq = baseCount + 1;
+  const moisDetails: Array<{ mois: number; moisNom: string; generated: number; isSeptembre: boolean }> = [];
+
+  for (const m of MOIS_SCOLAIRES) {
+    const moisNom = moisNoms[m - 1] ?? `Mois ${m}`;
+    const isSeptembre = m === 9;
+    const yearPart = m >= 9 ? anneeStart : anneeEnd;
+    const moisKey = `${yearPart}-${String(m).padStart(2, "0")}`;
+    const libelle = isSeptembre
+      ? `Scolarité ${moisNom} ${annee} + Frais de réinscription`
+      : `Scolarité ${moisNom} ${annee}`;
+    // Échéance = fin du mois concerné
+    const echeance = new Date(parseInt(yearPart), m, 0);
+    let generatedThisMonth = 0;
+
+    for (const eleve of elevesAvecTarif) {
+      const dedupKey = `${eleve.id}|${moisKey}`;
+      if (existingSet.has(dedupKey)) continue;
+
+      const niveau = eleve.classe?.niveau ?? "Inconnu";
+      const tarif = findTarif(niveau, eleve.siteId ?? null)!;
+
+      let montant = tarif.mensualite;
+      if (isSeptembre && tarif.fraisRenouvellement > 0) {
+        montant += tarif.fraisRenouvellement;
+      }
+      if (inclureCantine && tarif.fraisCantine) montant += tarif.fraisCantine;
+      if (inclureTransport && tarif.fraisTransport) montant += tarif.fraisTransport;
+
+      toCreate.push({
+        tenantId,
+        eleveId: eleve.id,
+        numero: `FAC-${anneeStart}-${String(seq).padStart(5, "0")}`,
+        libelle,
+        montant,
+        devise: tarif.devise,
+        statut: "EN_ATTENTE",
+        echeance,
+        mois: moisKey,
+        siteId: eleve.siteId ?? null,
+        createdById: session.user.id,
+      });
+      seq++;
+      generatedThisMonth++;
+      existingSet.add(dedupKey); // éviter les doublons intra-batch
+    }
+
+    moisDetails.push({ mois: m, moisNom, generated: generatedThisMonth, isSeptembre });
+  }
+
+  // Bulk insert
+  if (toCreate.length > 0) {
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- bulk insert, tenantId dans chaque ligne
+    await prisma.facture.createMany({ data: toCreate });
+  }
+
+  const skipped = eleves.length - elevesAvecTarif.length;
+
+  await audit({
+    tenantId,
+    userId: session.user.id,
+    action: "facturation.generer_annuelles",
+    verdict: "ALLOWED",
+    resource: "factures",
+    reason: `Génération factures annuelles ${annee}: ${toCreate.length} factures sur ${MOIS_SCOLAIRES.length} mois`,
+    metadata: { annee, totalGenerated: toCreate.length, skipped, moisDetails },
+  });
+
+  revalidatePath("/facturation");
+  revalidateTag("dashboard-data");
+  return {
+    success: true,
+    generated: toCreate.length,
+    skipped,
+    moisDetails,
+  };
+}
+
+// ============================================================
 // GÉNÉRATION FRAIS D'INSCRIPTION / RENOUVELLEMENT
 // ============================================================
 
@@ -288,9 +486,19 @@ export async function genererFraisInscription(params: {
   const tarifs = await prisma.tarifNiveau.findMany({
     where: { tenantId, annee, actif: true },
   });
-  const tarifMap = new Map<string, typeof tarifs[0]>();
+  // Indexation à deux niveaux : tarifs site-spécifique (prioritaires) + tarifs globaux
+  const tarifByNiveauSite = new Map<string, typeof tarifs[0]>();
+  const tarifByNiveauGlobal = new Map<string, typeof tarifs[0]>();
   for (const t of tarifs) {
-    tarifMap.set(t.niveau.toLowerCase(), t);
+    if (t.siteId) {
+      tarifByNiveauSite.set(`${t.niveau.toLowerCase()}|${t.siteId}`, t);
+    } else {
+      tarifByNiveauGlobal.set(t.niveau.toLowerCase(), t);
+    }
+  }
+  function findTarif(niveau: string, siteId: string | null) {
+    const key = `${niveau.toLowerCase()}|${siteId}`;
+    return tarifByNiveauSite.get(key) ?? tarifByNiveauGlobal.get(niveau.toLowerCase());
   }
 
   const libelle = type === "INSCRIPTION"
@@ -312,7 +520,7 @@ export async function genererFraisInscription(params: {
   // 2. Filtrer ceux qui ont un tarif
   const elevesAvecTarif = eleves.filter((e) => {
     const niveau = e.classe?.niveau ?? "Inconnu";
-    return tarifMap.has(niveau.toLowerCase());
+    return findTarif(niveau, e.siteId ?? null) !== undefined;
   });
 
   // 3. Batch : vérifier les factures déjà existantes (1 requête)
@@ -350,7 +558,7 @@ export async function genererFraisInscription(params: {
     if (existingSet.has(eleve.id)) continue;
 
     const niveau = eleve.classe?.niveau ?? "Inconnu";
-    const tarif = tarifMap.get(niveau.toLowerCase())!;
+    const tarif = findTarif(niveau, eleve.siteId ?? null)!;
     const montant = type === "INSCRIPTION" ? tarif.fraisInscription : tarif.fraisRenouvellement;
 
     toCreate.push({
@@ -421,7 +629,7 @@ export async function envoyerRelance(factureId: string, canal: string) {
   const niveau = dernierNiveau + 1;
 
   const messages: Record<number, string> = {
-    1: `Première relance : La facture ${facture.numero} de ${facture.eleve.prenom} ${facture.eleve.nom} d'un montant de ${restant} ${facture.devise} est en retard. Merci de régulariser.`,
+    1: `Première relance : La facture ${facture.numero} de ${facture.eleve?.prenom ?? ""} ${facture.eleve?.nom ?? ""} d'un montant de ${restant} ${facture.devise} est en retard. Merci de régulariser.`,
     2: `Deuxième relance : La facture ${facture.numero} reste impayée (${restant} ${facture.devise}). Merci de régulariser rapidement.`,
     3: `Troisième relance (ULTIME) : La facture ${facture.numero} est toujours impayée. Une procédure d'exclusion pourrait être engagée.`,
   };
@@ -441,7 +649,7 @@ export async function envoyerRelance(factureId: string, canal: string) {
 
   // Envoi réel pour les canaux supportés
   if (canal === "whatsapp") {
-    const tuteur = facture.eleve.parents[0]?.parent;
+    const tuteur = facture.eleve?.parents[0]?.parent;
     if (tuteur?.phone) {
       const tenant = await prisma.tenant.findUnique({
         where: { id: session.user.tenantId },
@@ -449,7 +657,7 @@ export async function envoyerRelance(factureId: string, canal: string) {
       });
       await sendPaymentWhatsApp(
         tuteur.phone,
-        `${facture.eleve.prenom} ${facture.eleve.nom}`,
+        `${facture.eleve?.prenom ?? ""} ${facture.eleve?.nom ?? ""}`,
         restant,
         facture.devise,
         facture.numero,
@@ -614,9 +822,9 @@ export async function detecterFacturesEnRetard() {
     return {
       id: f.id,
       numero: f.numero,
-      eleveNom: `${f.eleve.prenom} ${f.eleve.nom}`,
-      matricule: f.eleve.matricule,
-      classe: f.eleve.classe?.nom ?? "N/A",
+      eleveNom: `${f.eleve?.prenom ?? ""} ${f.eleve?.nom ?? ""}`,
+      matricule: f.eleve?.matricule ?? "",
+      classe: f.eleve?.classe?.nom ?? "N/A",
       montant: f.montant,
       restant: f.montant - totalPaye,
       echeance: f.echeance,

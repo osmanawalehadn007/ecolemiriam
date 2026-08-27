@@ -399,6 +399,9 @@ export const SITE_PATHS: Record<string, SitePath> = {
   session: "tenant",
   verificationToken: "tenant",
   userPermission: "tenant",
+  // Le journal des emails est transverse : il trace les envois
+  // indépendamment du périmètre de site.
+  emailLog: "tenant",
 };
 
 /**

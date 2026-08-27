@@ -29,7 +29,15 @@ interface FactureMensuelle {
     prenom: string;
     matricule: string;
     classe: { nom: string } | null;
-  };
+  } | null;
+  candidature: {
+    id: string;
+    nom: string;
+    prenom: string;
+    classeVoulue: string;
+    annee: string;
+    statut: string;
+  } | null;
   paiements: { montant: number }[];
   relances: { id: string; niveau: number; envoyeeLe: Date }[];
 }
@@ -125,9 +133,9 @@ export function FacturesMonthlyView({ factures, userRole }: FacturesMonthlyViewP
       const paye = f.paiements.reduce((s, p) => s + p.montant, 0);
       return [
         f.numero,
-        `${f.eleve.prenom} ${f.eleve.nom}`,
-        f.eleve.matricule,
-        f.eleve.classe?.nom ?? "",
+        `${f.eleve?.prenom ?? ""} ${f.eleve?.nom ?? ""}`,
+        f.eleve?.matricule ?? "",
+        f.eleve?.classe?.nom ?? "",
         f.libelle,
         f.montant,
         paye,
@@ -315,8 +323,8 @@ export function FacturesMonthlyView({ factures, userRole }: FacturesMonthlyViewP
                                   </Link>
                                 </td>
                                 <td className="px-4 py-2.5">
-                                  <div className="font-medium text-xs">{f.eleve.prenom} {f.eleve.nom}</div>
-                                  <div className="text-xs text-muted-foreground">{f.eleve.classe?.nom ?? "N/A"}</div>
+                                  <div className="font-medium text-xs">{f.eleve?.prenom ?? ""} {f.eleve?.nom ?? ""}</div>
+                                  <div className="text-xs text-muted-foreground">{f.eleve?.classe?.nom ?? "N/A"}</div>
                                 </td>
                                 <td className="px-4 py-2.5 text-right font-medium text-xs">{formatMoney(f.montant, f.devise)}</td>
                                 <td className="px-4 py-2.5 text-right text-green-600 text-xs">{formatMoney(paye, f.devise)}</td>

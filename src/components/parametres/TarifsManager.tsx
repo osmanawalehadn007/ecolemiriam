@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,10 +13,38 @@ import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { hasPermission } from "@/lib/client-permissions";
+import { niveauToLabel } from "@/lib/niveau";
 import {
   createTarif, updateTarif, deleteTarif,
   type TarifFormData,
 } from "@/lib/actions/facturation-avancee";
+
+/**
+ * Ordre canonique des niveaux (du primaire au lycée).
+ * Utilisé pour trier les niveaux de manière logique.
+ */
+const ORDRE_NIVEAUX_CANONIQUE = [
+  "1ère", "2ème", "3ème", "4ème", "5ème",
+  "6ème", "7ème", "8ème", "9ème",
+  "Seconde", "Première", "Terminale",
+];
+
+/**
+ * Tri des niveaux : suit l'ordre canonique (1ère → Terminale),
+ * puis les niveaux non reconnus par ordre alphabétique.
+ */
+function sortNiveaux(a: string, b: string): number {
+  const idxA = ORDRE_NIVEAUX_CANONIQUE.findIndex(
+    (n) => n.toLowerCase() === a.toLowerCase().trim()
+  );
+  const idxB = ORDRE_NIVEAUX_CANONIQUE.findIndex(
+    (n) => n.toLowerCase() === b.toLowerCase().trim()
+  );
+  if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+  if (idxA !== -1) return -1;
+  if (idxB !== -1) return 1;
+  return a.localeCompare(b);
+}
 
 interface Tarif {
   id: string;
@@ -38,7 +66,14 @@ interface Site {
   nom: string;
 }
 
-const NIVEAUX = ["Maternelle", "Primaire", "Collège", "Lycée"];
+interface Classe {
+  id: string;
+  nom: string;
+  niveau: string;
+  siteId: string | null;
+}
+
+const NIVEAUX = ORDRE_NIVEAUX_CANONIQUE;
 
 function formatMoney(amount: number, devise: string) {
   return new Intl.NumberFormat("fr-DJ", { style: "currency", currency: devise === "XOF" ? "DJF" : devise, maximumFractionDigits: 0 }).format(amount);
@@ -48,10 +83,14 @@ export function TarifsManager({
   tarifs: initial,
   sites,
   userRole,
+  classes = [],
+  anneeCourante,
 }: {
   tarifs: Tarif[];
   sites: Site[];
   userRole?: string;
+  classes?: Classe[];
+  anneeCourante?: string;
 }) {
   const t = useTranslations("parametres");
   const canWrite = hasPermission(userRole, "finance:write");
@@ -91,6 +130,8 @@ export function TarifsManager({
       {showForm && (
         <TarifForm
           sites={sites}
+          classes={classes}
+          anneeCourante={anneeCourante}
           editingTarif={editingId ? tarifs.find((t) => t.id === editingId) : undefined}
           onClose={() => { setShowForm(false); setEditingId(null); }}
           onSaved={handleCreated}
@@ -123,11 +164,15 @@ export function TarifsManager({
 
 function TarifForm({
   sites,
+  classes,
+  anneeCourante,
   editingTarif,
   onClose,
   onSaved,
 }: {
   sites: Site[];
+  classes: { id: string; nom: string; niveau: string; siteId: string | null }[];
+  anneeCourante?: string;
   editingTarif?: Tarif;
   onClose: () => void;
   onSaved: () => void;
@@ -135,8 +180,8 @@ function TarifForm({
   const t = useTranslations("parametres");
   const [isPending, startTransition] = useTransition();
   const [form, setForm] = useState<TarifFormData>({
-    niveau: editingTarif?.niveau ?? "Primaire",
-    annee: editingTarif?.annee ?? `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
+    niveau: editingTarif?.niveau ?? "1ère",
+    annee: editingTarif?.annee ?? anneeCourante ?? `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
     mensualite: editingTarif?.mensualite ?? 0,
     fraisInscription: editingTarif?.fraisInscription ?? 0,
     fraisRenouvellement: editingTarif?.fraisRenouvellement ?? 0,
@@ -146,6 +191,17 @@ function TarifForm({
     nbMois: editingTarif?.nbMois ?? 10,
     siteId: editingTarif?.siteId ?? undefined,
   });
+
+  // Niveaux uniques issus des classes réelles, filtrés par site sélectionné
+  const niveauxDisponibles = useMemo(() => {
+    const filtered = form.siteId
+      ? classes.filter((c) => c.siteId === form.siteId)
+      : classes;
+    const niveaux = [...new Set(filtered.map((c) => c.niveau))];
+    // Fusionner avec les niveaux statiques au cas où il n'y aurait pas de classes
+    const tous = [...new Set([...niveaux, ...NIVEAUX])];
+    return tous.sort(sortNiveaux);
+  }, [classes, form.siteId]);
 
   const set = <K extends keyof TarifFormData>(k: K, v: TarifFormData[K]) =>
     setForm((prev) => ({ ...prev, [k]: v }));
@@ -189,17 +245,29 @@ function TarifForm({
                 onChange={(e) => set("niveau", e.target.value)}
                 className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
               >
-                {NIVEAUX.map((n) => <option key={n} value={n}>{n}</option>)}
+                {niveauxDisponibles.map((n) => (
+                  <option key={n} value={n}>{niveauToLabel(n)}</option>
+                ))}
               </select>
+              {form.siteId && niveauxDisponibles.length <= NIVEAUX.length && (
+                <p className="text-xs text-muted-foreground">
+                  {classes.filter((c) => c.siteId === form.siteId).length} classe(s) sur ce site
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs">{t("tarifAnnee")}</Label>
               <Input
                 value={form.annee}
                 onChange={(e) => set("annee", e.target.value)}
-                placeholder="2025-2026"
+                placeholder="2026-2027"
                 className="h-9"
               />
+              {anneeCourante && !editingTarif && (
+                <p className="text-xs text-muted-foreground">
+                  Année courante: {anneeCourante}
+                </p>
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs">{t("tarifSite")}</Label>
@@ -337,7 +405,7 @@ function TarifCard({
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-sm">{tarif.niveau}</span>
+            <span className="font-semibold text-sm">{niveauToLabel(tarif.niveau)}</span>
             <Badge variant="secondary" className="text-xs">{tarif.annee}</Badge>
             <Badge variant="outline" className="text-xs">{siteNom}</Badge>
             {!tarif.actif && <Badge variant="destructive" className="text-xs">{t("tarifInactive")}</Badge>}

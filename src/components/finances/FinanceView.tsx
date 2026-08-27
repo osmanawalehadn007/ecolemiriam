@@ -69,7 +69,7 @@ interface FacturePeriode {
     prenom: string;
     matricule: string;
     classe: { nom: string } | null;
-  };
+  } | null;
   site: { nom: string } | null;
   paiements: { montant: number }[];
 }
@@ -501,8 +501,8 @@ export function FinanceView({
                           <td className="py-2 pr-2 whitespace-nowrap">{formatDate(f.createdAt)}</td>
                           <td className="py-2 pr-2 font-mono text-xs">{f.numero}</td>
                           <td className="py-2 pr-2">
-                            <div className="font-medium text-xs">{f.eleve.prenom} {f.eleve.nom}</div>
-                            <div className="text-xs text-muted-foreground">{f.eleve.classe?.nom ?? "N/A"}</div>
+                            <div className="font-medium text-xs">{f.eleve?.prenom ?? ""} {f.eleve?.nom ?? ""}</div>
+                            <div className="text-xs text-muted-foreground">{f.eleve?.classe?.nom ?? "N/A"}</div>
                           </td>
                           <td className="py-2 pr-2">
                             {f.statut === "PAYEE" && <Badge variant="success" className="text-xs">{t("statusPaid")}</Badge>}

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, Plus, Filter, Eye, User, X } from "lucide-react";
+import { Download, Plus, Filter, Eye, User, X, UserPlus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { StudentSearch } from "./StudentSearch";
 import { getPaymentMethod, getPaymentMethodType } from "@/lib/payment-methods";
@@ -26,7 +26,15 @@ interface FactureWithRelations {
     prenom: string;
     matricule: string;
     classe: { nom: string } | null;
-  };
+  } | null;
+  candidature: {
+    id: string;
+    nom: string;
+    prenom: string;
+    classeVoulue: string;
+    annee: string;
+    statut: string;
+  } | null;
   paiements: { montant: number; methode: string }[];
   createdBy?: { id: string; name: string } | null;
 }
@@ -87,22 +95,25 @@ export function FacturesTable({ factures }: FacturesTableProps) {
   const [search, setSearch] = useState("");
   const [statutFilter, setStatutFilter] = useState("");
   const [eleveFilterId, setEleveFilterId] = useState("");
+  const [admissionFilter, setAdmissionFilter] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
   const elevesOptions = useMemo(
     () =>
       Array.from(
         new Map(
-          factures.map((f) => [
-            f.eleve.id,
-            {
-              id: f.eleve.id,
-              nom: f.eleve.nom,
-              prenom: f.eleve.prenom,
-              matricule: f.eleve.matricule,
-              classe: f.eleve.classe,
-            },
-          ])
+          factures
+            .filter((f) => f.eleve)
+            .map((f) => [
+              f.eleve!.id,
+              {
+                id: f.eleve!.id,
+                nom: f.eleve!.nom,
+                prenom: f.eleve!.prenom,
+                matricule: f.eleve!.matricule,
+                classe: f.eleve!.classe,
+              },
+            ])
         ).values()
       ),
     [factures]
@@ -115,14 +126,17 @@ export function FacturesTable({ factures }: FacturesTableProps) {
         !q ||
         f.numero.toLowerCase().includes(q) ||
         f.libelle.toLowerCase().includes(q) ||
-        f.eleve.nom.toLowerCase().includes(q) ||
-        f.eleve.prenom.toLowerCase().includes(q) ||
-        f.eleve.matricule.toLowerCase().includes(q);
+        f.eleve?.nom.toLowerCase().includes(q) ||
+        f.eleve?.prenom.toLowerCase().includes(q) ||
+        f.eleve?.matricule.toLowerCase().includes(q) ||
+        f.candidature?.nom.toLowerCase().includes(q) ||
+        f.candidature?.prenom.toLowerCase().includes(q);
       const matchesStatut = !statutFilter || f.statut === statutFilter;
-      const matchesEleve = !eleveFilterId || f.eleve.id === eleveFilterId;
-      return matchesSearch && matchesStatut && matchesEleve;
+      const matchesEleve = !eleveFilterId || f.eleve?.id === eleveFilterId;
+      const matchesAdmission = !admissionFilter || (!f.eleve && !!f.candidature);
+      return matchesSearch && matchesStatut && matchesEleve && matchesAdmission;
     });
-  }, [factures, search, statutFilter, eleveFilterId]);
+  }, [factures, search, statutFilter, eleveFilterId, admissionFilter]);
 
   const totalMontant = filtered.reduce((sum, f) => sum + f.montant, 0);
   const totalPaye = filtered.reduce(
@@ -136,11 +150,16 @@ export function FacturesTable({ factures }: FacturesTableProps) {
     const rows = filtered.map((f) => {
       const paye = f.paiements.reduce((s, p) => s + p.montant, 0);
       const methodes = Array.from(new Set(f.paiements.map((p) => p.methode).filter(Boolean))).join(";");
+      const nomEleve = f.eleve
+        ? `${f.eleve.prenom} ${f.eleve.nom}`
+        : f.candidature
+          ? `${f.candidature.prenom} ${f.candidature.nom} (Admission)`
+          : "";
       return [
         f.numero,
-        `${f.eleve.prenom} ${f.eleve.nom}`,
-        f.eleve.matricule,
-        f.eleve.classe?.nom ?? "",
+        nomEleve,
+        f.eleve?.matricule ?? "",
+        f.eleve?.classe?.nom ?? (f.candidature?.classeVoulue ?? ""),
         f.libelle,
         f.montant,
         paye,
@@ -224,7 +243,7 @@ export function FacturesTable({ factures }: FacturesTableProps) {
                 emptyMessage={t("noStudentFound")}
               />
             </div>
-            {(statutFilter || eleveFilterId) && (
+            {(statutFilter || eleveFilterId || admissionFilter) && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -232,12 +251,25 @@ export function FacturesTable({ factures }: FacturesTableProps) {
                 onClick={() => {
                   setStatutFilter("");
                   setEleveFilterId("");
+                  setAdmissionFilter(false);
                 }}
               >
                 <X className="h-4 w-4" />
                 {t("resetFilters")}
               </Button>
             )}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={admissionFilter}
+                onChange={(e) => setAdmissionFilter(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              <span className="text-sm flex items-center gap-1">
+                <UserPlus className="w-3 h-3 text-indigo-500" />
+                {t("admissionOnly")}
+              </span>
+            </label>
           </CardContent>
         </Card>
       )}
@@ -295,8 +327,27 @@ export function FacturesTable({ factures }: FacturesTableProps) {
                       <tr key={f.id} className="border-b hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3 font-mono text-xs">{f.numero}</td>
                         <td className="px-4 py-3">
-                          <div className="font-medium">{f.eleve.prenom} {f.eleve.nom}</div>
-                          <div className="text-xs text-muted-foreground">{f.eleve.matricule} · {f.eleve.classe?.nom ?? t("notApplicable")}</div>
+                          {f.eleve ? (
+                            <>
+                              <div className="font-medium">{f.eleve.prenom} {f.eleve.nom}</div>
+                              <div className="text-xs text-muted-foreground">{f.eleve.matricule} · {f.eleve.classe?.nom ?? t("notApplicable")}</div>
+                            </>
+                          ) : f.candidature ? (
+                            <>
+                              <div className="font-medium flex items-center gap-1">
+                                <UserPlus className="w-3 h-3 text-indigo-500" />
+                                {f.candidature.prenom} {f.candidature.nom}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {t("admissionCandidate")} · {f.candidature.classeVoulue}
+                              </div>
+                              <Badge className="mt-0.5 text-[10px] px-1.5 py-0 bg-indigo-50 text-indigo-700 border-indigo-200">
+                                {t("admissionBadge")}
+                              </Badge>
+                            </>
+                          ) : (
+                            <div className="text-muted-foreground italic">—</div>
+                          )}
                           <PaymentMethodsBadges paiements={f.paiements} t={t} />
                         </td>
                         <td className="px-4 py-3">{f.libelle}</td>

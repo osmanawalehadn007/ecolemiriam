@@ -140,7 +140,7 @@ export async function GET(req: NextRequest) {
       date: p.date,
       montant: p.montant,
       devise: p.devise,
-      description: `Paiement ${p.facture.numero} - ${p.facture.eleve.prenom} ${p.facture.eleve.nom}`,
+      description: `Paiement ${p.facture.numero} - ${p.facture.eleve?.prenom ?? ""} ${p.facture.eleve?.nom ?? ""}`,
       categorie: p.methode,
       reference: p.reference ?? null,
       operateur: p.enregistrePar?.name ?? null,

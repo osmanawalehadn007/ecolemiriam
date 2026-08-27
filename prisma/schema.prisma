@@ -128,6 +128,9 @@ model Tenant {
   // Fournitures scolaires
   fournitureListes FournitureListe[]
 
+  // Journal des emails transactionnels
+  emailLogs EmailLog[]
+
   @@map("tenants")
 }
 
@@ -417,6 +420,9 @@ model User {
 
   // Fournitures validées par cet utilisateur (secrétariat)
   fournitureValideePar FournitureListe[] @relation("FournitureValideePar")
+
+  // Journal des emails transactionnels envoyés à cet utilisateur
+  emailLogs EmailLog[] @relation("EmailLogRecipient")
 
   @@index([tenantId])
   @@index([siteId])
@@ -1243,8 +1249,14 @@ model Facture {
   siteId String? // null = non rattaché à un site spécifique
   site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
 
-  eleveId String
-  eleve   Eleve  @relation(fields: [eleveId], references: [id], onDelete: Cascade)
+  // eleveId est optionnel : une facture d'admission est créée avant l'élève.
+  // Quand l'élève est créé (INSCRIT), on relie la facture à l'élève.
+  eleveId String?
+  eleve   Eleve?  @relation(fields: [eleveId], references: [id], onDelete: Cascade)
+
+  // Lien optionnel vers la candidature (facture d'inscription/admission)
+  candidatureId String?
+  candidature   Candidature? @relation(fields: [candidatureId], references: [id], onDelete: SetNull)
 
   numero   String
   libelle  String // "Scolarité 2025-2026", "Cantine Octobre"
@@ -1265,6 +1277,7 @@ model Facture {
 
   @@index([tenantId])
   @@index([eleveId])
+  @@index([candidatureId])
   @@index([tenantId, statut])
   @@index([tenantId, mois])
   @@index([siteId])
@@ -1731,6 +1744,74 @@ model Notification {
 }
 
 // ============================================================
+// JOURNAL DES EMAILS TRANSACTIONNELS
+// ============================================================
+
+enum TypeEmail {
+  VERIFICATION       // Email de vérification d'adresse (création de compte)
+  PASSWORD_RESET     // Réinitialisation de mot de passe
+  NOTIFICATION       // Notification diffusée (canal email)
+  ADMISSION          // Facture/lien d'admission
+  RELANCE            // Relance de facture
+  AUTRE              // Autre email transactionnel
+}
+
+enum StatutEmail {
+  PENDING     // En attente d'envoi
+  SENT        // Envoyé à Resend (ID reçu)
+  DELIVERED   // Délivré au serveur de messagerie (webhook)
+  BOUNCED     // Rejeté par le serveur de messagerie (webhook)
+  FAILED      // Échec d'envoi (erreur API Resend)
+  COMPLAINED  // Marqué comme spam par le destinataire (webhook)
+  OPENED      // Ouvert par le destinataire (webhook)
+  DELIVERY_DELAYED // Délai de livraison temporaire (webhook)
+}
+
+model EmailLog {
+  id        String      @id @default(cuid())
+  tenantId  String?
+  tenant    Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Destinataire
+  userId    String?
+  user      User?       @relation("EmailLogRecipient", fields: [userId], references: [id], onDelete: SetNull)
+  email     String      // adresse email du destinataire
+
+  // Contenu
+  type      TypeEmail
+  subject   String
+  status    StatutEmail @default(PENDING)
+
+  // Corrélation avec Resend
+  resendEmailId String? // ID retourné par l'API Resend pour les webhooks
+
+  // Détails d'erreur / diagnostic
+  errorMessage  String? @db.Text
+  bounceReason  String? @db.Text
+
+  // Horodatage des événements
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  bouncedAt     DateTime?
+  openedAt      DateTime?
+  complainedAt  DateTime?
+
+  // Métadonnées
+  createdBy String? // ID de l'utilisateur qui a déclenché l'envoi
+  tags      Json?   // tags Resend (ex: { category: "verification" })
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([email])
+  @@index([resendEmailId])
+  @@index([status])
+  @@map("email_logs")
+}
+
+// ============================================================
 // RH & PAIE ENSEIGNANTS
 // ============================================================
 
@@ -1914,6 +1995,7 @@ model CongePersonnel {
 
 enum StatutCandidature {
   SOUMISE // Candidature reçue, en attente de traitement
+  DOSSIER_COMPLET // Pièces justificatives reçues et vérifiées
   EN_EXAMEN // Dossier en cours d'examen
   ADMIS // Candidat admis
   REFUSE // Candidature refusée
@@ -1958,6 +2040,9 @@ model Candidature {
 
   // Documents joints (URLs)
   documents Json? // [{ nom: "Bulletin", url: "..." }]
+
+  // Factures liées (facture d'inscription générée à l'admission)
+  factures Facture[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

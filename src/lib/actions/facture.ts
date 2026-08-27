@@ -48,6 +48,8 @@ export async function getFacturesForTenant(filters?: { statut?: string; eleveId?
       paiements: { include: { enregistrePar: { select: { id: true, name: true } } } },
       relances: { select: { id: true, niveau: true, envoyeeLe: true } },
       createdBy: { select: { id: true, name: true } },
+      // Inclure la candidature pour les factures d'admission (eleveId = null)
+      candidature: { select: { id: true, nom: true, prenom: true, classeVoulue: true, annee: true, statut: true } },
     },
     orderBy: { createdAt: "desc" },
   });

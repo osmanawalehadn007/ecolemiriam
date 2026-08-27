@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Trash2, Power, Phone, Edit3, Check, X, Building2, MapPin, AlertTriangle, Search, Shield, GraduationCap, Briefcase, Users as UsersIcon, BookOpen, Users as UsersClass, Upload } from "lucide-react";
-import { createUser, toggleUserActive, deleteUser, updateUserPhone, assignUserSites, getUserSites, getMatieresForAffectation, getClassesForAffectation, type UserFormData } from "@/lib/actions/parametres";
+import { Loader2, Plus, Trash2, Power, Phone, Edit3, Check, X, Building2, MapPin, AlertTriangle, Search, Shield, GraduationCap, Briefcase, Users as UsersIcon, BookOpen, Users as UsersClass, Upload, Mail } from "lucide-react";
+import { createUser, toggleUserActive, deleteUser, updateUserPhone, assignUserSites, getUserSites, getMatieresForAffectation, getClassesForAffectation, resendVerificationEmail, type UserFormData } from "@/lib/actions/parametres";
 import { addUserToTenant } from "@/lib/actions/user-tenant";
 import { useTranslations } from "next-intl";
+import Link from "next/link";
 import type { AvailableTenant } from "@/auth.config";
 import type { Role } from "@prisma/client";
 import { cn } from "@/lib/utils";
@@ -21,11 +22,19 @@ interface UserItem {
   id: string;
   name: string;
   email: string;
+  emailVerified: Date | null;
   role: string;
   phone: string | null;
   isActive: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
+  emailLogs?: {
+    id: string;
+    status: string;
+    type: string;
+    createdAt: Date;
+    errorMessage: string | null;
+  }[];
 }
 
 const roleKeys: Record<string, string> = {
@@ -99,6 +108,7 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
   const [searchQuery, setSearchQuery] = useState("");
   const [showImportEnseignants, setShowImportEnseignants] = useState(false);
   const [showImportPersonnel, setShowImportPersonnel] = useState(false);
+  const [resendingEmailId, setResendingEmailId] = useState<string | null>(null);
 
   const filteredUsers = users.filter((u) => {
     const matchesCategory =
@@ -293,7 +303,16 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
           await assignUserSites(newUserId, formSiteIds.map((sid) => ({ siteId: sid, role: null })));
         }
       }
-      toast.success(t("userCreated"));
+      // Feedback différencié selon le statut de l'email
+      const emailSent = (result as { emailSent?: boolean }).emailSent;
+      const emailError = (result as { emailError?: string }).emailError;
+      if (emailSent) {
+        toast.success(t("userCreatedEmailSent"));
+      } else if (emailError) {
+        toast.error(t("userCreatedEmailFailed", { error: emailError }));
+      } else {
+        toast.success(t("userCreated"));
+      }
       setShowForm(false);
       setFormStep(1);
       setForm({ name: "", email: "", role: "TEACHER", phone: "", password: "", isActive: true });
@@ -304,6 +323,22 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
       toast.error(err instanceof Error ? err.message : t("genericError"));
     } finally {
       setIsPending(false);
+    }
+  }
+
+  async function handleResendEmail(userId: string) {
+    setResendingEmailId(userId);
+    try {
+      const result = await resendVerificationEmail(userId);
+      if (result.success) {
+        toast.success(t("emailResent"));
+      } else {
+        toast.error(result.error ?? t("emailResentFailed"));
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("emailResentFailed"));
+    } finally {
+      setResendingEmailId(null);
     }
   }
 
@@ -400,6 +435,12 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
             <Upload className="h-4 w-4" />
             {t("importPersonnel")}
           </Button>
+          <Link href="/parametres/journal-emails">
+            <Button size="sm" variant="outline" className="gap-2">
+              <Mail className="h-4 w-4" />
+              {t("emailJournal")}
+            </Button>
+          </Link>
           <Button size="sm" className="gap-2" onClick={() => showForm ? setShowForm(false) : openWizard()}>
             <Plus className="h-4 w-4" />
             {t("addUser")}
@@ -790,7 +831,64 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
                   filteredUsers.map((u) => (
                     <tr key={u.id} className="border-b hover:bg-muted/30">
                       <td className="px-4 py-3 font-medium">{u.name}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-muted-foreground">{u.email}</span>
+                          {u.emailVerified ? (
+                            <Badge variant="success" className="w-fit text-[10px] py-0 px-1.5">
+                              <Check className="h-2.5 w-2.5 mr-0.5" />
+                              {t("emailVerified")}
+                            </Badge>
+                          ) : u.emailLogs && u.emailLogs.length > 0 ? (
+                            <div className="flex items-center gap-1.5">
+                              {(() => {
+                                const log = u.emailLogs[0];
+                                const badgeVariant =
+                                  log.status === "DELIVERED" || log.status === "OPENED" ? "success" :
+                                  log.status === "BOUNCED" || log.status === "FAILED" ? "destructive" :
+                                  log.status === "COMPLAINED" ? "destructive" :
+                                  log.status === "DELIVERY_DELAYED" ? "warning" :
+                                  "secondary";
+                                const labelKey =
+                                  log.status === "SENT" ? "emailStatusSent" :
+                                  log.status === "DELIVERED" ? "emailStatusDelivered" :
+                                  log.status === "BOUNCED" ? "emailStatusBounced" :
+                                  log.status === "FAILED" ? "emailStatusFailed" :
+                                  log.status === "COMPLAINED" ? "emailStatusComplained" :
+                                  log.status === "OPENED" ? "emailStatusOpened" :
+                                  log.status === "DELIVERY_DELAYED" ? "emailStatusDelayed" :
+                                  "emailStatusPending";
+                                return (
+                                  <>
+                                    <Badge variant={badgeVariant as "success" | "destructive" | "warning" | "secondary"} className="w-fit text-[10px] py-0 px-1.5">
+                                      {t(labelKey)}
+                                    </Badge>
+                                    {(log.status === "BOUNCED" || log.status === "FAILED") && canManage && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-5 px-1.5 text-[10px]"
+                                        onClick={() => handleResendEmail(u.id)}
+                                        disabled={resendingEmailId === u.id}
+                                      >
+                                        {resendingEmailId === u.id ? (
+                                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                        ) : (
+                                          t("resendEmail")
+                                        )}
+                                      </Button>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          ) : (
+                            <Badge variant="secondary" className="w-fit text-[10px] py-0 px-1.5">
+                              {t("emailNotSent")}
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         {editingPhoneId === u.id ? (
                           <div className="flex items-center gap-1">

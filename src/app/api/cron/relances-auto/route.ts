@@ -87,7 +87,7 @@ async function handler(req: NextRequest) {
       const dejaRelance = facture.relances.some((r) => r.niveau >= palier.niveau);
       if (dejaRelance) continue;
 
-      const eleveNom = `${facture.eleve.prenom} ${facture.eleve.nom}`;
+      const eleveNom = `${facture.eleve?.prenom ?? ""} ${facture.eleve?.nom ?? ""}`.trim();
       const ecoleNom = facture.tenant.name;
       const montant = facture.montant;
       const numero = facture.numero;
@@ -100,7 +100,7 @@ async function handler(req: NextRequest) {
       // Collecter les contacts des parents
       const phones: string[] = [];
       const emails: string[] = [];
-      for (const ep of facture.eleve.parents) {
+      for (const ep of facture.eleve?.parents ?? []) {
         if (ep.parent.phone) phones.push(ep.parent.phone);
         if (ep.parent.email) emails.push(ep.parent.email);
       }

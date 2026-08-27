@@ -12,6 +12,14 @@ async function getCandidatures(tenantId: string, siteFilter: Record<string, unkn
   const candidatures = await prisma.candidature.findMany({
     where: { tenantId, annee: anneeActuelle, ...siteFilter },
     orderBy: { createdAt: "desc" },
+    include: {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- les factures sont filtrées via la candidature qui est déjà filtrée par site
+      factures: {
+        include: {
+          paiements: true,
+        },
+      },
+    },
   });
 
   return { candidatures };
@@ -27,6 +35,23 @@ export default async function AdmissionsPage() {
   const siteFilter = siteFilterForModel("candidature", session!.user);
   const { candidatures } = await getCandidatures(session!.user.tenantId!, siteFilter);
 
+  // Cast les documents + factures pour le composant
+  const candidaturesForView = candidatures.map((c) => ({
+    ...c,
+    dateNaissance: c.dateNaissance,
+    dateExamen: c.dateExamen,
+    documents: (c.documents as { nom: string; url: string; type?: string }[] | null) ?? null,
+    factures: c.factures.map((f) => ({
+      id: f.id,
+      numero: f.numero,
+      libelle: f.libelle,
+      montant: f.montant,
+      devise: f.devise,
+      statut: f.statut,
+      totalPaye: f.paiements.reduce((sum, p) => sum + p.montant, 0),
+    })),
+  }));
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <Header
@@ -36,7 +61,7 @@ export default async function AdmissionsPage() {
         userAvatar={session!.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <AdmissionsView candidatures={candidatures} userRole={session!.user.role} />
+        <AdmissionsView candidatures={candidaturesForView} userRole={session!.user.role} />
       </div>
     </div>
   );

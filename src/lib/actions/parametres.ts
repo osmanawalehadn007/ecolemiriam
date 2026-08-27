@@ -141,11 +141,17 @@ export async function getUsersForTenant() {
       id: true,
       name: true,
       email: true,
+      emailVerified: true,
       role: true,
       phone: true,
       isActive: true,
       lastLoginAt: true,
       createdAt: true,
+      emailLogs: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { id: true, status: true, type: true, createdAt: true, errorMessage: true },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -310,24 +316,32 @@ export async function createUser(data: UserFormData) {
   // Le mot de passe temporaire est inclus dans l'email pour que l'utilisateur
   // puisse se connecter directement, ou il peut en définir un nouveau via
   // la page /set-password après vérification.
-  // Ne pas bloquer la création si l'envoi échoue.
+  // Ne pas bloquer la création si l'envoi échoue, mais retourner le statut
+  // pour que l'UI puisse informer l'administrateur.
+  let emailSent = false;
+  let emailError: string | undefined;
   try {
     const verifyResult = await sendVerificationEmail(
       v.email,
       v.name,
       undefined,
       true,
-      password // mot de passe temporaire en clair dans l'email
+      password, // mot de passe temporaire en clair dans l'email
+      { tenantId: session.user.tenantId, userId: newUser.id, createdBy: session.user.id }
     );
     if (!verifyResult.success) {
       console.warn("[createUser] Échec envoi email de vérification:", verifyResult.error);
+      emailError = verifyResult.error;
+    } else {
+      emailSent = true;
     }
   } catch (err) {
     console.warn("[createUser] Erreur envoi email de vérification:", err);
+    emailError = err instanceof Error ? err.message : "Erreur inconnue";
   }
 
   revalidatePath("/parametres");
-  return { success: true, userId: newUser.id };
+  return { success: true, userId: newUser.id, emailSent, emailError };
 }
 
 export async function toggleUserActive(userId: string) {
@@ -1798,6 +1812,103 @@ export async function saveUserPermissions(
     resourceId: userId,
     metadata: { grants, denies },
   });
+
+  revalidatePath("/parametres");
+  return { success: true };
+}
+
+// ============================================================
+// JOURNAL DES EMAILS TRANSACTIONNELS
+// ============================================================
+
+export async function getEmailLogs(filters?: {
+  status?: string;
+  type?: string;
+  email?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+  const denied = checkPermission(session.user.role, "parametres:read");
+  if (denied) throw new Error("Accès refusé");
+
+  const where: Record<string, unknown> = {
+    tenantId: session.user.tenantId,
+  };
+  if (filters?.status) where.status = filters.status;
+  if (filters?.type) where.type = filters.type;
+  if (filters?.email) where.email = { contains: filters.email, mode: "insensitive" };
+
+  const limit = filters?.limit ?? 100;
+  const offset = filters?.offset ?? 0;
+
+  const [logs, total] = await Promise.all([
+    prisma.emailLog.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      skip: offset,
+      include: {
+        user: { select: { id: true, name: true, emailVerified: true } },
+      },
+    }),
+    prisma.emailLog.count({ where }),
+  ]);
+
+  return { logs, total };
+}
+
+export async function getEmailStats() {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+  const denied = checkPermission(session.user.role, "parametres:read");
+  if (denied) throw new Error("Accès refusé");
+
+  const tenantId = session.user.tenantId;
+
+  const [total, sent, delivered, bounced, failed, opened, complained] = await Promise.all([
+    prisma.emailLog.count({ where: { tenantId } }),
+    prisma.emailLog.count({ where: { tenantId, status: "SENT" } }),
+    prisma.emailLog.count({ where: { tenantId, status: "DELIVERED" } }),
+    prisma.emailLog.count({ where: { tenantId, status: "BOUNCED" } }),
+    prisma.emailLog.count({ where: { tenantId, status: "FAILED" } }),
+    prisma.emailLog.count({ where: { tenantId, status: "OPENED" } }),
+    prisma.emailLog.count({ where: { tenantId, status: "COMPLAINED" } }),
+  ]);
+
+  return { total, sent, delivered, bounced, failed, opened, complained };
+}
+
+export async function resendVerificationEmail(userId: string) {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Accès refusé");
+
+  const user = await prisma.user.findFirst({
+    where: {
+      id: userId,
+      tenantId: session.user.tenantId,
+      ...siteFilterForModel("user", session.user),
+    },
+    select: { id: true, name: true, email: true, emailVerified: true },
+  });
+  if (!user) throw new Error("Utilisateur non trouvé");
+  if (user.emailVerified) throw new Error("Cet email est déjà vérifié");
+
+  const result = await sendVerificationEmail(
+    user.email,
+    user.name,
+    undefined,
+    true,
+    undefined,
+    { tenantId: session.user.tenantId, userId: user.id, createdBy: session.user.id }
+  );
+
+  if (!result.success) {
+    return { success: false, error: result.error ?? "Échec d'envoi" };
+  }
 
   revalidatePath("/parametres");
   return { success: true };

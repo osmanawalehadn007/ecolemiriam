@@ -5,18 +5,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Plus, Search, ClipboardList, CheckCircle2, XCircle,
   Clock, UserPlus, BookOpen, Phone, Mail, Calendar,
-  Loader2, ChevronDown, ChevronUp, FileText, Star,
+  Loader2, ChevronDown, ChevronUp, FileText, Star, FolderCheck,
+  Banknote, Link as LinkIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import { PiecesJustificativesUploader } from "./PiecesJustificativesUploader";
+import { piecesRequisesPresentes } from "@/lib/admissions/pieces-justificatives";
+import { enregistrerPaiement } from "@/lib/actions/facture";
+import { PAYMENT_METHODS } from "@/lib/payment-methods";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type StatutCandidature = "SOUMISE" | "EN_EXAMEN" | "ADMIS" | "REFUSE" | "INSCRIT" | "ANNULE";
+type StatutCandidature = "SOUMISE" | "DOSSIER_COMPLET" | "EN_EXAMEN" | "ADMIS" | "REFUSE" | "INSCRIT" | "ANNULE";
 type LienParente = "PERE" | "MERE" | "TUTEUR" | "AUTRE";
 type Sexe = "M" | "F";
 
@@ -38,6 +44,16 @@ interface Candidature {
   noteExamen: number | null;
   commentaire: string | null;
   motifRefus: string | null;
+  documents?: { nom: string; url: string; type?: string }[] | null;
+  factures?: {
+    id: string;
+    numero: string;
+    libelle: string;
+    montant: number;
+    devise: string;
+    statut: string;
+    totalPaye: number;
+  }[];
   createdAt: Date | string;
 }
 
@@ -45,6 +61,7 @@ interface Candidature {
 
 const STATUT_CONFIG: Record<StatutCandidature, { labelKey: string; color: string; icon: React.ReactNode }> = {
   SOUMISE: { labelKey: "statusSubmitted", color: "bg-blue-50 text-blue-700 border-blue-200", icon: <ClipboardList className="w-3 h-3" /> },
+  DOSSIER_COMPLET: { labelKey: "statusDossierComplet", color: "bg-teal-50 text-teal-700 border-teal-200", icon: <FolderCheck className="w-3 h-3" /> },
   EN_EXAMEN: { labelKey: "statusExam", color: "bg-yellow-50 text-yellow-700 border-yellow-200", icon: <Clock className="w-3 h-3" /> },
   ADMIS: { labelKey: "statusAdmitted", color: "bg-green-50 text-green-700 border-green-200", icon: <CheckCircle2 className="w-3 h-3" /> },
   REFUSE: { labelKey: "statusRefused", color: "bg-red-50 text-red-700 border-red-200", icon: <XCircle className="w-3 h-3" /> },
@@ -52,7 +69,7 @@ const STATUT_CONFIG: Record<StatutCandidature, { labelKey: string; color: string
   ANNULE: { labelKey: "statusCancelled", color: "bg-gray-100 text-gray-500 border-gray-200", icon: <XCircle className="w-3 h-3" /> },
 };
 
-const WORKFLOW: StatutCandidature[] = ["SOUMISE", "EN_EXAMEN", "ADMIS", "INSCRIT"];
+const WORKFLOW: StatutCandidature[] = ["SOUMISE", "DOSSIER_COMPLET", "EN_EXAMEN", "ADMIS", "INSCRIT"];
 
 // ─── Formulaire de candidature ────────────────────────────────────────────────
 
@@ -214,7 +231,26 @@ function CandidatureCard({
   const t = useTranslations("admissions");
   const [expanded, setExpanded] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [localDocs, setLocalDocs] = useState<{ nom: string; url: string; type?: string }[]>(candidature.documents ?? []);
+  const [showPaiementModal, setShowPaiementModal] = useState(false);
   const config = STATUT_CONFIG[candidature.statut];
+
+  const piecesStatut = piecesRequisesPresentes(localDocs);
+
+  // Facture d'inscription (premier élément)
+  const facture = candidature.factures?.[0];
+  const facturePayee = facture && facture.montant > 0 && facture.totalPaye >= facture.montant;
+  const factureRestant = facture ? facture.montant - facture.totalPaye : 0;
+
+  // Indicateur de progression du dossier
+  const progressionSteps = [
+    { key: "SOUMISE", label: t("statusSubmitted"), done: WORKFLOW.indexOf(candidature.statut) >= 0 },
+    { key: "DOSSIER_COMPLET", label: t("statusDossierComplet"), done: WORKFLOW.indexOf(candidature.statut) >= 1 },
+    { key: "EN_EXAMEN", label: t("statusExam"), done: WORKFLOW.indexOf(candidature.statut) >= 2 },
+    { key: "ADMIS", label: t("statusAdmitted"), done: WORKFLOW.indexOf(candidature.statut) >= 3 },
+    { key: "PAIEMENT", label: t("stepPayment"), done: !!facturePayee },
+    { key: "INSCRIT", label: t("statusEnrolled"), done: candidature.statut === "INSCRIT" },
+  ];
 
   const handleStatut = (statut: StatutCandidature) => {
     startTransition(async () => {
@@ -222,7 +258,7 @@ function CandidatureCard({
         const res = await fetch(`/api/admissions/${candidature.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ statut }),
+          body: JSON.stringify({ statut, documents: localDocs }),
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
@@ -241,6 +277,24 @@ function CandidatureCard({
     });
   };
 
+  const handleSaveDocuments = () => {
+    startTransition(async () => {
+      try {
+        const res = await fetch(`/api/admissions/${candidature.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ documents: localDocs }),
+        });
+        if (!res.ok) throw new Error("Échec de la sauvegarde");
+        const { candidature: updated } = await res.json();
+        onUpdate(updated);
+        toast.success("Pièces justificatives sauvegardées");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Erreur de sauvegarde");
+      }
+    });
+  };
+
   // Actions disponibles selon le statut
   // L'inscription finale (INSCRIT) est accessible au comptable (bout-en-bout)
   // La direction est notifiée automatiquement côté serveur lors de la finalisation.
@@ -248,9 +302,19 @@ function CandidatureCard({
     userRole === "TENANT_ADMIN" ||
     userRole === "SUPER_ADMIN" ||
     userRole === "ACCOUNTANT";
-  const actions: { label: string; statut: StatutCandidature; variant?: string }[] = [];
+  const actions: { label: string; statut: StatutCandidature; variant?: string; disabled?: boolean }[] = [];
   if (candidature.statut === "SOUMISE") {
-    actions.push({ label: t("summonExam"), statut: "EN_EXAMEN" });
+    // Marquer dossier complet (pièces vérifiées) — possible même si pas toutes les pièces
+    actions.push({ label: t("markDossierComplet"), statut: "DOSSIER_COMPLET" });
+    actions.push({ label: t("reject"), statut: "REFUSE", variant: "destructive" });
+  }
+  if (candidature.statut === "DOSSIER_COMPLET") {
+    // Passer à l'examen — bloqué si pièces requises manquantes
+    actions.push({
+      label: piecesStatut.complet ? t("summonExam") : t("summonExamMissingDocs"),
+      statut: "EN_EXAMEN",
+      disabled: !piecesStatut.complet,
+    });
     actions.push({ label: t("reject"), statut: "REFUSE", variant: "destructive" });
   }
   if (candidature.statut === "EN_EXAMEN") {
@@ -258,7 +322,21 @@ function CandidatureCard({
     actions.push({ label: t("reject"), statut: "REFUSE", variant: "destructive" });
   }
   if (candidature.statut === "ADMIS" && canConfirmEnrollment) {
-    actions.push({ label: t("confirmEnrollment"), statut: "INSCRIT" });
+    if (!facture) {
+      actions.push({
+        label: t("confirmEnrollmentNoInvoice"),
+        statut: "INSCRIT",
+        disabled: true,
+      });
+    } else if (facturePayee) {
+      actions.push({ label: t("confirmEnrollment"), statut: "INSCRIT" });
+    } else {
+      actions.push({
+        label: t("confirmEnrollmentUnpaid"),
+        statut: "INSCRIT",
+        disabled: true,
+      });
+    }
   }
 
   return (
@@ -321,6 +399,150 @@ function CandidatureCard({
           <p className="mt-2 text-xs text-gray-500 italic">{candidature.commentaire}</p>
         )}
 
+        {/* Indicateur de progression du dossier */}
+        {candidature.statut !== "REFUSE" && candidature.statut !== "ANNULE" && (
+          <div className="mt-3 flex items-center gap-1 flex-wrap">
+            {progressionSteps.map((step, i) => (
+              <div key={step.key} className="flex items-center gap-1">
+                <div className={cn(
+                  "flex items-center gap-1 px-2 py-0.5 rounded-full text-xs",
+                  step.done
+                    ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                    : "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500"
+                )}>
+                  {step.done ? (
+                    <CheckCircle2 className="w-3 h-3" />
+                  ) : (
+                    <div className="w-3 h-3 rounded-full border border-current" />
+                  )}
+                  <span className="text-xs font-medium">{step.label}</span>
+                </div>
+                {i < progressionSteps.length - 1 && (
+                  <div className={cn("w-3 h-px", step.done ? "bg-green-300" : "bg-gray-200")} />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Facture d'inscription (visible à partir de ADMIS) */}
+        {candidature.factures && candidature.factures.length > 0 && (
+          <div className="mt-3 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg space-y-1">
+            {candidature.factures.map((f) => {
+              const restant = f.montant - f.totalPaye;
+              const estPayee = f.montant > 0 && f.totalPaye >= f.montant;
+              const fmt = (n: number) => new Intl.NumberFormat("fr-DJ", { style: "currency", currency: f.devise === "XOF" ? "DJF" : f.devise, maximumFractionDigits: 0 }).format(n);
+              return (
+                <div key={f.id} className="space-y-1">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="w-3 h-3 text-blue-600 flex-shrink-0" />
+                      <a
+                        href={`/facturation?numero=${encodeURIComponent(f.numero)}`}
+                        className="font-medium text-blue-600 hover:underline flex items-center gap-1"
+                      >
+                        {f.numero}
+                        <LinkIcon className="w-2.5 h-2.5" />
+                      </a>
+                      <span className="text-muted-foreground truncate hidden sm:inline">{f.libelle}</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="font-semibold">{fmt(f.montant)}</span>
+                      {estPayee ? (
+                        <Badge className="bg-green-50 text-green-700 border-green-200 text-xs">
+                          <CheckCircle2 className="w-3 h-3 mr-1" />
+                          {t("invoicePaid")}
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
+                          {t("invoiceUnpaid")} ({fmt(restant)})
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  {/* Barre de progression du paiement */}
+                  {!estPayee && f.montant > 0 && (
+                    <div className="w-full h-1.5 bg-amber-100 dark:bg-amber-900/30 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-green-500 rounded-full transition-all"
+                        style={{ width: `${Math.min(100, (f.totalPaye / f.montant) * 100)}%` }}
+                      />
+                    </div>
+                  )}
+                  {/* Bouton encaisser + message */}
+                  {candidature.statut === "ADMIS" && !estPayee && f.montant > 0 && (
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <p className="text-xs text-amber-600">
+                        {t("paymentRequiredBeforeEnrollment")}
+                      </p>
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs gap-1 flex-shrink-0"
+                        onClick={() => setShowPaiementModal(true)}
+                        disabled={isPending}
+                      >
+                        <Banknote className="w-3 h-3" />
+                        {t("collectPayment")}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Modal d'encaissement inline */}
+        {showPaiementModal && facture && (
+          <PaiementInlineModal
+            factureId={facture.id}
+            factureNumero={facture.numero}
+            montantTotal={facture.montant}
+            totalPaye={facture.totalPaye}
+            devise={facture.devise}
+            onClose={() => setShowPaiementModal(false)}
+            onPaid={() => {
+              setShowPaiementModal(false);
+              // Rafraîchir la page pour recharger les données de la candidature
+              // (factures + paiements mis à jour)
+              window.location.reload();
+            }}
+          />
+        )}
+
+        {/* Toggle pièces justificatives */}
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="mt-3 flex items-center gap-1 text-xs text-blue-600 hover:underline"
+        >
+          {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          {t("piecesJustificatives")}
+          {localDocs.length > 0 && (
+            <span className="ml-1 text-muted-foreground">({localDocs.length})</span>
+          )}
+        </button>
+
+        {/* Section pièces justificatives expandable */}
+        {expanded && (
+          <div className="mt-3 pt-3 border-t">
+            <PiecesJustificativesUploader
+              documents={localDocs}
+              onChange={setLocalDocs}
+            />
+            <div className="mt-3 flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs h-7"
+                disabled={isPending}
+                onClick={handleSaveDocuments}
+              >
+                {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : t("saveDocuments")}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Actions */}
         {actions.length > 0 && (
           <div className="mt-3 flex gap-2 flex-wrap">
@@ -330,8 +552,8 @@ function CandidatureCard({
                 size="sm"
                 variant={a.variant === "destructive" ? "destructive" : "outline"}
                 className="text-xs h-7"
-                disabled={isPending}
-                onClick={() => handleStatut(a.statut)}
+                disabled={isPending || a.disabled}
+                onClick={() => !a.disabled && handleStatut(a.statut)}
               >
                 {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : a.label}
               </Button>
@@ -340,6 +562,138 @@ function CandidatureCard({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ─── Modal d'encaissement inline ──────────────────────────────────────────────
+
+function PaiementInlineModal({
+  factureId,
+  factureNumero,
+  montantTotal,
+  totalPaye,
+  devise,
+  onClose,
+  onPaid,
+}: {
+  factureId: string;
+  factureNumero: string;
+  montantTotal: number;
+  totalPaye: number;
+  devise: string;
+  onClose: () => void;
+  onPaid: () => void;
+}) {
+  const t = useTranslations("admissions");
+  const tFact = useTranslations("facturation");
+  const [isPending, startTransition] = useTransition();
+  const restant = montantTotal - totalPaye;
+  const fmt = (n: number) => new Intl.NumberFormat("fr-DJ", { style: "currency", currency: devise === "XOF" ? "DJF" : devise, maximumFractionDigits: 0 }).format(n);
+
+  const [montant, setMontant] = useState(restant);
+  const [methode, setMethode] = useState("espèces");
+  const [reference, setReference] = useState("");
+
+  function handlePaiement(e: React.FormEvent) {
+    e.preventDefault();
+    startTransition(async () => {
+      try {
+        await enregistrerPaiement(factureId, {
+          montant,
+          methode,
+          reference: reference || undefined,
+        });
+        toast.success(t("paymentCollected"));
+        onPaid();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : t("paymentError"));
+      }
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <Card className="w-full max-w-md border-0 shadow-2xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Banknote className="w-5 h-5 text-green-600" />
+            {t("collectPaymentTitle")}
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">{factureNumero}</p>
+        </CardHeader>
+        <CardContent>
+          {/* Résumé de la facture */}
+          <div className="bg-muted/50 rounded-lg p-3 mb-4 space-y-1">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">{tFact("total")}</span>
+              <span className="font-semibold">{fmt(montantTotal)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">{t("alreadyPaid")}</span>
+              <span className="font-semibold text-green-600">{fmt(totalPaye)}</span>
+            </div>
+            <div className="flex justify-between text-sm border-t pt-1 mt-1">
+              <span className="text-muted-foreground font-medium">{t("remainingToPay")}</span>
+              <span className="font-bold text-amber-600">{fmt(restant)}</span>
+            </div>
+          </div>
+
+          <form onSubmit={handlePaiement} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("paymentAmount")}</Label>
+              <Input
+                type="number"
+                value={montant}
+                onChange={(e) => setMontant(parseFloat(e.target.value) || 0)}
+                min={0.01}
+                max={restant}
+                step="0.01"
+                className="h-9"
+                required
+              />
+              {montant < restant && (
+                <p className="text-xs text-amber-600">{t("partialPaymentHint")}</p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("paymentMethod")}</Label>
+              <select
+                value={methode}
+                onChange={(e) => setMethode(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {PAYMENT_METHODS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {tFact(m.labelKey)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("paymentReference")}</Label>
+              <Input
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+                placeholder={t("paymentReferencePlaceholder")}
+                className="h-9"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button type="submit" disabled={isPending} className="flex-1 gap-2 bg-green-600 hover:bg-green-700">
+                {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Banknote className="w-4 h-4" />}
+                {t("confirmPayment")}
+              </Button>
+              <Button type="button" variant="outline" onClick={onClose}>
+                {t("cancel")}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -360,6 +714,7 @@ export function AdmissionsView({ candidatures: initial, userRole }: AdmissionsVi
   const stats = useMemo(() => ({
     total: candidatures.length,
     soumises: candidatures.filter((c) => c.statut === "SOUMISE").length,
+    dossierComplet: candidatures.filter((c) => c.statut === "DOSSIER_COMPLET").length,
     enExamen: candidatures.filter((c) => c.statut === "EN_EXAMEN").length,
     admis: candidatures.filter((c) => c.statut === "ADMIS").length,
     inscrits: candidatures.filter((c) => c.statut === "INSCRIT").length,
@@ -383,6 +738,7 @@ export function AdmissionsView({ candidatures: initial, userRole }: AdmissionsVi
   // Pipeline visuel (entonnoir)
   const pipelineStats = [
     { statut: "SOUMISE" as const, count: stats.soumises, icon: <ClipboardList className="w-4 h-4" /> },
+    { statut: "DOSSIER_COMPLET" as const, count: stats.dossierComplet, icon: <FolderCheck className="w-4 h-4" /> },
     { statut: "EN_EXAMEN" as const, count: stats.enExamen, icon: <Clock className="w-4 h-4" /> },
     { statut: "ADMIS" as const, count: stats.admis, icon: <CheckCircle2 className="w-4 h-4" /> },
     { statut: "INSCRIT" as const, count: stats.inscrits, icon: <UserPlus className="w-4 h-4" /> },

@@ -5,6 +5,7 @@
  * Variables d'environnement :
  *   RESEND_API_KEY=re_...
  *   EMAIL_FROM="École Miriam <noreply@ecolemiriam.app>"
+ *   RESEND_WEBHOOK_SECRET=whsec_... (pour vérifier les webhooks)
  *
  * Si la clé est absente, l'envoi est simulé (utile en dev / sandbox).
  */
@@ -15,6 +16,8 @@ export interface EmailResult {
   success: boolean;
   sent: number;
   error?: string;
+  /** IDs Resend par destinataire : { email: resendId } — pour corrélation webhook */
+  emailIds?: Record<string, string>;
 }
 
 const FROM = process.env.EMAIL_FROM ?? "École Miriam <noreply@ecolemiriam.app>";
@@ -28,12 +31,14 @@ const BATCH = 50; // limite Resend par appel
  * @param subject — sujet de l'email
  * @param html    — contenu HTML
  * @param text    — contenu plain text (optionnel mais recommandé pour la délivrabilité)
+ * @param tags    — tags Resend pour le suivi (optionnel)
  */
 export async function sendEmail(
   to: string[],
   subject: string,
   html: string,
-  text?: string
+  text?: string,
+  tags?: Record<string, string>
 ): Promise<EmailResult> {
   const recipients = [...new Set(to.filter(Boolean))];
   if (recipients.length === 0) return { success: true, sent: 0 };
@@ -46,6 +51,7 @@ export async function sendEmail(
 
   const resend = new Resend(apiKey);
   let sent = 0;
+  const emailIds: Record<string, string> = {};
 
   try {
     for (let i = 0; i < recipients.length; i += BATCH) {
@@ -57,15 +63,24 @@ export async function sendEmail(
         subject,
         html,
         ...(text ? { text } : {}),
+        ...(tags ? { tags: Object.entries(tags).map(([name, value]) => ({ name, value })) } : {}),
       }));
-      const { error } = await resend.batch.send(payload);
+      const { data, error } = await resend.batch.send(payload);
       if (error) {
         console.error("[Email] Erreur lot Resend:", error);
         return { success: false, sent, error: error.message };
       }
+      // Capturer les IDs Resend pour corrélation webhook
+      if (data && Array.isArray(data)) {
+        data.forEach((item: { id?: string }, idx: number) => {
+          if (item.id && batch[idx]) {
+            emailIds[batch[idx]] = item.id;
+          }
+        });
+      }
       sent += batch.length;
     }
-    return { success: true, sent };
+    return { success: true, sent, emailIds };
   } catch (err) {
     console.error("[Email] Erreur envoi:", err);
     return { success: false, sent, error: "Erreur réseau" };

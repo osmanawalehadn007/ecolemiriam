@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Zap, AlertTriangle, Ban, Unlock, RefreshCw, Banknote } from "lucide-react";
+import { Loader2, Zap, AlertTriangle, Ban, Unlock, RefreshCw, Banknote, CalendarDays } from "lucide-react";
 import { useTranslations } from "next-intl";
 import {
   genererMensualites,
+  genererFacturesAnnuelles,
   genererFraisInscription,
   detecterFacturesEnRetard,
   envoyerRelance,
@@ -50,6 +51,7 @@ export function FacturationActions({ currentYear = "2025-2026", userRole }: { cu
   const canWrite = hasPermission(userRole, "finance:write");
   const [isPending, setIsPending] = useState(false);
   const [showGenModal, setShowGenModal] = useState(false);
+  const [showAnnualModal, setShowAnnualModal] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
   const [showRetardModal, setShowRetardModal] = useState(false);
   const [showExcluModal, setShowExcluModal] = useState(false);
@@ -74,6 +76,19 @@ export function FacturationActions({ currentYear = "2025-2026", userRole }: { cu
       const result = await genererMensualites({ mois: genMois, annee: genAnnee, inclureCantine: genCantine, inclureTransport: genTransport });
       toast.success(t("invoicesGenerated", { generated: result.generated, skipped: result.skipped }));
       setShowGenModal(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("error"));
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function handleGenererFacturesAnnuelles() {
+    setIsPending(true);
+    try {
+      const result = await genererFacturesAnnuelles({ annee: genAnnee, inclureCantine: genCantine, inclureTransport: genTransport });
+      toast.success(t("annualInvoicesGenerated", { generated: result.generated, skipped: result.skipped }));
+      setShowAnnualModal(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("error"));
     } finally {
@@ -157,6 +172,12 @@ export function FacturationActions({ currentYear = "2025-2026", userRole }: { cu
           </Button>
         )}
         {canWrite && (
+          <Button size="sm" variant="secondary" className="gap-2" onClick={() => setShowAnnualModal(!showAnnualModal)}>
+            <CalendarDays className="h-4 w-4" />
+            {t("generateAnnual")}
+          </Button>
+        )}
+        {canWrite && (
           <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowPayModal(!showPayModal)}>
             <Banknote className="h-4 w-4" />
             {t("payByInvoiceNumber")}
@@ -176,6 +197,53 @@ export function FacturationActions({ currentYear = "2025-2026", userRole }: { cu
 
       {/* Modal: Paiement par numéro */}
       {showPayModal && <PaiementParNumero open={showPayModal} onClose={() => setShowPayModal(false)} />}
+
+      {/* Modal: Génération annuelle (Septembre → Juin) */}
+      {showAnnualModal && (
+        <Card className="border-primary/30">
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-primary" />
+              {t("generateAnnualTitle")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="annual-annee">{t("schoolYear")}</Label>
+                <Input id="annual-annee" value={genAnnee} onChange={(e) => setGenAnnee(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={genCantine} onChange={(e) => setGenCantine(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                <span className="text-sm">{t("includeCanteen")}</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={genTransport} onChange={(e) => setGenTransport(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                <span className="text-sm">{t("includeTransport")}</span>
+              </label>
+            </div>
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 space-y-1.5">
+              <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
+                {t("annualHintTitle")}
+              </p>
+              <ul className="text-xs text-blue-600 dark:text-blue-400 space-y-1 list-disc list-inside">
+                <li>{t("annualHintSeptembre")}</li>
+                <li>{t("annualHintOtherMonths")}</li>
+                <li>{t("annualHintTotal")}</li>
+              </ul>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" className="gap-2" onClick={handleGenererFacturesAnnuelles} disabled={isPending}>
+                {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarDays className="h-4 w-4" />}
+                {t("generateAnnual")}
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowAnnualModal(false)}>{t("cancel")}</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Modal: Génération mensualités */}
       {showGenModal && (

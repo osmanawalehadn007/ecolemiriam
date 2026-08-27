@@ -11,6 +11,7 @@
 import { randomBytes } from "crypto";
 import prismaBase from "@/lib/prisma-base";
 import { sendEmail } from "@/lib/notifications/email";
+import { createEmailLog, markEmailSent, markEmailFailed } from "@/lib/notifications/email-log";
 
 const TOKEN_EXPIRY_HOURS = 24;
 const TOKEN_BYTES = 32;
@@ -146,6 +147,7 @@ export interface SendVerificationResult {
   success: boolean;
   token?: string;
   error?: string;
+  emailLogId?: string;
 }
 
 /**
@@ -156,13 +158,15 @@ export interface SendVerificationResult {
  * @param ecoleNom          — nom de l'établissement (pour le branding)
  * @param force             — si true, supprime les tokens précédents avant d'en créer un nouveau
  * @param temporaryPassword — mot de passe temporaire à inclure dans l'email (optionnel)
+ * @param logContext        — contexte pour le journal des emails (tenantId, userId, createdBy)
  */
 export async function sendVerificationEmail(
   userEmail: string,
   userName: string,
   ecoleNom?: string,
   force = false,
-  temporaryPassword?: string
+  temporaryPassword?: string,
+  logContext?: { tenantId?: string | null; userId?: string | null; createdBy?: string | null }
 ): Promise<SendVerificationResult> {
   // Nettoyer les tokens expirés ou existants pour cet email
   if (force) {
@@ -191,18 +195,49 @@ export async function sendVerificationEmail(
   const html = renderVerificationEmailHtml(userName, verifyUrl, ecoleNom, temporaryPassword);
   const text = renderVerificationEmailText(userName, verifyUrl, ecoleNom, temporaryPassword);
 
+  const subject = "Vérifiez votre adresse email — École Miriam";
+
+  // Créer l'enregistrement EmailLog avant l'envoi
+  let emailLogId: string | undefined;
+  if (logContext) {
+    try {
+      emailLogId = await createEmailLog({
+        tenantId: logContext.tenantId,
+        userId: logContext.userId,
+        email: userEmail,
+        type: "VERIFICATION",
+        subject,
+        createdBy: logContext.createdBy,
+        tags: { category: "verification" },
+      });
+    } catch (err) {
+      console.warn("[sendVerificationEmail] Impossible de créer l'EmailLog:", err);
+    }
+  }
+
   const result = await sendEmail(
     [userEmail],
-    "Vérifiez votre adresse email — École Miriam",
+    subject,
     html,
-    text
+    text,
+    { category: "verification" }
   );
 
   if (!result.success) {
-    return { success: false, error: result.error ?? "Échec d'envoi de l'email" };
+    // Marquer l'EmailLog comme échoué
+    if (emailLogId) {
+      await markEmailFailed(emailLogId, result.error ?? "Échec d'envoi").catch(() => {});
+    }
+    return { success: false, error: result.error ?? "Échec d'envoi de l'email", emailLogId };
   }
 
-  return { success: true, token };
+  // Marquer l'EmailLog comme envoyé avec l'ID Resend
+  if (emailLogId) {
+    const resendId = result.emailIds?.[userEmail] ?? null;
+    await markEmailSent(emailLogId, resendId).catch(() => {});
+  }
+
+  return { success: true, token, emailLogId };
 }
 
 export interface VerifyTokenResult {

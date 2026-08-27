@@ -313,7 +313,8 @@ export default async function ElevesPage({
   const currentSiteColor = currentSiteId ? siteColors[currentSiteId] : undefined;
 
   // Le bouton "Ajouter un élève" et l'import Excel nécessitent eleves:write.
-  // Les comptables (ACCOUNTANT) n'ont que eleves:read — ils inscrivent via /admissions.
+  // Le comptable (ACCOUNTANT) a désormais eleves:write — il peut inscrire
+  // directement depuis /eleves/nouveau OU via le workflow /admissions.
   const canWriteEleves = roleHasPermission(session.user.role as Role, "eleves:write");
 
   // Filtrer la liste des classes pour les enseignants (ne montrer que leurs classes)

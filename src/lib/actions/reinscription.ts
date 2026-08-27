@@ -394,12 +394,24 @@ export async function genererFraisRenouvellement(annee: string) {
   });
 
   // 2. Tarifs pour l'année cible
+  // Indexation à deux niveaux : tarifs site-spécifique (prioritaires) + tarifs globaux
+  // Clé: `${niveau}|${siteId}` → un tarif global a siteId=null
   const tarifs = await prisma.tarifNiveau.findMany({
     where: { tenantId, annee, actif: true },
   });
-  const tarifMap = new Map<string, typeof tarifs[0]>();
+  const tarifByNiveauSite = new Map<string, typeof tarifs[0]>();
+  const tarifByNiveauGlobal = new Map<string, typeof tarifs[0]>();
   for (const t of tarifs) {
-    tarifMap.set(t.niveau.toLowerCase(), t);
+    if (t.siteId) {
+      tarifByNiveauSite.set(`${t.niveau.toLowerCase()}|${t.siteId}`, t);
+    } else {
+      tarifByNiveauGlobal.set(t.niveau.toLowerCase(), t);
+    }
+  }
+  // Lookup : tarif site-spécifique en priorité, fallback sur global
+  function findTarif(niveau: string, siteId: string | null) {
+    const key = `${niveau.toLowerCase()}|${siteId}`;
+    return tarifByNiveauSite.get(key) ?? tarifByNiveauGlobal.get(niveau.toLowerCase());
   }
 
   const libelle = `Frais de renouvellement ${annee}`;
@@ -408,7 +420,7 @@ export async function genererFraisRenouvellement(annee: string) {
   // 3. Batch : vérifier les factures existantes
   const elevesAvecTarif = eleves.filter((e) => {
     const niveau = e.classe?.niveau ?? "Inconnu";
-    return tarifMap.has(niveau.toLowerCase());
+    return findTarif(niveau, e.siteId ?? null) !== undefined;
   });
 
   // eslint-disable-next-line ecolemiriam/require-site-filter -- bulk check, tenantId dans le where
@@ -444,7 +456,7 @@ export async function genererFraisRenouvellement(annee: string) {
   for (const eleve of elevesAvecTarif) {
     if (existingSet.has(eleve.id)) continue;
     const niveau = eleve.classe?.niveau ?? "Inconnu";
-    const tarif = tarifMap.get(niveau.toLowerCase())!;
+    const tarif = findTarif(niveau, eleve.siteId ?? null)!;
 
     toCreate.push({
       tenantId,
