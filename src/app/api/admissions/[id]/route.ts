@@ -8,6 +8,7 @@ import { auditFire } from "@/lib/audit";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { notifyDirection } from "@/lib/notifications/notify-direction";
 import { piecesRequisesPresentes } from "@/lib/admissions/pieces-justificatives";
+import { formatMoisScolarite, moisScolariteDefaut, isMoisScolariteValide } from "@/lib/admissions/mois-scolarite";
 
 const UpdateSchema = z.object({
   statut: z.enum(["SOUMISE", "DOSSIER_COMPLET", "EN_EXAMEN", "ADMIS", "REFUSE", "INSCRIT", "ANNULE"]).optional(),
@@ -16,6 +17,9 @@ const UpdateSchema = z.object({
   commentaire: z.string().optional(),
   motifRefus: z.string().optional(),
   documents: z.array(z.object({ nom: z.string(), url: z.string(), type: z.string().optional() })).optional(),
+  // Mois de scolarité à facturer avec les frais d'inscription (format "YYYY-MM").
+  // Utilisé uniquement au passage à ADMIS. Défaut calculé selon la date si absent.
+  moisScolarite: z.string().refine(isMoisScolariteValide, "Mois invalide (format attendu YYYY-MM)").optional(),
 });
 
 export async function PATCH(
@@ -94,11 +98,16 @@ export async function PATCH(
         },
       });
 
-      // La facture d'inscription inclut : frais d'inscription + mensualité de septembre
+      // La facture d'inscription inclut : frais d'inscription + une mensualité de
+      // scolarité. Le mois facturé est choisi par l'utilisateur au moment de
+      // l'admission ; à défaut on applique la règle par date (septembre en
+      // août/septembre, sinon le mois en cours).
       const fraisInscription = tarif?.fraisInscription ?? 0;
       const mensualite = tarif?.mensualite ?? 0;
       const montantTotal = fraisInscription + mensualite;
       const devise = tarif?.devise ?? "DJF";
+      const moisScolarite = data.moisScolarite ?? moisScolariteDefaut();
+      const moisLabel = formatMoisScolarite(moisScolarite);
 
       // Générer un numéro de facture
       // eslint-disable-next-line ecolemiriam/require-site-filter -- count global pour numéro séquentiel
@@ -113,7 +122,7 @@ export async function PATCH(
           siteId: candidature.siteId,
           candidatureId: candidature.id,
           numero: numeroFacture,
-          libelle: `Frais d'inscription + Scolarité Septembre — ${candidature.prenom} ${candidature.nom} (${candidature.classeVoulue}, ${candidature.annee})`,
+          libelle: `Frais d'inscription + Scolarité ${moisLabel} — ${candidature.prenom} ${candidature.nom} (${candidature.classeVoulue}, ${candidature.annee})`,
           montant: montantTotal,
           devise,
           statut: "EN_ATTENTE",

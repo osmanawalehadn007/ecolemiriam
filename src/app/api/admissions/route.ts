@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, siteIdForCreate } from "@/lib/site-scope";
 import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
 
 const CandidatureSchema = z.object({
@@ -69,11 +69,18 @@ export async function POST(req: NextRequest) {
     const slug = host.split(".")[0];
 
     let tenantId: string | null = null;
+    // Site à rattacher à la candidature. Renseigné uniquement lorsqu'un membre
+    // du dashboard (session active) est rattaché à un site unique. Sans cela la
+    // candidature naît avec `siteId: null` et devient invisible aux comptes
+    // site-scopés (le filtre de site exclut `null` pour ce modèle) — d'où le
+    // « Candidature introuvable » au clic sur « Dossier complet ».
+    let siteId: string | null = null;
 
     // Si appelé depuis le dashboard (session active)
     const session = await auth();
     if (session?.user?.tenantId) {
       tenantId = session.user.tenantId;
+      siteId = siteIdForCreate(session.user);
     } else {
       // Appel public : résoudre le tenant via le slug
       const tenant = await prisma.tenant.findUnique({ where: { slug } });
@@ -92,6 +99,7 @@ export async function POST(req: NextRequest) {
     const candidature = await prisma.candidature.create({
       data: {
         tenantId,
+        siteId,
         nom: data.nom,
         prenom: data.prenom,
         dateNaissance: new Date(data.dateNaissance),

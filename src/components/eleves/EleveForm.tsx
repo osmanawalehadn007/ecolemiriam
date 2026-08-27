@@ -13,6 +13,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import type { ResultatEleve } from "@/lib/actions/eleve";
 
 interface Classe {
   id: string;
@@ -70,10 +71,7 @@ interface EleveFormProps {
   submitAction: (
     data: EleveFormData,
     confirmations?: { dateNaissance?: boolean; doublon?: boolean }
-  ) => Promise<
-    | { success: true; id: string }
-    | { success: false; confirmation: { code: string; titre: string; message: string } }
-  >;
+  ) => Promise<ResultatEleve>;
   submitLabel: string;
   title: string;
   backHref: string;
@@ -167,6 +165,15 @@ export function EleveForm({ classes, sites = [], currentSiteId = null, tenantHas
         return;
       }
       setConfirmation(null);
+      // Inscription directe nécessitant un paiement : une candidature + une
+      // facture d'inscription ont été créées. On oriente vers la facture pour
+      // encaissement, la fiche élève étant créée automatiquement une fois payée.
+      if ("requiresPayment" in result) {
+        toast.success(t("enrollInvoiceCreated"));
+        router.push(`/facturation?numero=${encodeURIComponent(result.factureNumero)}`);
+        router.refresh();
+        return;
+      }
       toast.success(submitLabel === "Créer" ? t("enrollSuccess") : t("updateSuccess"));
       router.push(`/eleves/${result.id}`);
       router.refresh();

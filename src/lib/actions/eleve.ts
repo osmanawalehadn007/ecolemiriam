@@ -66,6 +66,7 @@ export interface Confirmations {
 
 export type ResultatEleve =
   | { success: true; id: string }
+  | { success: true; requiresPayment: true; candidatureId: string; factureId: string; factureNumero: string; montant: number; devise: string }
   | { success: false; confirmation: ConfirmationRequise };
 
 export async function getClassesForTenant() {
@@ -180,18 +181,6 @@ export async function createEleve(
   const anneeInscription = await getAnneeCouranteLibelle(tenantId);
   if (!anneeInscription) throw new Error("Aucune année scolaire active pour ce tenant");
 
-  let matricule = values.matricule?.trim();
-  if (!matricule) {
-    const count = await prisma.eleve.count({ where: { tenantId, ...siteFilterForModel("eleve", session.user) } });
-    matricule = `ECL-${anneeInscription}-${String(count + 1).padStart(4, "0")}`;
-  }
-
-  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- findUnique sur contrainte unique tenantId_matricule, le tenantId est dans la clé composite
-  const existing = await prisma.eleve.findUnique({
-    where: { tenantId_matricule: { tenantId, matricule } },
-  });
-  if (existing) throw new Error("Ce matricule existe déjà");
-
   const identite = {
     nom: values.nom,
     prenom: values.prenom,
@@ -228,79 +217,128 @@ export async function createEleve(
       },
     };
   }
-  const identiteKey = await resoudreIdentiteKey(tenantId, identite, {
-    forcer: confirmations.doublon,
-  });
 
+  // ── Résoudre le site et le niveau depuis la classe choisie ──
   // L'élève hérite du site de sa classe, unique source de vérité.
   // S'il n'est rattaché à aucune classe, on conserve le site de la session.
   let resolvedSiteId = session.user.siteId ?? null;
+  let classeNiveau: string | null = null;
+  let classeNom: string | null = null;
   if (values.classeId) {
-    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-tenant-id -- findUnique pour récupérer le siteId de la classe
+    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-tenant-id -- findUnique pour récupérer le siteId et le niveau de la classe
     const classe = await prisma.classe.findUnique({
       where: { id: values.classeId },
-      select: { siteId: true },
+      select: { siteId: true, niveau: true, nom: true },
     });
     if (classe?.siteId) resolvedSiteId = classe.siteId;
+    if (classe?.niveau) classeNiveau = classe.niveau;
+    if (classe?.nom) classeNom = classe.nom;
   }
 
-  const eleve = await prisma.eleve.create({
+  // ── Créer une candidature au statut ADMIS ──
+  //    L'inscription directe passe par le même circuit que les admissions :
+  //    candidature ADMIS → facture générée → paiement → INSCRIT → élève créé.
+  //    Les champs supplémentaires du formulaire (groupeSanguin, allergies,
+  //    regime, etc.) sont stockés dans le JSON `documents` pour être appliqués
+  //    au moment de la création de l'élève (transition INSCRIT).
+  const extraFormData = {
+    _type: "extraForm",
+    classeId: values.classeId || null,
+    classeNom: classeNom,
+    statut: values.statut || "ACTIF",
+    groupeSanguin: values.groupeSanguin || null,
+    allergies: values.allergies || null,
+    besoinsSpeciaux: values.besoinsSpeciaux || null,
+    regime: values.regime || null,
+    transport: values.transport || null,
+    contactUrgenceNom: values.contactUrgenceNom || null,
+    contactUrgencePhone: values.contactUrgencePhone || null,
+    numeroBoursier: values.numeroBoursier || null,
+    parentProfession: values.parentProfession || null,
+    parentAdresse: values.parentAdresse || null,
+    parentIsGardien: values.parentIsGardien ?? true,
+    photoUrl: values.photoUrl || null,
+  };
+
+  const candidature = await prisma.candidature.create({
     data: {
       tenantId,
       siteId: resolvedSiteId,
-      matricule,
       nom: values.nom,
       prenom: values.prenom,
       dateNaissance: new Date(values.dateNaissance),
       lieuNaissance: values.lieuNaissance || null,
-      nationalite: values.nationalite || "SN",
       sexe: values.sexe,
-      classeId: values.classeId || null,
-      statut: values.statut || "ACTIF",
-      groupeSanguin: values.groupeSanguin || null,
-      allergies: values.allergies || null,
-      besoinsSpeciaux: values.besoinsSpeciaux || null,
-      regime: values.regime || null,
-      transport: values.transport || null,
-      contactUrgenceNom: values.contactUrgenceNom || null,
-      contactUrgencePhone: values.contactUrgencePhone || null,
-      numeroBoursier: values.numeroBoursier || null,
-      anneeInscription,
+      nationalite: values.nationalite || "SN",
       photoUrl: values.photoUrl || null,
-      identiteKey,
+      classeVoulue: classeNiveau ?? classeNom ?? "Non précisée",
+      annee: anneeInscription,
+      parentNom: values.parentNom || "",
+      parentPrenom: values.parentPrenom || "",
+      parentEmail: values.parentEmail || null,
+      parentPhone: values.parentPhone || "",
+      parentLien: (values.parentLien as "PERE" | "MERE" | "TUTEUR" | "AUTRE") || "PERE",
+      statut: "ADMIS" as const,
+      commentaire: `Inscription directe par ${session.user.name ?? "admin"} — en attente de paiement pour finaliser`,
+      documents: extraFormData as unknown as object,
     },
   });
 
-  if (values.parentNom && values.parentPrenom && values.parentPhone) {
-    const parent = await prisma.parent.create({
-      data: {
-        tenantId,
-        nom: values.parentNom,
-        prenom: values.parentPrenom,
-        phone: values.parentPhone,
-        email: values.parentEmail || null,
-        profession: values.parentProfession || null,
-        adresse: values.parentAdresse || null,
-      },
-    });
+  // ── Générer la facture d'inscription (frais inscription + mensualité septembre) ──
+  //    Même logique que le workflow d'admission : on cherche le TarifNiveau
+  //    pour le niveau/site/année, et on crée une facture liée à la candidature.
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- recherche tarif par niveau, pas par site obligatoire
+  const tarif = await prisma.tarifNiveau.findFirst({
+    where: {
+      tenantId,
+      niveau: classeNiveau ?? "",
+      annee: anneeInscription,
+      actif: true,
+      OR: [{ siteId: resolvedSiteId }, { siteId: null }],
+    },
+    orderBy: { siteId: "desc" }, // privilégier le tarif spécifique au site
+  });
 
-    await prisma.eleveParent.create({
-      data: {
-        eleveId: eleve.id,
-        parentId: parent.id,
-        lien: values.parentLien || "PERE",
-        isGardien: values.parentIsGardien ?? true,
-      },
-    });
-  }
+  const fraisInscription = tarif?.fraisInscription ?? 0;
+  const mensualite = tarif?.mensualite ?? 0;
+  const montantTotal = fraisInscription + mensualite;
+  const devise = tarif?.devise ?? "DJF";
+
+  // Générer un numéro de facture
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- count global pour numéro séquentiel
+  const factureCount = await prisma.facture.count({
+    where: { tenantId },
+  });
+  const numeroFacture = `FAC-${new Date().getFullYear()}-${String(factureCount + 1).padStart(5, "0")}`;
+
+  const facture = await prisma.facture.create({
+    data: {
+      tenantId,
+      siteId: resolvedSiteId,
+      candidatureId: candidature.id,
+      numero: numeroFacture,
+      libelle: `Frais d'inscription + Scolarité Septembre — ${values.prenom} ${values.nom} (${classeNom ?? classeNiveau ?? "N/A"}, ${anneeInscription})`,
+      montant: montantTotal,
+      devise,
+      statut: "EN_ATTENTE",
+    },
+  });
 
   revalidatePath("/eleves");
-  // Les effectifs par classe sont aussi affichés dans Paramètres → Pédagogie :
-  // sans cette invalidation, cet écran garde les chiffres d.avant.
+  revalidatePath("/admissions");
+  revalidatePath("/facturation");
   revalidatePath("/parametres");
   revalidateTag("eleves-stats");
   revalidateTag("dashboard-data");
-  return { success: true, id: eleve.id };
+  return {
+    success: true,
+    requiresPayment: true,
+    candidatureId: candidature.id,
+    factureId: facture.id,
+    factureNumero: facture.numero,
+    montant: montantTotal,
+    devise,
+  };
 }
 
 export async function updateEleve(

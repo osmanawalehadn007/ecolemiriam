@@ -312,9 +312,11 @@ export default async function ElevesPage({
       : "Aucun site";
   const currentSiteColor = currentSiteId ? siteColors[currentSiteId] : undefined;
 
-  // Le bouton "Ajouter un élève" et l'import Excel nécessitent eleves:write.
-  // Le comptable (ACCOUNTANT) a désormais eleves:write — il peut inscrire
-  // directement depuis /eleves/nouveau OU via le workflow /admissions.
+  // Le bouton "Inscrire un élève" et l'import Excel nécessitent eleves:write.
+  // Source unique d'inscription : le bouton renvoie désormais vers le workflow
+  // d'admissions (/admissions), qui gère candidature → facture → paiement →
+  // création de la fiche élève. La saisie directe (/eleves/nouveau) redirige
+  // aussi vers /admissions.
   const canWriteEleves = roleHasPermission(session.user.role as Role, "eleves:write");
 
   // Filtrer la liste des classes pour les enseignants (ne montrer que leurs classes)
@@ -346,7 +348,7 @@ export default async function ElevesPage({
             )}
             {canWriteEleves && (
               <Button asChild size="sm" className="gap-2">
-                <Link href="/eleves/nouveau">
+                <Link href="/admissions">
                   <Plus className="h-4 w-4" />
                   {t("register")}
                 </Link>

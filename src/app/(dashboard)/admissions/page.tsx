@@ -5,6 +5,7 @@ import { AdmissionsView } from "@/components/admissions/AdmissionsView";
 import { getTranslations } from "next-intl/server";
 import { guardPage } from "@/lib/guard-page";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { getClassesForTenant } from "@/lib/actions/eleve";
 
 async function getCandidatures(tenantId: string, siteFilter: Record<string, unknown>) {
   const anneeActuelle = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
@@ -33,7 +34,15 @@ export default async function AdmissionsPage() {
   guardPage(session, "admissions:read");
 
   const siteFilter = siteFilterForModel("candidature", session!.user);
-  const { candidatures } = await getCandidatures(session!.user.tenantId!, siteFilter);
+  const [{ candidatures }, classesRaw] = await Promise.all([
+    getCandidatures(session!.user.tenantId!, siteFilter),
+    getClassesForTenant(),
+  ]);
+
+  // Classes du site (dédupliquées par nom) pour la liste déroulante du formulaire
+  const classes = Array.from(
+    new Map(classesRaw.map((c) => [c.nom, { id: c.id, nom: c.nom }])).values()
+  ).sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
 
   // Cast les documents + factures pour le composant
   const candidaturesForView = candidatures.map((c) => ({
@@ -61,7 +70,7 @@ export default async function AdmissionsPage() {
         userAvatar={session!.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <AdmissionsView candidatures={candidaturesForView} userRole={session!.user.role} />
+        <AdmissionsView candidatures={candidaturesForView} userRole={session!.user.role} classes={classes} />
       </div>
     </div>
   );

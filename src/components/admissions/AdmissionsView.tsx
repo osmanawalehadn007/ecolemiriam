@@ -19,6 +19,7 @@ import { PiecesJustificativesUploader } from "./PiecesJustificativesUploader";
 import { piecesRequisesPresentes } from "@/lib/admissions/pieces-justificatives";
 import { enregistrerPaiement } from "@/lib/actions/facture";
 import { PAYMENT_METHODS } from "@/lib/payment-methods";
+import { optionsMoisScolarite, moisScolariteDefaut } from "@/lib/admissions/mois-scolarite";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -76,9 +77,11 @@ const WORKFLOW: StatutCandidature[] = ["SOUMISE", "DOSSIER_COMPLET", "EN_EXAMEN"
 function CandidatureForm({
   onClose,
   onCreated,
+  classes,
 }: {
   onClose: () => void;
   onCreated: (c: Candidature) => void;
+  classes: { id: string; nom: string }[];
 }) {
   const t = useTranslations("admissions");
   const anneeActuelle = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
@@ -154,7 +157,25 @@ function CandidatureForm({
                 </div>
                 <div>
                   <label className="text-xs text-gray-600 mb-1 block">{t("desiredClass")}</label>
-                  <Input value={form.classeVoulue} onChange={(e) => set("classeVoulue", e.target.value)} required placeholder="6ème, Terminale S…" className="text-sm" />
+                  {classes.length > 0 ? (
+                    <select
+                      value={form.classeVoulue}
+                      onChange={(e) => set("classeVoulue", e.target.value)}
+                      required
+                      className="w-full rounded-md border border-input px-3 py-2 text-sm bg-background"
+                    >
+                      <option value="" disabled>
+                        {t("selectClass")}
+                      </option>
+                      {classes.map((c) => (
+                        <option key={c.id} value={c.nom}>
+                          {c.nom}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input value={form.classeVoulue} onChange={(e) => set("classeVoulue", e.target.value)} required placeholder="6ème, Terminale S…" className="text-sm" />
+                  )}
                 </div>
                 <div>
                   <label className="text-xs text-gray-600 mb-1 block">{t("schoolYear")}</label>
@@ -233,6 +254,7 @@ function CandidatureCard({
   const [isPending, startTransition] = useTransition();
   const [localDocs, setLocalDocs] = useState<{ nom: string; url: string; type?: string }[]>(candidature.documents ?? []);
   const [showPaiementModal, setShowPaiementModal] = useState(false);
+  const [showAdmitModal, setShowAdmitModal] = useState(false);
   const config = STATUT_CONFIG[candidature.statut];
 
   const piecesStatut = piecesRequisesPresentes(localDocs);
@@ -252,13 +274,13 @@ function CandidatureCard({
     { key: "INSCRIT", label: t("statusEnrolled"), done: candidature.statut === "INSCRIT" },
   ];
 
-  const handleStatut = (statut: StatutCandidature) => {
+  const handleStatut = (statut: StatutCandidature, extra?: Record<string, unknown>) => {
     startTransition(async () => {
       try {
         const res = await fetch(`/api/admissions/${candidature.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ statut, documents: localDocs }),
+          body: JSON.stringify({ statut, documents: localDocs, ...extra }),
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
@@ -510,6 +532,19 @@ function CandidatureCard({
           />
         )}
 
+        {/* Modal choix du mois de scolarité à l'admission */}
+        {showAdmitModal && (
+          <AdmitMoisModal
+            eleveNom={`${candidature.prenom} ${candidature.nom}`}
+            isPending={isPending}
+            onClose={() => setShowAdmitModal(false)}
+            onConfirm={(moisScolarite) => {
+              setShowAdmitModal(false);
+              handleStatut("ADMIS", { moisScolarite });
+            }}
+          />
+        )}
+
         {/* Toggle pièces justificatives */}
         <button
           onClick={() => setExpanded(!expanded)}
@@ -553,7 +588,13 @@ function CandidatureCard({
                 variant={a.variant === "destructive" ? "destructive" : "outline"}
                 className="text-xs h-7"
                 disabled={isPending || a.disabled}
-                onClick={() => !a.disabled && handleStatut(a.statut)}
+                onClick={() => {
+                  if (a.disabled) return;
+                  // L'admission génère la facture → on demande d'abord le mois
+                  // de scolarité à facturer.
+                  if (a.statut === "ADMIS") setShowAdmitModal(true);
+                  else handleStatut(a.statut);
+                }}
               >
                 {isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : a.label}
               </Button>
@@ -562,6 +603,70 @@ function CandidatureCard({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ─── Modal choix du mois de scolarité (admission) ─────────────────────────────
+
+function AdmitMoisModal({
+  eleveNom,
+  isPending,
+  onClose,
+  onConfirm,
+}: {
+  eleveNom: string;
+  isPending: boolean;
+  onClose: () => void;
+  onConfirm: (moisScolarite: string) => void;
+}) {
+  const t = useTranslations("admissions");
+  // Options figées au montage (les 12 mois de l'année scolaire en cours).
+  const options = useMemo(() => optionsMoisScolarite(), []);
+  const [mois, setMois] = useState(() => moisScolariteDefaut());
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <Card className="w-full max-w-md border-0 shadow-2xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <CheckCircle2 className="w-5 h-5 text-green-600" />
+            {t("admitTitle")}
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">{eleveNom}</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">{t("admitInvoiceHint")}</p>
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t("tuitionMonth")}</Label>
+            <select
+              value={mois}
+              onChange={(e) => setMois(e.target.value)}
+              className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="button"
+              disabled={isPending}
+              onClick={() => onConfirm(mois)}
+              className="flex-1 gap-2 bg-green-600 hover:bg-green-700"
+            >
+              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              {t("confirmAdmission")}
+            </Button>
+            <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
+              {t("cancel")}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -699,12 +804,18 @@ function PaiementInlineModal({
 
 // ─── Composant principal ──────────────────────────────────────────────────────
 
+interface ClasseOption {
+  id: string;
+  nom: string;
+}
+
 interface AdmissionsViewProps {
   candidatures: Candidature[];
   userRole?: string;
+  classes?: ClasseOption[];
 }
 
-export function AdmissionsView({ candidatures: initial, userRole }: AdmissionsViewProps) {
+export function AdmissionsView({ candidatures: initial, userRole, classes = [] }: AdmissionsViewProps) {
   const t = useTranslations("admissions");
   const [candidatures, setCandidatures] = useState<Candidature[]>(initial);
   const [search, setSearch] = useState("");
@@ -747,7 +858,7 @@ export function AdmissionsView({ candidatures: initial, userRole }: AdmissionsVi
   return (
     <div className="space-y-6">
       {showForm && (
-        <CandidatureForm onClose={() => setShowForm(false)} onCreated={handleCreated} />
+        <CandidatureForm onClose={() => setShowForm(false)} onCreated={handleCreated} classes={classes} />
       )}
 
       {/* En-tête */}
