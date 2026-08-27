@@ -1123,7 +1123,8 @@
     "cibleTeachers": "Teachers",
     "cibleStudents": "Students",
     "cibleClass": "A class",
-    "cibleLevel": "A level"
+    "cibleLevel": "A level",
+    "cibleDirection": "Direction"
   },
   "vieScolaire": {
     "title": "School Life",

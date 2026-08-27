@@ -8,6 +8,7 @@ import { audit } from "@/lib/audit";
 import { getAnneeCourante, getAnneeCouranteLibelle, setAnneeCourante, invalidateAnneeCourante } from "@/lib/annee-scolaire";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { niveauSuivant } from "@/lib/niveau-suivant";
+import { notifyDirection } from "@/lib/notifications/notify-direction";
 import type { Role } from "@prisma/client";
 
 // ============================================================
@@ -356,6 +357,14 @@ export async function promouvoirEleves(): Promise<ResultatPromotion> {
     metadata: { promus: promusCount, diplomes: diplomesCount, manuels: sansChangement },
   });
 
+  // Notifier la direction de la promotion effectuée
+  await notifyDirection({
+    tenantId,
+    titre: "Promotion des élèves effectuée",
+    contenu: `La promotion automatique a été effectuée par ${session.user.name ?? "un utilisateur"}.\n\nRésumé :\n• ${promusCount} élève(s) promu(s) au niveau supérieur\n• ${diplomesCount} élève(s) diplômé(s)\n• ${sansChangement} élève(s) en promotion manuelle`,
+    envoyeParId: session.user.id,
+  });
+
   revalidatePath("/eleves");
   revalidatePath("/reinscription");
   revalidateTag("eleves-stats");
@@ -465,6 +474,14 @@ export async function genererFraisRenouvellement(annee: string) {
     resource: "factures",
     reason: `Génération frais de renouvellement ${annee}: ${toCreate.length} factures`,
     metadata: { annee, generated: toCreate.length, skipped: eleves.length - toCreate.length },
+  });
+
+  // Notifier la direction de la génération des frais
+  await notifyDirection({
+    tenantId,
+    titre: `Frais de renouvellement générés — ${annee}`,
+    contenu: `Les frais de renouvellement pour l'année ${annee} ont été générés par ${session.user.name ?? "un utilisateur"}.\n\nRésumé :\n• ${toCreate.length} facture(s) créée(s)\n• ${eleves.length - toCreate.length} élève(s) sans tarif configuré (ignorés)\n\nLes factures sont visibles dans le module Facturation.`,
+    envoyeParId: session.user.id,
   });
 
   revalidatePath("/facturation");
@@ -586,6 +603,21 @@ export async function procederReinscriptionComplete(params: {
     resourceId: params.anneeId,
     reason: `Procédure de réinscription complète (${erreurs.length} erreurs)`,
     metadata: { anneeActive, promotion, fraisRenouvellement, mensualites, erreurs },
+  });
+
+  // Notifier la direction du résultat de la procédure complète
+  const resumeParts: string[] = [];
+  if (anneeActive) resumeParts.push("Année scolaire activée");
+  if (promotion) resumeParts.push(`${promotion.promus} promus, ${promotion.diplomes} diplômés`);
+  if (fraisRenouvellement) resumeParts.push(`${fraisRenouvellement.generated} factures de renouvellement`);
+  if (mensualites) resumeParts.push(`${mensualites.generated} mensualités générées`);
+  if (erreurs.length > 0) resumeParts.push(`${erreurs.length} erreur(s)`);
+
+  await notifyDirection({
+    tenantId,
+    titre: "Procédure de réinscription terminée",
+    contenu: `La procédure de réinscription a été exécutée par ${session.user.name ?? "un utilisateur"}.\n\nRésumé :\n• ${resumeParts.join("\n• ")}${erreurs.length > 0 ? `\n\nErreurs :\n${erreurs.map((e) => `• ${e}`).join("\n")}` : ""}`,
+    envoyeParId: session.user.id,
   });
 
   await invalidateAnneeCourante(tenantId);

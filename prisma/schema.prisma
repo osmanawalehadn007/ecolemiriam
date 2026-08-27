@@ -1692,6 +1692,7 @@ enum CibleNotification {
   ELEVES // Tous les élèves
   CLASSE // Une classe spécifique
   NIVEAU // Un niveau (ex: Terminale)
+  DIRECTION // Directeur (TENANT_ADMIN) + Chef d'établissement (PRINCIPAL)
 }
 
 model Notification {

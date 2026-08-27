@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { auditFire } from "@/lib/audit";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { notifyDirection } from "@/lib/notifications/notify-direction";
 
 const UpdateSchema = z.object({
   statut: z.enum(["SOUMISE", "EN_EXAMEN", "ADMIS", "REFUSE", "INSCRIT", "ANNULE"]).optional(),
@@ -30,21 +31,10 @@ export async function PATCH(
   const body = await req.json();
   const data = UpdateSchema.parse(body);
 
-  // ── Restriction : le statut INSCRIT est réservé au directeur (TENANT_ADMIN)
-  //    et au super-admin. Un comptable peut faire tout le workflow jusqu'à
-  //    ADMIS, mais l'inscription finale doit être confirmée par le directeur.
-  //    Sans cette vérification côté serveur, un comptable pourrait contourner
-  //    l'UI et appeler l'API directement avec { statut: "INSCRIT" }.
-  if (
-    data.statut === "INSCRIT" &&
-    session.user.role !== "TENANT_ADMIN" &&
-    session.user.role !== "SUPER_ADMIN"
-  ) {
-    return NextResponse.json(
-      { error: "L'inscription finale (INSCRIT) est réservée au directeur." },
-      { status: 403 }
-    );
-  }
+  // ── Le statut INSCRIT est désormais accessible au comptable (bout-en-bout).
+  //    La direction (TENANT_ADMIN + PRINCIPAL) est notifiée automatiquement
+  //    quand un comptable finalise une inscription (voir plus bas, après la
+  //    création de l'élève).
 
   const siteFilter = siteFilterForModel("candidature", session.user);
   const candidature = await prisma.candidature.findFirst({
@@ -59,6 +49,7 @@ export async function PATCH(
   //    Le directeur confirme l'inscription → on crée l'élève + le parent
   //    + le lien EleveParent en une seule transaction.
   let eleveCreeId: string | null = null;
+  let matricule: string | null = null;
 
   if (data.statut === "INSCRIT" && candidature.statut !== "INSCRIT") {
     const tenantId = session.user.tenantId;
@@ -67,7 +58,7 @@ export async function PATCH(
     const anneeInscription = await getAnneeCouranteLibelle(tenantId);
     // eslint-disable-next-line ecolemiriam/require-site-filter -- count global pour matricule sequentiel
     const count = await prisma.eleve.count({ where: { tenantId } });
-    const matricule = `ECL-${anneeInscription ?? new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
+    matricule = `ECL-${anneeInscription ?? new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
 
     // Vérifier que le matricule n'existe pas déjà
     // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- findUnique sur contrainte unique tenantId_matricule
@@ -105,7 +96,7 @@ export async function PATCH(
         data: {
           tenantId,
           siteId: candidature.siteId,
-          matricule,
+          matricule: matricule!,
           nom: candidature.nom,
           prenom: candidature.prenom,
           dateNaissance: new Date(candidature.dateNaissance),
@@ -160,6 +151,46 @@ export async function PATCH(
       ...(data.motifRefus !== undefined && { motifRefus: data.motifRefus }),
     },
   });
+
+  // ── Notifications automatiques à la direction (TENANT_ADMIN + PRINCIPAL) ──
+  //    Le comptable gère le flux bout-en-bout ; la direction est tenue informée
+  //    à chaque étape clé (admission → inscription finale).
+  const eleveNomComplet = `${candidature.prenom} ${candidature.nom}`;
+  const auteurNom = session.user.name ?? "Comptable";
+
+  if (data.statut === "ADMIS") {
+    await notifyDirection({
+      tenantId: session.user.tenantId,
+      titre: `Candidat admis — ${eleveNomComplet}`,
+      contenu: `Le candidat ${eleveNomComplet} (classe souhaitée: ${candidature.classeVoulue}) a été admis par ${auteurNom}.\n\nLa candidature est en attente de confirmation d'inscription.`,
+      envoyeParId: session.user.id,
+      siteId: candidature.siteId ?? null,
+    });
+  }
+
+  if (data.statut === "INSCRIT") {
+    await notifyDirection({
+      tenantId: session.user.tenantId,
+      titre: `Nouvel élève inscrit — ${eleveNomComplet}`,
+      contenu: `L'élève ${eleveNomComplet} a été inscrit par ${auteurNom}.${
+        matricule ? `\nMatricule: ${matricule}` : ""
+      }\nClasse souhaitée: ${candidature.classeVoulue}\nAnnée: ${candidature.annee}\n\nLa fiche élève et le compte parent ont été créés automatiquement.`,
+      envoyeParId: session.user.id,
+      siteId: candidature.siteId ?? null,
+    });
+  }
+
+  if (data.statut === "REFUSE") {
+    await notifyDirection({
+      tenantId: session.user.tenantId,
+      titre: `Candidature refusée — ${eleveNomComplet}`,
+      contenu: `La candidature de ${eleveNomComplet} (classe: ${candidature.classeVoulue}) a été refusée par ${auteurNom}.${
+        data.motifRefus ? `\nMotif: ${data.motifRefus}` : ""
+      }`,
+      envoyeParId: session.user.id,
+      siteId: candidature.siteId ?? null,
+    });
+  }
 
   return NextResponse.json({ candidature: updated, eleveCreeId });
 }

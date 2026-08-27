@@ -72,9 +72,10 @@ const CLIENT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "eleves:read", "absences:read", "messages:read", "messages:write",
   ],
   ACCOUNTANT: [
-    "finance:*", "rh:*", "eleves:read", "parents:read", "inventaire:*",
-    "analytics:read", "messages:*", "rapports:read",
+    "finance:*", "rh:*", "eleves:read", "eleves:write", "parents:read",
+    "inventaire:*", "analytics:read", "messages:*", "rapports:read",
     "admissions:read", "admissions:write",
+    "parametres:read", "parametres:write",
   ],
   PARENT: [
     "bulletins:read", "absences:read", "notes:read", "messages:*",

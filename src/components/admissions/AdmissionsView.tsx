@@ -242,8 +242,12 @@ function CandidatureCard({
   };
 
   // Actions disponibles selon le statut
-  // L'inscription finale (INSCRIT) est réservée au directeur (TENANT_ADMIN) et super-admin
-  const canConfirmEnrollment = userRole === "TENANT_ADMIN" || userRole === "SUPER_ADMIN";
+  // L'inscription finale (INSCRIT) est accessible au comptable (bout-en-bout)
+  // La direction est notifiée automatiquement côté serveur lors de la finalisation.
+  const canConfirmEnrollment =
+    userRole === "TENANT_ADMIN" ||
+    userRole === "SUPER_ADMIN" ||
+    userRole === "ACCOUNTANT";
   const actions: { label: string; statut: StatutCandidature; variant?: string }[] = [];
   if (candidature.statut === "SOUMISE") {
     actions.push({ label: t("summonExam"), statut: "EN_EXAMEN" });

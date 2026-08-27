@@ -1059,7 +1059,8 @@
     "cibleTeachers": "Teachers",
     "cibleStudents": "Students",
     "cibleClass": "A class",
-    "cibleLevel": "A level"
+    "cibleLevel": "A level",
+    "cibleDirection": "Maamulka"
   },
   "vieScolaire": {
     "title": "Nolosha dugsiga",

@@ -101,11 +101,15 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "eleves:read", "absences:read", "messages:read", "messages:write",
   ],
 
-  // Comptable — finance, paie & admissions (procédure jusqu'à ADMIS, INSCRIT réservé au directeur)
+  // Comptable — finance, paie, admissions & réinscription (bout-en-bout)
+  // Le comptable peut inscrire un nouvel élève, gérer le renouvellement,
+  // générer les factures et encaisser les paiements. La direction est notifiée
+  // automatiquement à chaque étape clé du flux.
   ACCOUNTANT: [
-    "finance:*", "rh:*", "eleves:read", "parents:read", "inventaire:*",
-    "analytics:read", "messages:*", "rapports:read",
+    "finance:*", "rh:*", "eleves:read", "eleves:write", "parents:read",
+    "inventaire:*", "analytics:read", "messages:*", "rapports:read",
     "admissions:read", "admissions:write",
+    "parametres:read", "parametres:write",
   ],
 
   // Parent — consultation de son périmètre (lecture seule + messagerie)

@@ -101,6 +101,23 @@ async function resolveRecipients(
       addParents(parents);
       break;
     }
+    case "DIRECTION": {
+      // Notifie le directeur (TENANT_ADMIN) et le chef d'établissement (PRINCIPAL)
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- notification dispatch, role-based recipient resolution
+      const directors = await prisma.user.findMany({
+        where: {
+          tenantId,
+          isActive: true,
+          role: { in: ["TENANT_ADMIN", "PRINCIPAL"] },
+        },
+        select: { id: true, email: true },
+      });
+      directors.forEach((u) => {
+        if (u.email) emails.add(u.email);
+        userIds.add(u.id);
+      });
+      break;
+    }
   }
 
   return {

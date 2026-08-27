@@ -63,8 +63,14 @@ export function ReinscriptionView({ apercu, userRole }: ReinscriptionViewProps) 
   const [resultatFrais, setResultatFrais] = useState<{ generated: number; skipped: number } | null>(null);
   const [resultatComplete, setResultatComplete] = useState<ResultatReinscriptionComplete | null>(null);
 
-  const canManageParametres = userRole === "TENANT_ADMIN" || userRole === "SUPER_ADMIN";
-  const canManageFinance = userRole === "TENANT_ADMIN" || userRole === "SUPER_ADMIN" || userRole === "ACCOUNTANT";
+  const canManageParametres =
+    userRole === "TENANT_ADMIN" ||
+    userRole === "SUPER_ADMIN" ||
+    userRole === "ACCOUNTANT";
+  const canManageFinance =
+    userRole === "TENANT_ADMIN" ||
+    userRole === "SUPER_ADMIN" ||
+    userRole === "ACCOUNTANT";
 
   // ── Actions individuelles ──
 
