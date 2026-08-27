@@ -76,6 +76,21 @@ export async function getFactureForDetail(id: string) {
           parents: { include: { parent: true }, where: { isGardien: true }, take: 1 },
         },
       },
+      // Facture d'admission : l'élève n'existe pas encore (créé à l'inscription).
+      // On charge la candidature pour afficher le nom et la classe souhaitée.
+      candidature: {
+        select: {
+          id: true,
+          nom: true,
+          prenom: true,
+          classeVoulue: true,
+          statut: true,
+          parentNom: true,
+          parentPrenom: true,
+          parentPhone: true,
+          parentEmail: true,
+        },
+      },
       // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur facture)
       paiements: { orderBy: { date: "desc" }, include: { enregistrePar: { select: { id: true, name: true } } } },
       createdBy: { select: { id: true, name: true } },

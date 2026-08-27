@@ -5,7 +5,6 @@ import { AdmissionsView } from "@/components/admissions/AdmissionsView";
 import { getTranslations } from "next-intl/server";
 import { guardPage } from "@/lib/guard-page";
 import { siteFilterForModel } from "@/lib/site-scope";
-import { getClassesForTenant } from "@/lib/actions/eleve";
 
 async function getCandidatures(tenantId: string, siteFilter: Record<string, unknown>) {
   const anneeActuelle = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
@@ -34,15 +33,26 @@ export default async function AdmissionsPage() {
   guardPage(session, "admissions:read");
 
   const siteFilter = siteFilterForModel("candidature", session!.user);
+  const classeSiteFilter = siteFilterForModel("classe", session!.user);
   const [{ candidatures }, classesRaw] = await Promise.all([
     getCandidatures(session!.user.tenantId!, siteFilter),
-    getClassesForTenant(),
+    // Classes du périmètre de l'utilisateur, avec leur site. On NE dédoublonne
+    // PAS par nom : deux sites peuvent avoir une classe homonyme, et c'est l'ID
+    // (lié au site) qui doit être choisi — pas le nom.
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- where inclut tenantId + classeSiteFilter
+    prisma.classe.findMany({
+      where: { tenantId: session!.user.tenantId!, ...classeSiteFilter },
+      select: { id: true, nom: true, niveau: true, site: { select: { nom: true } } },
+      orderBy: [{ nom: "asc" }],
+    }),
   ]);
 
-  // Classes du site (dédupliquées par nom) pour la liste déroulante du formulaire
-  const classes = Array.from(
-    new Map(classesRaw.map((c) => [c.nom, { id: c.id, nom: c.nom }])).values()
-  ).sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
+  const classes = classesRaw.map((c) => ({
+    id: c.id,
+    nom: c.nom,
+    niveau: c.niveau,
+    siteNom: c.site?.nom ?? null,
+  }));
 
   // Cast les documents + factures pour le composant
   const candidaturesForView = candidatures.map((c) => ({

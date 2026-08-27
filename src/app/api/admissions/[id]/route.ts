@@ -228,6 +228,41 @@ export async function PATCH(
       );
     }
 
+    // ── Résoudre la classe AVANT la transaction, pour pouvoir refuser proprement ──
+    //    `candidature.classeVoulue` contient le NOM de la classe. On la cherche
+    //    STRICTEMENT dans le site de la candidature (la classe définit la
+    //    structure/site) : d'abord nom + site + année, puis nom + site. Refuser
+    //    l'inscription si aucune classe ne correspond, plutôt que de créer un
+    //    élève sans structure ou rattaché à une classe d'un autre site.
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup borné au tenant + site de la candidature
+    const classeExacte = await prisma.classe.findFirst({
+      where: {
+        tenantId,
+        nom: candidature.classeVoulue,
+        annee: candidature.annee,
+        ...(candidature.siteId ? { siteId: candidature.siteId } : {}),
+      },
+      select: { id: true },
+    });
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- même lookup, sans contrainte d'année (fallback)
+    const classeVisee = classeExacte ?? await prisma.classe.findFirst({
+      where: {
+        tenantId,
+        nom: candidature.classeVoulue,
+        ...(candidature.siteId ? { siteId: candidature.siteId } : {}),
+      },
+      select: { id: true },
+    });
+
+    if (!classeVisee) {
+      return NextResponse.json(
+        {
+          error: `La classe « ${candidature.classeVoulue} » n'existe pas dans ce site. Créez la structure (Classes) ou corrigez la classe de la candidature avant d'inscrire l'élève.`,
+        },
+        { status: 400 }
+      );
+    }
+
     // Créer l'élève + parent + lien en transaction + lier la facture à l'élève
     const result = await prisma.$transaction(async (tx) => {
       // 1. Créer le parent (s'il n'existe pas déjà par téléphone)
@@ -247,38 +282,12 @@ export async function PATCH(
         });
       }
 
-      // 2a. Résoudre la classe choisie pour rattacher l'élève à sa structure.
-      //     `candidature.classeVoulue` contient le NOM de la classe (sélectionné
-      //     dans la liste). On cherche d'abord la classe du bon nom / site /
-      //     année ; à défaut (année qui diffère) on retombe sur nom + site.
-      //     Sans cette résolution, l'élève naissait sans aucune classe.
-      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par nom de classe, borné au tenant + site de la candidature
-      const classeVisee =
-        (await tx.classe.findFirst({
-          where: {
-            tenantId,
-            nom: candidature.classeVoulue,
-            annee: candidature.annee,
-            ...(candidature.siteId ? { siteId: candidature.siteId } : {}),
-          },
-          select: { id: true },
-        })) ??
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- même lookup, sans contrainte d'année
-        (await tx.classe.findFirst({
-          where: {
-            tenantId,
-            nom: candidature.classeVoulue,
-            ...(candidature.siteId ? { siteId: candidature.siteId } : {}),
-          },
-          select: { id: true },
-        }));
-
-      // 2b. Créer l'élève, rattaché à sa classe
+      // 2. Créer l'élève, rattaché à sa classe (résolue et vérifiée ci-dessus)
       const eleve = await tx.eleve.create({
         data: {
           tenantId,
           siteId: candidature.siteId,
-          classeId: classeVisee?.id ?? null,
+          classeId: classeVisee.id,
           matricule: matricule!,
           nom: candidature.nom,
           prenom: candidature.prenom,

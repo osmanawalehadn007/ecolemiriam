@@ -945,6 +945,8 @@
     "createdOn": "Created on",
     "dueOn": "Due",
     "viewProfile": "View profile",
+    "viewApplication": "View application",
+    "candidatePending": "Application (student not yet created)",
     "amountPositive": "Amount must be positive",
     "paymentSuccess": "Payment recorded successfully",
     "onlineUnavailable": "Online payment unavailable",

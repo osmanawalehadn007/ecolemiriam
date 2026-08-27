@@ -81,13 +81,16 @@ function CandidatureForm({
 }: {
   onClose: () => void;
   onCreated: (c: Candidature) => void;
-  classes: { id: string; nom: string }[];
+  classes: ClasseOption[];
 }) {
   const t = useTranslations("admissions");
   const anneeActuelle = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+  // Plusieurs sites présents dans la liste ? Alors on affiche le site pour lever
+  // toute ambiguïté entre classes homonymes.
+  const multiSites = new Set(classes.map((c) => c.siteNom ?? "")).size > 1;
   const [form, setForm] = useState({
     nom: "", prenom: "", dateNaissance: "", sexe: "M" as Sexe,
-    classeVoulue: "", annee: anneeActuelle,
+    classeId: "", classeVoulue: "", annee: anneeActuelle,
     parentNom: "", parentPrenom: "", parentEmail: "", parentPhone: "",
     parentLien: "PERE" as LienParente,
   });
@@ -159,8 +162,8 @@ function CandidatureForm({
                   <label className="text-xs text-gray-600 mb-1 block">{t("desiredClass")}</label>
                   {classes.length > 0 ? (
                     <select
-                      value={form.classeVoulue}
-                      onChange={(e) => set("classeVoulue", e.target.value)}
+                      value={form.classeId}
+                      onChange={(e) => set("classeId", e.target.value)}
                       required
                       className="w-full rounded-md border border-input px-3 py-2 text-sm bg-background"
                     >
@@ -168,8 +171,9 @@ function CandidatureForm({
                         {t("selectClass")}
                       </option>
                       {classes.map((c) => (
-                        <option key={c.id} value={c.nom}>
+                        <option key={c.id} value={c.id}>
                           {c.nom}
+                          {multiSites && c.siteNom ? ` — ${c.siteNom}` : ""}
                         </option>
                       ))}
                     </select>
@@ -807,6 +811,8 @@ function PaiementInlineModal({
 interface ClasseOption {
   id: string;
   nom: string;
+  niveau?: string;
+  siteNom?: string | null;
 }
 
 interface AdmissionsViewProps {

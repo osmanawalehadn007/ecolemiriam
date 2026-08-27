@@ -924,6 +924,8 @@
     "createdOn": "Created on",
     "dueOn": "Due",
     "viewProfile": "View profile",
+    "viewApplication": "Arag codsiga",
+    "candidatePending": "Codsi (arday weli lama abuurin)",
     "amountPositive": "Amount must be positive",
     "paymentSuccess": "Payment recorded successfully",
     "onlineUnavailable": "Online payment unavailable",

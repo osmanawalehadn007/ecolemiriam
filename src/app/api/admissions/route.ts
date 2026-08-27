@@ -13,7 +13,12 @@ const CandidatureSchema = z.object({
   lieuNaissance: z.string().optional(),
   sexe: z.enum(["M", "F"]).default("M"),
   nationalite: z.string().optional(),
-  classeVoulue: z.string().min(1),
+  // Depuis le dashboard : identifiant de la classe choisie (lié au site). Le
+  // serveur en déduit le nom (classeVoulue) et le site de la candidature.
+  classeId: z.string().optional(),
+  // Nom de la classe. Obligatoire seulement en soumission publique (texte libre)
+  // où aucun classeId n'est fourni ; sinon dérivé du classeId.
+  classeVoulue: z.string().optional(),
   annee: z.string().min(1),
   parentNom: z.string().min(1),
   parentPrenom: z.string().min(1),
@@ -96,6 +101,40 @@ export async function POST(req: NextRequest) {
     // Année par défaut si non précisée
     const annee = data.annee || new Date().getFullYear() + "-" + (new Date().getFullYear() + 1);
 
+    // Résolution de la classe choisie (dashboard). Le NOM et le SITE de la
+    // candidature proviennent de la classe elle-même : c'est l'unique garant
+    // que la structure existe bien dans le site où l'élève sera inscrit. On
+    // borne la recherche au périmètre de site de l'utilisateur pour empêcher
+    // de rattacher une classe d'un site non autorisé.
+    let classeVoulue = data.classeVoulue?.trim() || "";
+    if (data.classeId && session?.user?.tenantId) {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- where inclut tenantId + filtre de périmètre de site
+      const classe = await prisma.classe.findFirst({
+        where: {
+          id: data.classeId,
+          tenantId,
+          ...siteFilterForModel("classe", session.user),
+        },
+        select: { nom: true, siteId: true },
+      });
+      if (!classe) {
+        return NextResponse.json(
+          { error: "Classe introuvable ou hors de votre périmètre. Sélectionnez une classe de votre site." },
+          { status: 400 }
+        );
+      }
+      classeVoulue = classe.nom;
+      // Le site de la candidature suit la classe (source de vérité du site).
+      siteId = classe.siteId;
+    }
+
+    if (!classeVoulue) {
+      return NextResponse.json(
+        { error: "La classe souhaitée est obligatoire." },
+        { status: 400 }
+      );
+    }
+
     const candidature = await prisma.candidature.create({
       data: {
         tenantId,
@@ -106,7 +145,7 @@ export async function POST(req: NextRequest) {
         lieuNaissance: data.lieuNaissance,
         sexe: data.sexe,
         nationalite: data.nationalite ?? "SN",
-        classeVoulue: data.classeVoulue,
+        classeVoulue,
         annee,
         parentNom: data.parentNom,
         parentPrenom: data.parentPrenom,

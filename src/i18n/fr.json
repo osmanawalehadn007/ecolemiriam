@@ -945,6 +945,8 @@
     "createdOn": "Créée le",
     "dueOn": "Échéance",
     "viewProfile": "Voir la fiche",
+    "viewApplication": "Voir la candidature",
+    "candidatePending": "Candidature (élève non encore créé)",
     "amountPositive": "Le montant doit être positif",
     "paymentSuccess": "Paiement enregistré avec succès",
     "onlineUnavailable": "Paiement en ligne indisponible",

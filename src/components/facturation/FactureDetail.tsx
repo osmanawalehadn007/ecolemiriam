@@ -53,6 +53,17 @@ interface FactureDetailProps {
       classe: { nom: string; niveau: string } | null;
       parents: { parent: { nom: string; prenom: string; phone: string | null; email: string | null } }[];
     } | null;
+    candidature?: {
+      id: string;
+      nom: string;
+      prenom: string;
+      classeVoulue: string;
+      statut: string;
+      parentNom: string;
+      parentPrenom: string;
+      parentPhone: string | null;
+      parentEmail: string | null;
+    } | null;
     paiements: Paiement[];
     createdBy?: { id: string; name: string } | null;
   };
@@ -107,8 +118,28 @@ export function FactureDetail({ facture }: FactureDetailProps) {
   const totalPaye = useMemo(() => facture.paiements.reduce((sum, p) => sum + p.montant, 0), [facture.paiements]);
   const restant = facture.montant - totalPaye;
   const cfg = statutConfig[facture.statut] ?? statutConfig.EN_ATTENTE;
-  const tuteur = facture.eleve?.parents[0]?.parent;
   const canPay = facture.statut !== "ANNULEE" && facture.statut !== "PAYEE" && restant > 0;
+
+  // Facture d'admission : l'élève n'existe pas encore → on affiche les infos de
+  // la candidature (nom, classe souhaitée, parent) au lieu de « N/A ».
+  const eleveNom = facture.eleve
+    ? `${facture.eleve.prenom} ${facture.eleve.nom}`
+    : facture.candidature
+      ? `${facture.candidature.prenom} ${facture.candidature.nom}`
+      : "";
+  const classeLabel =
+    facture.eleve?.classe?.nom ?? facture.candidature?.classeVoulue ?? "N/A";
+  const niveauLabel = facture.eleve?.classe?.niveau ?? "";
+  const matriculeLabel = facture.eleve?.matricule ?? (facture.candidature ? t("candidatePending") : "");
+  const tuteur = facture.eleve?.parents[0]?.parent
+    ?? (facture.candidature
+      ? {
+          prenom: facture.candidature.parentPrenom,
+          nom: facture.candidature.parentNom,
+          phone: facture.candidature.parentPhone,
+          email: facture.candidature.parentEmail,
+        }
+      : undefined);
 
   async function handlePaiement(e: React.FormEvent) {
     e.preventDefault();
@@ -239,12 +270,18 @@ export function FactureDetail({ facture }: FactureDetailProps) {
             <CardTitle className="text-sm">{t("student")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
-            <p className="font-medium">{facture.eleve?.prenom ?? ""} {facture.eleve?.nom ?? ""}</p>
-            <p className="text-sm text-muted-foreground">{facture.eleve?.matricule ?? ""}</p>
-            <p className="text-sm text-muted-foreground">{facture.eleve?.classe?.nom ?? "N/A"} — {facture.eleve?.classe?.niveau ?? ""}</p>
-            <Button asChild variant="outline" size="sm" className="mt-2">
-              <Link href={`/eleves/${facture.eleve?.id ?? ""}`}>{t("viewProfile")}</Link>
-            </Button>
+            <p className="font-medium">{eleveNom}</p>
+            <p className="text-sm text-muted-foreground">{matriculeLabel}</p>
+            <p className="text-sm text-muted-foreground">{classeLabel}{niveauLabel ? ` — ${niveauLabel}` : ""}</p>
+            {facture.eleve ? (
+              <Button asChild variant="outline" size="sm" className="mt-2">
+                <Link href={`/eleves/${facture.eleve.id}`}>{t("viewProfile")}</Link>
+              </Button>
+            ) : facture.candidature ? (
+              <Button asChild variant="outline" size="sm" className="mt-2">
+                <Link href="/admissions">{t("viewApplication")}</Link>
+              </Button>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -300,7 +337,7 @@ export function FactureDetail({ facture }: FactureDetailProps) {
             <div className="mb-4 p-3 bg-muted/50 rounded-lg flex flex-wrap items-center gap-3 text-sm">
               <span className="text-muted-foreground">{t("invoice")}:</span>
               <span className="font-mono font-semibold">{facture.numero}</span>
-              <span className="text-muted-foreground">· {facture.eleve?.prenom ?? ""} {facture.eleve?.nom ?? ""}</span>
+              <span className="text-muted-foreground">· {eleveNom}</span>
               <span className="text-muted-foreground">· {t("remaining")}: </span>
               <span className="font-semibold text-red-600">{formatMoney(restant, facture.devise)}</span>
             </div>
