@@ -1928,7 +1928,10 @@
     "partialPaymentHint": "Paiement partiel — le reste sera dû",
     "stepPayment": "Paiement",
     "confirmEnrollmentUnpaid": "Inscription bloquée (facture impayée)",
-    "confirmEnrollmentNoInvoice": "Inscription bloquée (aucune facture)"
+    "confirmEnrollmentNoInvoice": "Inscription bloquée (aucune facture)",
+    "selectSiteFirst": "Sélectionnez un site dans la barre latérale avant de créer une candidature. Les classes affichées dépendent du site choisi.",
+    "unassignedSite": "Hors site",
+    "classesBySite": "Classes par site"
   },
   "parents": {
     "title": "Parents & Contacts",

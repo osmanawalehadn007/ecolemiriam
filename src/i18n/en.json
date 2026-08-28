@@ -1920,7 +1920,10 @@
     "partialPaymentHint": "Partial payment — balance remains due",
     "stepPayment": "Payment",
     "confirmEnrollmentUnpaid": "Enrollment blocked (invoice unpaid)",
-    "confirmEnrollmentNoInvoice": "Enrollment blocked (no invoice)"
+    "confirmEnrollmentNoInvoice": "Enrollment blocked (no invoice)",
+    "selectSiteFirst": "Select a site in the sidebar before creating a candidature. The displayed classes depend on the selected site.",
+    "unassignedSite": "Unassigned",
+    "classesBySite": "Classes by site"
   },
   "parents": {
     "title": "Parents & Contacts",

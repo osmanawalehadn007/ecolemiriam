@@ -1856,7 +1856,10 @@
     "partialPaymentHint": "Bixin qayb — hadhaag ayaa hadhay",
     "stepPayment": "Bixinta",
     "confirmEnrollmentUnpaid": "Qorista la xannibay (lacag la'aan)",
-    "confirmEnrollmentNoInvoice": "Qorista la xannibay (faktar la'aan)"
+    "confirmEnrollmentNoInvoice": "Qorista la xannibay (faktar la'aan)",
+    "selectSiteFirst": "Ka dooro goob ka hor intaadan abuurin codso. Fasalada la muujiyay waxay ku xidhan yihiin goobta la doortay.",
+    "unassignedSite": "Goob la'aan",
+    "classesBySite": "Fasalada goobta"
   },
   "parents": {
     "title": "Waalidiinta & Xiriiriyayaasha",

@@ -4,7 +4,7 @@ import { Header } from "@/components/layout/Header";
 import { AdmissionsView } from "@/components/admissions/AdmissionsView";
 import { getTranslations } from "next-intl/server";
 import { guardPage } from "@/lib/guard-page";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, isTenantWideRole } from "@/lib/site-scope";
 
 async function getCandidatures(tenantId: string, siteFilter: Record<string, unknown>) {
   const anneeActuelle = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
@@ -42,7 +42,7 @@ export default async function AdmissionsPage() {
     // eslint-disable-next-line ecolemiriam/require-site-filter -- where inclut tenantId + classeSiteFilter
     prisma.classe.findMany({
       where: { tenantId: session!.user.tenantId!, ...classeSiteFilter },
-      select: { id: true, nom: true, niveau: true, site: { select: { nom: true } } },
+      select: { id: true, nom: true, niveau: true, siteId: true, site: { select: { nom: true } } },
       orderBy: [{ nom: "asc" }],
     }),
   ]);
@@ -51,6 +51,7 @@ export default async function AdmissionsPage() {
     id: c.id,
     nom: c.nom,
     niveau: c.niveau,
+    siteId: c.siteId ?? null,
     siteNom: c.site?.nom ?? null,
   }));
 
@@ -80,7 +81,13 @@ export default async function AdmissionsPage() {
         userAvatar={session!.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <AdmissionsView candidatures={candidaturesForView} userRole={session!.user.role} classes={classes} />
+        <AdmissionsView
+          candidatures={candidaturesForView}
+          userRole={session!.user.role}
+          classes={classes}
+          userSiteId={session!.user.siteId ?? null}
+          isTenantWide={isTenantWideRole(session!.user.role)}
+        />
       </div>
     </div>
   );

@@ -10,7 +10,7 @@ import {
   Plus, Search, ClipboardList, CheckCircle2, XCircle,
   Clock, UserPlus, BookOpen, Phone, Mail, Calendar,
   Loader2, ChevronDown, ChevronUp, FileText, Star, FolderCheck,
-  Banknote, Link as LinkIcon,
+  Banknote, Link as LinkIcon, AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
@@ -170,12 +170,31 @@ function CandidatureForm({
                       <option value="" disabled>
                         {t("selectClass")}
                       </option>
-                      {classes.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.nom}
-                          {multiSites && c.siteNom ? ` — ${c.siteNom}` : ""}
-                        </option>
-                      ))}
+                      {multiSites ? (
+                        // Grouper par site quand plusieurs sites sont présents :
+                        // évite de sélectionner une classe d'un autre site par erreur.
+                        Object.entries(
+                          classes.reduce<Record<string, ClasseOption[]>>((acc, c) => {
+                            const key = c.siteNom ?? t("unassignedSite");
+                            (acc[key] ??= []).push(c);
+                            return acc;
+                          }, {})
+                        ).map(([siteNom, siteClasses]) => (
+                          <optgroup key={siteNom} label={siteNom}>
+                            {siteClasses.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.nom}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))
+                      ) : (
+                        classes.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.nom}
+                          </option>
+                        ))
+                      )}
                     </select>
                   ) : (
                     <Input value={form.classeVoulue} onChange={(e) => set("classeVoulue", e.target.value)} required placeholder="6ème, Terminale S…" className="text-sm" />
@@ -812,6 +831,7 @@ interface ClasseOption {
   id: string;
   nom: string;
   niveau?: string;
+  siteId?: string | null;
   siteNom?: string | null;
 }
 
@@ -819,14 +839,21 @@ interface AdmissionsViewProps {
   candidatures: Candidature[];
   userRole?: string;
   classes?: ClasseOption[];
+  userSiteId?: string | null;
+  isTenantWide?: boolean;
 }
 
-export function AdmissionsView({ candidatures: initial, userRole, classes = [] }: AdmissionsViewProps) {
+export function AdmissionsView({ candidatures: initial, userRole, classes = [], userSiteId = null, isTenantWide = false }: AdmissionsViewProps) {
   const t = useTranslations("admissions");
   const [candidatures, setCandidatures] = useState<Candidature[]>(initial);
   const [search, setSearch] = useState("");
   const [filtreStatut, setFiltreStatut] = useState<StatutCandidature | "TOUS">("TOUS");
   const [showForm, setShowForm] = useState(false);
+
+  // Un admin tenant-wide sans site sélectionné voit toutes les classes de tous
+  // les sites — c'est ambigu pour créer une candidature (la classe détermine le
+  // site de l'élève). On l'invite à sélectionner un site d'abord.
+  const needsSiteSelection = isTenantWide && !userSiteId;
 
   const stats = useMemo(() => ({
     total: candidatures.length,
@@ -873,11 +900,23 @@ export function AdmissionsView({ candidatures: initial, userRole, classes = [] }
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t("title")}</h2>
           <p className="text-sm text-gray-500">{t("totalCandidatures", { count: stats.total, s: stats.total > 1 ? "s" : "" })}</p>
         </div>
-        <Button onClick={() => setShowForm(true)} className="gap-2">
+        <Button onClick={() => setShowForm(true)} disabled={needsSiteSelection} className="gap-2">
           <Plus className="w-4 h-4" />
           {t("newCandidature")}
         </Button>
       </div>
+
+      {/* Avertissement : sélectionner un site avant de créer une candidature */}
+      {needsSiteSelection && (
+        <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+              {t("selectSiteFirst")}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Pipeline */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

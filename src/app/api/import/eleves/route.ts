@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { getSchoolGroup } from "@/lib/school-groups";
 import type { StructureType, Sexe } from "@prisma/client";
-import { siteFilterForModel, requireSiteIdForCreate, mergeFilters } from "@/lib/site-scope";
+import { siteFilterForModel, requireSiteIdForCreate, mergeFilters, siteIdForCreate } from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { revalidateTag, revalidatePath } from "next/cache";
 import { preparerPlan, dernierMatricule } from "@/lib/import-eleves-server";
@@ -54,7 +54,11 @@ export async function POST(req: NextRequest) {
     if (!file) return NextResponse.json({ error: "Aucun fichier fourni" }, { status: 400 });
 
     const formSiteId = formData.get("siteId") as string | null;
-    const targetSiteId = formSiteId || (session.user.siteId ?? null);
+    // Résolution robuste du site cible : formData > siteId de session > site
+    // unique déduit du périmètre (siteIdForCreate). Sans cela, un utilisateur
+    // ayant un seul site dans siteIds mais sans siteId explicite dans la session
+    // créait des classes/élèves orphelins (siteId null).
+    const targetSiteId = formSiteId || session.user.siteId || siteIdForCreate(session.user) || null;
 
     // L'import doit avoir été prévisualisé : on refuse une écriture directe.
     const hashAttendu = formData.get("hash") as string | null;
