@@ -3,14 +3,16 @@
   "plugins": ["ecolemiriam"],
   "rules": {
     "ecolemiriam/require-tenant-id": "off",
-    "ecolemiriam/require-site-filter": "off"
+    "ecolemiriam/require-site-filter": "off",
+    "ecolemiriam/require-annee-filter": "off"
   },
   "overrides": [
     {
       "files": ["src/lib/**/*.{ts,tsx}", "src/app/api/**/*.{ts,tsx}", "src/app/(dashboard)/**/*.{ts,tsx}"],
       "rules": {
         "ecolemiriam/require-tenant-id": "error",
-        "ecolemiriam/require-site-filter": "error"
+        "ecolemiriam/require-site-filter": "error",
+        "ecolemiriam/require-annee-filter": "warn"
       }
     }
   ]

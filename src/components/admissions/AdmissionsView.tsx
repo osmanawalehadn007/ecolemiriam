@@ -78,13 +78,17 @@ function CandidatureForm({
   onClose,
   onCreated,
   classes,
+  annee,
 }: {
   onClose: () => void;
   onCreated: (c: Candidature) => void;
   classes: ClasseOption[];
+  annee?: string;
 }) {
   const t = useTranslations("admissions");
-  const anneeActuelle = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+  // L'année vient du serveur (année courante du tenant). Le repli calendaire
+  // ne sert que si aucune année scolaire n'est déclarée dans les paramètres.
+  const anneeActuelle = annee ?? `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
   // Plusieurs sites présents dans la liste ? Alors on affiche le site pour lever
   // toute ambiguïté entre classes homonymes.
   const multiSites = new Set(classes.map((c) => c.siteNom ?? "")).size > 1;
@@ -202,7 +206,11 @@ function CandidatureForm({
                 </div>
                 <div>
                   <label className="text-xs text-gray-600 mb-1 block">{t("schoolYear")}</label>
-                  <Input value={form.annee} onChange={(e) => set("annee", e.target.value)} className="text-sm" />
+                  {/* Année verrouillée : les classes proposées sont celles de
+                      l'année courante du site. Laisser saisir une autre année
+                      produisait une candidature rattachée à une classe d'une
+                      année révolue. */}
+                  <Input value={form.annee} readOnly disabled className="text-sm" />
                 </div>
               </div>
             </div>
@@ -839,11 +847,13 @@ interface AdmissionsViewProps {
   candidatures: Candidature[];
   userRole?: string;
   classes?: ClasseOption[];
+  /** Année scolaire courante du tenant, résolue côté serveur. */
+  annee?: string;
   userSiteId?: string | null;
   isTenantWide?: boolean;
 }
 
-export function AdmissionsView({ candidatures: initial, userRole, classes = [], userSiteId = null, isTenantWide = false }: AdmissionsViewProps) {
+export function AdmissionsView({ candidatures: initial, userRole, classes = [], annee, userSiteId = null, isTenantWide = false }: AdmissionsViewProps) {
   const t = useTranslations("admissions");
   const [candidatures, setCandidatures] = useState<Candidature[]>(initial);
   const [search, setSearch] = useState("");
@@ -891,7 +901,7 @@ export function AdmissionsView({ candidatures: initial, userRole, classes = [], 
   return (
     <div className="space-y-6">
       {showForm && (
-        <CandidatureForm onClose={() => setShowForm(false)} onCreated={handleCreated} classes={classes} />
+        <CandidatureForm onClose={() => setShowForm(false)} onCreated={handleCreated} classes={classes} annee={annee} />
       )}
 
       {/* En-tête */}

@@ -5,12 +5,15 @@ import { AdmissionsView } from "@/components/admissions/AdmissionsView";
 import { getTranslations } from "next-intl/server";
 import { guardPage } from "@/lib/guard-page";
 import { siteFilterForModel, isTenantWideRole } from "@/lib/site-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 
-async function getCandidatures(tenantId: string, siteFilter: Record<string, unknown>) {
-  const anneeActuelle = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
-
+async function getCandidatures(
+  tenantId: string,
+  annee: string,
+  siteFilter: Record<string, unknown>
+) {
   const candidatures = await prisma.candidature.findMany({
-    where: { tenantId, annee: anneeActuelle, ...siteFilter },
+    where: { tenantId, annee, ...siteFilter },
     orderBy: { createdAt: "desc" },
     include: {
       // eslint-disable-next-line ecolemiriam/require-site-filter -- les factures sont filtrées via la candidature qui est déjà filtrée par site
@@ -34,14 +37,29 @@ export default async function AdmissionsPage() {
 
   const siteFilter = siteFilterForModel("candidature", session!.user);
   const classeSiteFilter = siteFilterForModel("classe", session!.user);
+
+  // Année scolaire courante du tenant (table `annees_scolaires`, isCurrent).
+  // Repli sur l'année calendaire si aucune année n'est déclarée.
+  const annee =
+    (await getAnneeCouranteLibelle(session!.user.tenantId!)) ??
+    `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+
   const [{ candidatures }, classesRaw] = await Promise.all([
-    getCandidatures(session!.user.tenantId!, siteFilter),
-    // Classes du périmètre de l'utilisateur, avec leur site. On NE dédoublonne
-    // PAS par nom : deux sites peuvent avoir une classe homonyme, et c'est l'ID
-    // (lié au site) qui doit être choisi — pas le nom.
+    getCandidatures(session!.user.tenantId!, annee, siteFilter),
+    // Classes du périmètre de l'utilisateur, avec leur site. Deux bornes
+    // indissociables :
+    //   - le SITE (classeSiteFilter) : une classe d'un autre site ne doit
+    //     jamais être proposée ;
+    //   - l'ANNÉE (annee) : les classes des années révolues restent en base
+    //     (historique des notes, bulletins, absences) mais ne sont plus des
+    //     structures d'accueil. Sans ce filtre, le sélecteur proposait par
+    //     exemple les classes de Lycée 2025-2026 d'un site qui n'accueille
+    //     plus que du collège en 2026-2027.
+    // On NE dédoublonne PAS par nom : deux sites peuvent avoir une classe
+    // homonyme, et c'est l'ID (lié au site) qui doit être choisi — pas le nom.
     // eslint-disable-next-line ecolemiriam/require-site-filter -- where inclut tenantId + classeSiteFilter
     prisma.classe.findMany({
-      where: { tenantId: session!.user.tenantId!, ...classeSiteFilter },
+      where: { tenantId: session!.user.tenantId!, annee, ...classeSiteFilter },
       select: { id: true, nom: true, niveau: true, siteId: true, site: { select: { nom: true } } },
       orderBy: [{ nom: "asc" }],
     }),
@@ -85,6 +103,7 @@ export default async function AdmissionsPage() {
           candidatures={candidaturesForView}
           userRole={session!.user.role}
           classes={classes}
+          annee={annee}
           userSiteId={session!.user.siteId ?? null}
           isTenantWide={isTenantWideRole(session!.user.role)}
         />

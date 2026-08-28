@@ -229,27 +229,36 @@ export async function PATCH(
     }
 
     // ── Résoudre la classe AVANT la transaction, pour pouvoir refuser proprement ──
-    //    `candidature.classeVoulue` contient le NOM de la classe. On la cherche
-    //    STRICTEMENT dans le site de la candidature (la classe définit la
-    //    structure/site) : d'abord nom + site + année, puis nom + site. Refuser
-    //    l'inscription si aucune classe ne correspond, plutôt que de créer un
-    //    élève sans structure ou rattaché à une classe d'un autre site.
+    //    `candidature.classeVoulue` contient le NOM de la classe. Le couple
+    //    (SITE, ANNÉE) est une borne stricte, sans repli :
+    //      - SITE  : la classe définit la structure d'accueil, donc le site de
+    //                l'élève ; une classe d'un autre site est un mélange de
+    //                périmètres.
+    //      - ANNÉE : les classes des années révolues restent en base pour
+    //                l'historique. L'ancien repli « nom + site » sans année
+    //                rattachait silencieusement un élève 2026-2027 à une
+    //                classe 2025-2026 homonyme (cas « 6ème2 » / « 1ère SG »
+    //                sur l'Annexe Warabaleh). Mieux vaut refuser et demander
+    //                la création de la structure de l'année en cours.
+    //    Une candidature sans site est refusée : créer un élève hors site
+    //    fabriquerait précisément la donnée orpheline visible depuis tous
+    //    les sites.
+    if (!candidature.siteId) {
+      return NextResponse.json(
+        {
+          error: "Cette candidature n'est rattachée à aucun site. Rouvrez-la et sélectionnez une classe du site concerné avant de finaliser l'inscription.",
+        },
+        { status: 400 }
+      );
+    }
+
     // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup borné au tenant + site de la candidature
-    const classeExacte = await prisma.classe.findFirst({
+    const classeVisee = await prisma.classe.findFirst({
       where: {
         tenantId,
         nom: candidature.classeVoulue,
         annee: candidature.annee,
-        ...(candidature.siteId ? { siteId: candidature.siteId } : {}),
-      },
-      select: { id: true },
-    });
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- même lookup, sans contrainte d'année (fallback)
-    const classeVisee = classeExacte ?? await prisma.classe.findFirst({
-      where: {
-        tenantId,
-        nom: candidature.classeVoulue,
-        ...(candidature.siteId ? { siteId: candidature.siteId } : {}),
+        siteId: candidature.siteId,
       },
       select: { id: true },
     });
@@ -257,7 +266,7 @@ export async function PATCH(
     if (!classeVisee) {
       return NextResponse.json(
         {
-          error: `La classe « ${candidature.classeVoulue} » n'existe pas dans ce site. Créez la structure (Classes) ou corrigez la classe de la candidature avant d'inscrire l'élève.`,
+          error: `La classe « ${candidature.classeVoulue} » n'existe pas dans ce site pour l'année ${candidature.annee}. Créez la structure (Classes) pour l'année en cours ou corrigez la classe de la candidature avant d'inscrire l'élève.`,
         },
         { status: 400 }
       );

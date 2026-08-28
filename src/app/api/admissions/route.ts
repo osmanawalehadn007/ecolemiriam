@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel, siteIdForCreate } from "@/lib/site-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
 
 const CandidatureSchema = z.object({
@@ -98,8 +99,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const data = CandidatureSchema.parse(body);
 
-    // Année par défaut si non précisée
-    const annee = data.annee || new Date().getFullYear() + "-" + (new Date().getFullYear() + 1);
+    // Année scolaire de la candidature. Depuis le dashboard, elle est
+    // IMPOSÉE par l'année courante du tenant : accepter la valeur du client
+    // permettait de créer une candidature 2026-2027 rattachée à une classe
+    // 2025-2026 (structure d'une année révolue).
+    const anneeCourante = await getAnneeCouranteLibelle(tenantId);
+    const annee =
+      (session?.user?.tenantId ? anneeCourante : null) ??
+      (data.annee ||
+        `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`);
 
     // Résolution de la classe choisie (dashboard). Le NOM et le SITE de la
     // candidature proviennent de la classe elle-même : c'est l'unique garant
@@ -113,13 +121,19 @@ export async function POST(req: NextRequest) {
         where: {
           id: data.classeId,
           tenantId,
+          // L'ANNÉE est une borne au même titre que le site : une classe
+          // d'une année révolue n'est plus une structure d'accueil, même
+          // sur le bon site.
+          annee,
           ...siteFilterForModel("classe", session.user),
         },
         select: { nom: true, siteId: true },
       });
       if (!classe) {
         return NextResponse.json(
-          { error: "Classe introuvable ou hors de votre périmètre. Sélectionnez une classe de votre site." },
+          {
+            error: `Classe introuvable, hors de votre périmètre de site, ou n'appartenant pas à l'année ${annee}. Sélectionnez une classe de votre site pour l'année en cours.`,
+          },
           { status: 400 }
         );
       }
