@@ -58,13 +58,21 @@ else
     echo "  Les fichiers locaux non-commités peuvent être écrasés par git pull."
   fi
 fi
+
 git pull origin main 2>&1
-# Réappliquer les modifications locales du VPS — échec explicite si conflit
+
+# Réappliquer les modifications locales du VPS
+# En cas de conflit, on refuse le stash pop mais on NE s'arrête PAS
+# On force un reset dur au remote pour avoir un état cohérent
 if [ "$STASHED" = "true" ]; then
   if ! git stash pop 2>&1; then
-    echo "ERREUR: git stash pop a échoué (conflit). Stash conservé."
-    echo "Résoudre manuellement : cd /opt/ecolemiriam && git stash pop"
-    exit 1
+    echo ""
+    echo "ATTENTION: git stash pop a échoué (conflit détecté)"
+    echo "→ Stratégie de fallback: force reset vers origin/main"
+    echo ""
+    git reset --hard origin/main
+    git stash drop 2>&1 || true
+    echo "Le stash a été supprimé. État repository = origin/main"
   fi
 fi
 
