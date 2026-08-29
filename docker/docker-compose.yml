@@ -226,6 +226,14 @@ services:
     tmpfs:
       - /tmp:size=64M,mode=1777
       - /home/nextjs:size=16M,mode=1777
+      # Le conteneur est read_only. Sans ce montage, Next.js ne peut pas
+      # écrire son cache de rendu : chaque requête produisait
+      #   Failed to update prerender cache [ENOENT: mkdir '/app/.next/cache']
+      # et tous les `unstable_cache` (getTenantName, getDashboardData,
+      # getClassesList…) retombaient sur le seul LRU mémoire — perdu à chaque
+      # redéploiement et jamais partagé entre les slots blue et green. Chaque
+      # bascule repartait donc cache totalement froid.
+      - /app/.next/cache:size=256M,mode=0777
 
     networks:
       - frontend
