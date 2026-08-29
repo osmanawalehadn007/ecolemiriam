@@ -12,7 +12,7 @@
       "rules": {
         "ecolemiriam/require-tenant-id": "error",
         "ecolemiriam/require-site-filter": "error",
-        "ecolemiriam/require-annee-filter": "warn"
+        "ecolemiriam/require-annee-filter": "error"
       }
     }
   ]

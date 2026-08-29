@@ -273,7 +273,7 @@ async function recipientScopeFilter(
       // Classes où l'émetteur a un enfant inscrit : c'est le lien de filiation
       // qui borne la requête, pas le site. Un parent dont les enfants sont sur
       // deux sites doit joindre les enseignants des deux.
-      // eslint-disable-next-line ecolemiriam/require-site-filter
+      // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- bornée par le lien de filiation : les enfants sont dans les classes de l'année en cours
       const classes = await prisma.classe.findMany({
         where: {
           tenantId,
@@ -415,7 +415,7 @@ async function classeUserFilter(
 ): Promise<Record<string, unknown>> {
   // `classeId` est vérifié par l'appelant — la route contrôle
   // `canAccessSite(actor, classe.siteId)` avant d'ouvrir la conversation.
-  // eslint-disable-next-line ecolemiriam/require-site-filter
+  // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- lookup par id, vérifié par l'appelant
   const classe = await prisma.classe.findFirst({
     where: { id: classeId, tenantId },
     select: { id: true, profPrincipal: { select: { userId: true } } },
@@ -462,7 +462,7 @@ export async function getClassParticipants(
         parents: { include: { parent: { include: { user: { select: { id: true } } } } } },
       },
     }),
-    // eslint-disable-next-line ecolemiriam/require-site-filter
+    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- lookup par id, vérifié par l'appelant
     prisma.classe.findFirst({
       where: { id: classeId, tenantId },
       include: {

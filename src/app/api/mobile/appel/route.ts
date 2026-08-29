@@ -5,6 +5,9 @@ import { sendAbsenceAlert } from "@/lib/sms/africasTalking";
 import { sendEmail, renderNotificationEmail } from "@/lib/notifications/email";
 import { sendAbsenceWhatsApp } from "@/lib/notifications/whatsapp";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
 import { revalidateTag } from "next/cache";
 
 export async function POST(req: NextRequest) {
@@ -25,7 +28,11 @@ export async function POST(req: NextRequest) {
 
   // La classe doit appartenir au tenant ET au périmètre de sites de l'appelant.
   const classe = await prisma.classe.findFirst({
-    where: { id: classeId, tenantId: user.tenantId, ...siteFilterForModel("classe", user) },
+    where: mergeFilters(
+      { id: classeId, tenantId: user.tenantId },
+      siteFilterForModel("classe", user),
+      anneeFilterForModel("classe", await getAnneeCouranteLibelle(user.tenantId)),
+    ),
     select: { id: true, nom: true },
   });
 

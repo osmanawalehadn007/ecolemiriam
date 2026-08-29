@@ -9,6 +9,8 @@ import { getTarifsForTenant } from "@/lib/actions/facturation-avancee";
 import { getSitesForSettings } from "@/lib/actions/parametres";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { mergeFilters } from "@/lib/site-scope";
 
 export default async function TarifsPage() {
   const [session, t] = await Promise.all([
@@ -31,7 +33,11 @@ export default async function TarifsPage() {
     getTarifsForTenant(),
     getSitesForSettings(),
     prisma.classe.findMany({
-      where: { tenantId, ...siteFilter, ...(anneeCourante ? { annee: anneeCourante } : {}) },
+      where: mergeFilters(
+        { tenantId },
+        siteFilter,
+        anneeFilterForModel("classe", anneeCourante),
+      ),
       select: { id: true, nom: true, niveau: true, siteId: true },
       orderBy: [{ niveau: "asc" }, { nom: "asc" }],
     }),

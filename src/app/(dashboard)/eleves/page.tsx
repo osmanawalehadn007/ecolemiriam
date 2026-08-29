@@ -14,10 +14,11 @@ import { Plus, Upload } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { unstable_cache } from "next/cache";
 import { ImportElevesButton } from "@/components/eleves/ImportElevesButton";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
 import { roleHasPermission } from "@/lib/rbac";
 import { getSitesForUserCached } from "@/lib/sites-cached";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
 import { getSiteColorMap } from "@/lib/site-colors";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import type { Role } from "@prisma/client";
@@ -130,7 +131,11 @@ const getClassesList = unstable_cache(
     return runWithTenant(tenantId, siteId, async () => {
     // eslint-disable-next-line ecolemiriam/require-site-filter -- where includes ...siteFilter spread, not detectable inside unstable_cache
     const classes = await prisma.classe.findMany({
-      where: { tenantId, ...siteFilter, ...(annee ? { annee } : {}) } as Prisma.ClasseWhereInput,
+      where: mergeFilters(
+        { tenantId },
+        siteFilter,
+        anneeFilterForModel("classe", annee),
+      ) as Prisma.ClasseWhereInput,
       select: { id: true, nom: true, site: { select: { nom: true } } },
       orderBy: [{ site: { nom: "asc" } }, { nom: "asc" }],
     });
@@ -259,7 +264,7 @@ async function getElevesData(
   // Pour les autres rôles : cache partagé filtré par site.
   const classeNoms = scope?.isRestricted && scope.classeIds.length > 0
     ? await runWithTenant(tenantId, siteId, async () => {
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- teacher scope: classeIds is the security boundary, not siteId
+        // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- périmètre enseignant : `classeIds` est la frontière, et ces classes sont celles où il enseigne cette année
         const classes = await prisma.classe.findMany({
           where: { tenantId, id: { in: scope.classeIds } },
           select: { id: true, nom: true, site: { select: { nom: true } } },

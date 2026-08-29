@@ -5,6 +5,7 @@ import { FacturesViewToggleClient } from "@/components/facturation/FacturesViewT
 import { getFacturesForTenant } from "@/lib/actions/facture";
 import { getTranslations } from "next-intl/server";
 import { guardPage } from "@/lib/guard-page";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 
 export default async function FacturationPage() {
   const [session, t] = await Promise.all([
@@ -14,6 +15,11 @@ export default async function FacturationPage() {
   guardPage(session, "finance:read");
 
   const factures = await getFacturesForTenant();
+  // Année réelle du tenant : le libellé était écrit en dur (« 2025-2026 »),
+  // il désignait donc une année révolue depuis la rentrée.
+  const anneeCourante =
+    (await getAnneeCouranteLibelle(session!.user.tenantId!)) ??
+    `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -24,7 +30,7 @@ export default async function FacturationPage() {
         userAvatar={session!.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin space-y-4">
-        <FacturationActions currentYear="2025-2026" userRole={session!.user.role} />
+        <FacturationActions currentYear={anneeCourante} userRole={session!.user.role} />
         <FacturesViewToggleClient factures={factures} userRole={session!.user.role} />
       </div>
     </div>

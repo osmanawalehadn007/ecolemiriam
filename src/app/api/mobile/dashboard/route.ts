@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { withMobileScope } from "@/lib/mobile-auth";
 import { eleveScopeFilter, siteFilterForModel, siteFilterForRelation } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
 
 export async function GET(req: NextRequest) {
   return withMobileScope(req, async (user) => {
@@ -16,7 +19,9 @@ export async function GET(req: NextRequest) {
   const eleveFilter = siteFilterForModel("eleve", user);
   const [totalEleves, totalClasses, totalNotes] = await Promise.all([
     prisma.eleve.count({ where: { tenantId, statut: "ACTIF", ...eleveFilter } }),
-    prisma.classe.count({ where: { tenantId, ...classeFilter } }),
+    prisma.classe.count({
+      where: mergeFilters({ tenantId }, classeFilter, anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId))),
+    }),
     prisma.note.count({ where: { tenantId, ...eleveRelFilter } }),
   ]);
 
@@ -56,7 +61,11 @@ export async function GET(req: NextRequest) {
       take: 5,
     }),
     prisma.evaluation.findMany({
-      where: { tenantId, statut: "PLANIFIE", ...classeRelFilter },
+      where: mergeFilters(
+        { tenantId, statut: "PLANIFIE" },
+        classeRelFilter,
+        anneeFilterForModel("evaluation", await getAnneeCouranteLibelle(tenantId)),
+      ),
       select: {
         id: true,
         titre: true,

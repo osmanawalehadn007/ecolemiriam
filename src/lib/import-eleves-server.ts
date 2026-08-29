@@ -8,6 +8,8 @@
 
 import prisma from "@/lib/prisma";
 import { siteFilterForModel, mergeFilters, type SessionSiteClaims } from "@/lib/site-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
 import { normalizeName } from "@/lib/eleve-identity";
 import {
   analyzeImport,
@@ -68,7 +70,14 @@ export async function preparerPlan(
     }),
     // eslint-disable-next-line ecolemiriam/require-site-filter -- classeSiteFilter déjà appliqué via mergeFilters (le linter ne détecte pas le spread conditionnel)
     prisma.classe.findMany({
-      where: mergeFilters({ tenantId: acteur.tenantId }, classeSiteFilter),
+      where: mergeFilters(
+        { tenantId: acteur.tenantId },
+        classeSiteFilter,
+        anneeFilterForModel(
+          "classe",
+          await getAnneeCouranteLibelle(acteur.tenantId),
+        ),
+      ),
       select: { nom: true },
     }),
     // Empreinte du fichier : a-t-il déjà été importé dans cet établissement ?

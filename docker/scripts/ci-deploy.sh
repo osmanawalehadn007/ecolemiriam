@@ -39,10 +39,24 @@ echo "=== 1/3 — Git pull ==="
 # Les fichiers générés par blue-green-deploy.sh (upstream.conf,
 # upstream-simple.conf, ofelia/config.ini) sont dans .gitignore → git stash
 # ne les touche plus, fini la course silencieuse.
-if git stash 2>/dev/null; then
-  STASHED=true
+#
+# On ne stasher QUE les fichiers tracked modifiés (--keep-index implicite
+# via `git stash` sans -u). Les fichiers untracked (backups, .sql, .bak)
+# sont ignorés par .gitignore et ne doivent pas entrer dans le stash.
+# Avant, `git stash` sans précaution pouvait capturer des untracked et
+# faire échouer `git stash pop` avec "would be overwritten" → déploiement
+# bloqué pendant des heures.
+STASHED=false
+if git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null; then
+  echo "  Aucune modification locale à stasher."
 else
-  STASHED=false
+  echo "  Stash des modifications locales (tracked uniquement)..."
+  if git stash push -m "ci-deploy: $(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>&1; then
+    STASHED=true
+  else
+    echo "  ATTENTION: git stash a échoué — on continue sans stasher."
+    echo "  Les fichiers locaux non-commités peuvent être écrasés par git pull."
+  fi
 fi
 git pull origin main 2>&1
 # Réappliquer les modifications locales du VPS — échec explicite si conflit
@@ -52,6 +66,15 @@ if [ "$STASHED" = "true" ]; then
     echo "Résoudre manuellement : cd /opt/ecolemiriam && git stash pop"
     exit 1
   fi
+fi
+
+# Régénérer le userlist PgBouncer avec les hashes réels depuis pg_authid.
+# Le fichier est dans .gitignore et non-tracké : git pull peut écraser la
+# version du repo (placeholder) ou la supprimer du tracking. On la régénère
+# systématiquement après le pull pour que PgBouncer ait les bons hashes.
+if [ -f docker/scripts/generate-pgbouncer-userlist.sh ]; then
+  echo "  Régénération du userlist PgBouncer..."
+  bash docker/scripts/generate-pgbouncer-userlist.sh 2>&1 || true
 fi
 
 # --- 2. Login GHCR ---

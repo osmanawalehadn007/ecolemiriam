@@ -4,6 +4,9 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import type { Role } from "@prisma/client";
 
@@ -61,8 +64,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Vérifier que la classe et la matière appartiennent au tenant
     if (classeId) {
       // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
-      const classe = await prisma.classe.findFirst({ where: { id: classeId, tenantId } });
-      if (!classe) return NextResponse.json({ error: "Classe introuvable" }, { status: 404 });
+      const classe = await prisma.classe.findFirst({
+        where: mergeFilters(
+          { id: classeId, tenantId },
+          anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+        ),
+      });
+      if (!classe) {
+        return NextResponse.json(
+          { error: "Classe introuvable pour l'année en cours" },
+          { status: 404 }
+        );
+      }
     }
     if (matiereId) {
       // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission

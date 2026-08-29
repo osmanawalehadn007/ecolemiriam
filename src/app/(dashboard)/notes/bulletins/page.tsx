@@ -36,7 +36,7 @@ async function getBulletinsData(
   );
 
   const [classes, periodes] = await Promise.all([
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
+    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- écran de bulletins : les années révolues doivent rester consultables (la période choisie porte l'année)
     prisma.classe.findMany({
       where: classeWhere,
       include: {

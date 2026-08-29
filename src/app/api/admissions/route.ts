@@ -3,8 +3,9 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForModel, siteIdForCreate } from "@/lib/site-scope";
+import { siteFilterForModel, siteIdForCreate, mergeFilters } from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
 import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
 
 const CandidatureSchema = z.object({
@@ -45,13 +46,18 @@ export async function GET(req: NextRequest) {
 
 
   const siteFilter = siteFilterForModel("candidature", session.user);
+  // Année : celle demandée explicitement, sinon l'année courante. Sans ce
+  // défaut, l'API renvoyait les candidatures de toutes les années confondues.
+  const anneeVisee = annee ?? (await getAnneeCouranteLibelle(session.user.tenantId));
   const candidatures = await prisma.candidature.findMany({
-    where: {
-      tenantId: session.user.tenantId,
-      ...siteFilter,
-      ...(statut ? { statut: statut as never } : {}),
-      ...(annee ? { annee } : {}),
-    },
+    where: mergeFilters(
+      {
+        tenantId: session.user.tenantId,
+        ...(statut ? { statut: statut as never } : {}),
+      },
+      siteFilter,
+      anneeFilterForModel("candidature", anneeVisee),
+    ),
     orderBy: { createdAt: "desc" },
   });
 

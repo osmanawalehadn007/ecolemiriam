@@ -54,7 +54,7 @@ cat > "$USERLIST" <<EOF
 
 EOF
 echo "$HASHES" >> "$USERLIST"
-chmod 600 "$USERLIST"
+chmod 644 "$USERLIST"
 
 echo "[generate-pgbouncer-userlist] userlist.txt régénéré ✓"
 echo "[generate-pgbouncer-userlist] Relancer PgBouncer pour prendre en compte :"

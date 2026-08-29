@@ -1,14 +1,62 @@
 import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
-import { siteFilterForRelation } from "@/lib/site-filter";
+import prisma, { runWithTenant } from "@/lib/prisma";
+import { siteFilterForRelation, type SessionSiteClaims } from "@/lib/site-filter";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import type { Role } from "@prisma/client";
 import Link from "next/link";
 import { ArrowLeft, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GrilleSaisie } from "@/components/evaluations/GrilleSaisie";
+import { unstable_cache } from "next/cache";
+
+// Cache du détail d'une évaluation — sans ce cache, chaque navigation
+// ré-exécute getTeacherScope + 2 requêtes prisma (evalCheck + evaluation).
+// Le paramètre `evaluationId` fait partie de la clé de cache.
+const getEvaluationDetailData = unstable_cache(
+  async (
+    evaluationId: string,
+    tenantId: string,
+    siteId: string | null,
+    scopeHash: string,
+    claimsHash: string,
+  ) => {
+    const claims = JSON.parse(claimsHash) as SessionSiteClaims;
+    const scope = scopeHash
+      ? (JSON.parse(scopeHash) as { classeIds: string[]; matiereIds: string[]; isRestricted: boolean })
+      : null;
+    const siteFilter = siteFilterForRelation(claims, "classe");
+
+    return runWithTenant(tenantId, siteId, async () => {
+      // Pour les enseignants restreints : vérifier que l'évaluation porte sur
+      // une de leurs classes
+      let evalCheck: { classeId: string; matiereId: string } | null = null;
+      if (scope?.isRestricted) {
+        // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- lookup par id : l'évaluation porte son année via sa classe
+        evalCheck = await prisma.evaluation.findFirst({
+          where: { id: evaluationId, tenantId },
+          select: { classeId: true, matiereId: true },
+        });
+      }
+
+      // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : l'évaluation porte son année via sa classe
+      const evaluation = await prisma.evaluation.findFirst({
+        where: { id: evaluationId, tenantId, ...siteFilter },
+        include: {
+          // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
+          classe: { include: { eleves: { orderBy: { nom: 'asc' } } } },
+          matiere: true,
+          notes: true,
+        }
+      });
+
+      return { evalCheck, evaluation };
+    });
+  },
+  ["evaluation-detail-data"],
+  { revalidate: 30, tags: ["evaluation-detail-data"] }
+);
 
 export default async function SaisieNotesPage({
   params
@@ -20,32 +68,36 @@ export default async function SaisieNotesPage({
   guardPage(session, "evaluations:read");
 
   const { id: evaluationId } = await params;
-  const siteFilter = siteFilterForRelation(session.user, "classe");
+
+  // Construire les claims pour le filtre par site (sérialisées pour le cache)
+  const claims: SessionSiteClaims = {
+    role: session.user.role,
+    siteId: session.user.siteId ?? null,
+    siteIds: (session.user as { siteIds?: string[] | null }).siteIds ?? null,
+    tenantHasSites: (session.user as { tenantHasSites?: boolean }).tenantHasSites ?? false,
+  };
+  const claimsHash = JSON.stringify(claims);
 
   // Pour les enseignants : vérifier que l'évaluation porte sur une de leurs classes
-  if (isTeacherRole(session.user.role as Role)) {
-    const scope = await getTeacherScope(session.user.tenantId!, session.user.id, session.user.role as Role);
-    if (scope.isRestricted) {
-      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-      const evalCheck = await prisma.evaluation.findFirst({
-        where: { id: evaluationId, tenantId: session.user.tenantId },
-        select: { classeId: true, matiereId: true },
-      });
-      if (!evalCheck || !scope.classeIds.includes(evalCheck.classeId)) {
-        redirect("/evaluations");
-      }
+  const scope = isTeacherRole(session.user.role as Role)
+    ? await getTeacherScope(session.user.tenantId!, session.user.id, session.user.role as Role)
+    : null;
+  const scopeHash = scope ? JSON.stringify(scope) : "";
+
+  const { evalCheck, evaluation } = await getEvaluationDetailData(
+    evaluationId,
+    session.user.tenantId,
+    session.user.siteId ?? null,
+    scopeHash,
+    claimsHash,
+  );
+
+  // Redirect pour enseignant restreint non autorisé
+  if (scope?.isRestricted) {
+    if (!evalCheck || !scope.classeIds.includes(evalCheck.classeId)) {
+      redirect("/evaluations");
     }
   }
-
-  const evaluation = await prisma.evaluation.findFirst({
-    where: { id: evaluationId, tenantId: session.user.tenantId, ...siteFilter },
-    include: {
-      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
-      classe: { include: { eleves: { orderBy: { nom: 'asc' } } } },
-      matiere: true,
-      notes: true,
-    }
-  });
 
   if (!evaluation) {
     redirect("/evaluations");

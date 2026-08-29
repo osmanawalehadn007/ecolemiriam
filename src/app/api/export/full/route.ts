@@ -324,7 +324,7 @@ export async function GET(req: NextRequest) {
 
   // ── 06. Emploi du temps ─────────────────────────────────────
   const emploiFolder = root.folder("06_Emploi_du_temps")!;
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
+  // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- export intégral : toutes les années sont exportées volontairement
   const emplois = await prisma.emploiTemps.findMany({
     where: { tenantId },
     include: {
@@ -580,6 +580,7 @@ export async function GET(req: NextRequest) {
 
   // ── 14. Cahier de texte ─────────────────────────────────────
   const cahierFolder = root.folder("14_Cahier_de_texte")!;
+  // eslint-disable-next-line ecolemiriam/require-annee-filter -- export intégral : toutes les années sont exportées volontairement
   const cahiers = await prisma.cahierTexte.findMany({
     where: { tenantId, ...siteFilter },
     include: {

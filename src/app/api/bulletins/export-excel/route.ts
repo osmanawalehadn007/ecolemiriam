@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Récupérer la classe et les élèves
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- export d'archives : une classe d'une année révolue doit rester exportable
     const classe = await prisma.classe.findFirst({
       where: { id: classeId, tenantId: session.user.tenantId, ...siteFilter },
       select: { nom: true },

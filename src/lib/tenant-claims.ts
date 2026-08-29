@@ -43,6 +43,37 @@ export interface TenantSiteClaims {
  * @param preferredTenantId tenant souhaité ; ignoré si l'utilisateur n'y a pas
  *   accès. À défaut, le tenant `isDefault` puis le premier accessible.
  */
+type UserWithTenants = {
+  id: string;
+  role: Role;
+  isActive: boolean;
+  tenantId: string | null;
+  siteId: string | null;
+  userTenants: {
+    tenantId: string;
+    role: Role;
+    isDefault: boolean;
+    tenant: { id: string; name: string; slug: string; logoUrl: string | null };
+  }[];
+};
+
+/**
+ * Variante de `deriveClaims` qui accepte un utilisateur déjà chargé avec ses
+ * relations `userTenants`. Évite un second aller-retour DB au login, où
+ * l'utilisateur a déjà été fetché par `authorize()` avec toutes les relations
+ * nécessaires.
+ *
+ * La seule requête DB restante est le `Promise.all` des 3 requêtes de sites.
+ */
+export async function deriveClaimsFromUser(
+  user: UserWithTenants,
+  preferredTenantId?: string | null
+): Promise<TenantSiteClaims | null> {
+  if (!user.isActive) return null;
+
+  return deriveClaimsFromData(user, preferredTenantId);
+}
+
 export async function deriveClaims(
   userId: string,
   preferredTenantId?: string | null
@@ -70,6 +101,18 @@ export async function deriveClaims(
 
   if (!user || !user.isActive) return null;
 
+  return deriveClaimsFromData(user, preferredTenantId);
+}
+
+/**
+ * Logique commune de dérivation des claims à partir des données utilisateur
+ * déjà chargées. Ne fait qu'un seul aller-retour DB : les 3 requêtes de sites
+ * en parallèle.
+ */
+async function deriveClaimsFromData(
+  user: UserWithTenants,
+  preferredTenantId?: string | null
+): Promise<TenantSiteClaims | null> {
   const memberships = user.userTenants;
 
   // ---- Tenant actif ------------------------------------------------------
@@ -120,13 +163,13 @@ export async function deriveClaims(
   /* eslint-disable ecolemiriam/require-site-filter -- claims derivation: resolving site assignments, filtering would be circular */
   const [userSites, enseignantSites, tenantSites] = await Promise.all([
     prismaBase.userSite.findMany({
-      where: { userId, site: { tenantId: activeTenantId } },
+      where: { userId: user.id, site: { tenantId: activeTenantId } },
       select: { siteId: true, role: true },
     }),
     prismaBase.enseignantSite.findMany({
       where: {
         site: { tenantId: activeTenantId },
-        enseignant: { userId, tenantId: activeTenantId },
+        enseignant: { userId: user.id, tenantId: activeTenantId },
       },
       select: { siteId: true },
     }),

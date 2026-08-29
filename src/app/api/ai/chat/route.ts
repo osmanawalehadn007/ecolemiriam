@@ -37,6 +37,9 @@ import {
 import type { BulkCreneauProposal } from "@/lib/emploi-du-temps/bulk-generate";
 import type { Role } from "@prisma/client";
 import { siteFilterForModel, siteFilterForRelation, type SessionSiteClaims } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
 
 type PendingAction = CreneauProposal & { type: "create_emploi_du_temps" };
 
@@ -204,7 +207,9 @@ async function buildSystemPrompt(scope: AiScope, tenantId: string, userId: strin
 
     const [nbEleves, nbClasses, nbAbsencesAujourdhui] = await Promise.all([
       prisma.eleve.count({ where: { tenantId, ...siteFilter, statut: "ACTIF" } }),
-      prisma.classe.count({ where: { tenantId, ...siteFilter } }),
+      prisma.classe.count({
+        where: mergeFilters({ tenantId }, siteFilter, anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId))),
+      }),
       // eslint-disable-next-line ecolemiriam/require-site-filter -- absenceFilter = siteFilterForRelation(session.user, "eleve"), spread sous un nom de variable
       prisma.absence.count({ where: { tenantId, ...absenceFilter, date: { gte: debutJour, lte: finJour } } }),
     ]);

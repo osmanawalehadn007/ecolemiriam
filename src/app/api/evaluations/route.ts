@@ -4,6 +4,9 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForRelation, requireSiteIdForCreate } from "@/lib/site-filter";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
 
 export async function GET(req: NextRequest) {
   try {
@@ -20,11 +23,17 @@ export async function GET(req: NextRequest) {
     const siteFilter = siteFilterForRelation(session.user, "classe");
 
     const evaluations = await prisma.evaluation.findMany({
-      where: {
-        tenantId: session.user.tenantId,
-        ...siteFilter,
-        ...(classeId ? { classeId } : {}),
-      },
+      where: mergeFilters(
+        {
+          tenantId: session.user.tenantId,
+          ...(classeId ? { classeId } : {}),
+        },
+        siteFilter,
+        anneeFilterForModel(
+          "evaluation",
+          await getAnneeCouranteLibelle(session.user.tenantId),
+        ),
+      ),
       include: {
         classe: { select: { nom: true, niveau: true } },
         matiere: { select: { nom: true, code: true, coefficient: true } },

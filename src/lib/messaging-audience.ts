@@ -356,7 +356,7 @@ async function siteIdsForScope(actor: Actor, scope: AudienceScope): Promise<stri
   if (classeIds.length === 0) return [];
   // `classeIds` sort de `classeIdsForScope`, qui applique déjà
   // `siteFilterForModel("classe", actor)` : la portée est acquise en amont.
-  // eslint-disable-next-line ecolemiriam/require-site-filter
+  // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- `classeIds` sort de classeIdsForScope, déjà borné à l'année en cours
   const classes = await prisma.classe.findMany({
     where: { id: { in: classeIds }, tenantId: actor.tenantId },
     select: { siteId: true },
@@ -438,12 +438,12 @@ async function resolveEnseignants(actor: Actor, scope: AudienceScope) {
   // seule définition fidèle de « les enseignants de cette classe ».
   // `classeIds` sort de `classeIdsForScope`, déjà borné au périmètre de site.
   const [classes, creneaux] = await Promise.all([
-    // eslint-disable-next-line ecolemiriam/require-site-filter
+    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- `classeIds` déjà borné à l'année en cours
     prisma.classe.findMany({
       where: { id: { in: classeIds }, tenantId: actor.tenantId },
       select: { profPrincipal: { select: { userId: true } } },
     }),
-    // eslint-disable-next-line ecolemiriam/require-site-filter
+    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- créneaux des classes ciblées, elles-mêmes bornées à l'année en cours
     prisma.emploiTemps.findMany({
       where: {
         classeId: { in: classeIds },
@@ -688,6 +688,7 @@ export async function scopeLabel(actor: Actor, scope: AudienceScope): Promise<st
       return structure?.nom ?? "structure";
     }
     case "CLASSE": {
+      // eslint-disable-next-line ecolemiriam/require-annee-filter -- libellé d'une classe désignée par id (affichage du nom de l'audience)
       const classe = await prisma.classe.findFirst({
         where: mergeFilters(
           { id: scope.id, tenantId: actor.tenantId },

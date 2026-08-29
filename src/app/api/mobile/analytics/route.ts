@@ -27,7 +27,9 @@ export async function GET(req: NextRequest) {
     totalIncidents,
   ] = await Promise.all([
     prisma.eleve.count({ where: { tenantId, statut: "ACTIF", ...eleveFilter } }),
-    prisma.classe.count({ where: { tenantId, ...eleveFilter } }),
+    prisma.classe.count({
+      where: mergeFilters({ tenantId }, eleveFilter, anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId))),
+    }),
     prisma.enseignant.count({ where: { tenantId, ...siteFilterForModel("enseignant", user) } }),
     prisma.note.count({ where: { tenantId, ...eleveRelFilter } }),
     prisma.absence.count({ where: { tenantId, ...eleveRelFilter } }),

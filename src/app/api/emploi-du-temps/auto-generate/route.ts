@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel, siteFilterForRelation } from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { mergeFilters } from "@/lib/site-scope";
 
 type Jour = "DIMANCHE" | "LUNDI" | "MARDI" | "MERCREDI" | "JEUDI" | "VENDREDI" | "SAMEDI";
 
@@ -98,7 +100,14 @@ export async function POST(req: NextRequest) {
 
     // Fetch all data needed
     const [classe, allMatieres, enseignants, allSalles, existingCreneaux, disponibilites, indisponibilites] = await Promise.all([
-      prisma.classe.findFirst({ where: { id: classeId, tenantId, ...classeFilter }, select: { id: true, nom: true, siteId: true } }),
+      prisma.classe.findFirst({
+        where: mergeFilters(
+          { id: classeId, tenantId },
+          classeFilter,
+          anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+        ),
+        select: { id: true, nom: true, siteId: true },
+      }),
       // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
       prisma.matiere.findMany({ where: { tenantId }, orderBy: { coefficient: "desc" } }),
       // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)

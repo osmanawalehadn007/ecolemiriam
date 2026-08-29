@@ -32,6 +32,7 @@ export async function getTarifsForTenant() {
   if (!session?.user?.tenantId) return [];
   const denied = checkPermission(session.user.role, "finance:read");
   if (denied) return [];
+  // eslint-disable-next-line ecolemiriam/require-annee-filter -- l'écran des tarifs affiche volontairement toutes les années (colonne « année »), la plus récente en tête
   return prisma.tarifNiveau.findMany({
     where: { tenantId: session.user.tenantId },
     orderBy: [{ annee: "desc" }, { niveau: "asc" }],

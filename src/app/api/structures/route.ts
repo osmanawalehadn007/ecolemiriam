@@ -120,6 +120,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     // Vérifier qu'il n'y a pas de classes rattachées
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- toutes les années comptent : une structure conserve ses classes archivées, la supprimer les orphelinerait
     const classCount = await prisma.classe.count({
       where: { structureId, tenantId: session.user.tenantId, ...siteFilterForModel("classe", session.user) },
     });

@@ -5,6 +5,9 @@ import prisma from "@/lib/prisma";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -26,7 +29,14 @@ export async function GET(req: NextRequest) {
   const eleveFilter = siteFilterForModel("eleve", session.user);
   const [classe, eleves, tenant] = await Promise.all([
     prisma.classe.findFirst({
-      where: { id: classeId, tenantId: session.user.tenantId, ...classeFilter },
+      where: mergeFilters(
+        { id: classeId, tenantId: session.user.tenantId },
+        classeFilter,
+        anneeFilterForModel(
+          "classe",
+          await getAnneeCouranteLibelle(session.user.tenantId),
+        ),
+      ),
     }),
     prisma.eleve.findMany({
       where: { classeId, tenantId: session.user.tenantId, ...eleveFilter, statut: "ACTIF" },

@@ -2,11 +2,13 @@ import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
+import { runWithTenant } from "@/lib/prisma";
+import { unstable_cache } from "next/cache";
 import { Header } from "@/components/layout/Header";
 import { CahierTextView } from "@/components/cahier-texte/CahierTextView";
 import { getTranslations } from "next-intl/server";
 import { roleHasPermission } from "@/lib/rbac";
-import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
+import { siteFilterForModel, mergeFilters, type SessionSiteClaims } from "@/lib/site-scope";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import { anneeFilterForModel } from "@/lib/annee-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
@@ -14,104 +16,141 @@ import type { Role } from "@prisma/client";
 
 export const metadata = { title: "Cahier de texte — École Miriam" };
 
+// Cache des entrées du cahier de texte — sans ce cache, chaque navigation
+// ré-exécute getTeacherScope + getAnneeCouranteLibelle + 4 requêtes prisma.
+// unstable_cache s'exécute hors contexte de requête → auth() indisponible →
+// l'extension RLS ne positionne pas SET LOCAL app.tenant_id. runWithTenant
+// injecte le contexte via AsyncLocalStorage, contournant ce problème.
+const getCahierTexteData = unstable_cache(
+  async (
+    tenantId: string,
+    siteId: string | null,
+    userId: string,
+    role: Role,
+    scopeHash: string,
+  ) => {
+    const sessionUser = { tenantId, siteId, role, id: userId } as SessionSiteClaims;
+    const scope = scopeHash
+      ? (JSON.parse(scopeHash) as { classeIds: string[]; matiereIds: string[]; isRestricted: boolean })
+      : undefined;
+
+    // Filtrer par classes de l'enseignant si applicable
+    const teacherClasseFilter = scope?.isRestricted && scope.classeIds.length > 0
+      ? { classeId: { in: scope.classeIds } }
+      : scope?.isRestricted
+        ? { id: "__none__" as const }
+        : {};
+
+    // Pour les enseignants restreints : filtrer les entrées par classeId
+    // (scope) SANS filtre de site, car un enseignant peut enseigner dans
+    // des classes situées sur des sites auxquels il n'est pas rattaché.
+    // Le scope (classeIds) est la sécurité, pas le site.
+    const entryWhere = scope?.isRestricted && scope.classeIds.length > 0
+      ? { tenantId, ...teacherClasseFilter }
+      : scope?.isRestricted
+        ? { tenantId, id: "__none__" as const }
+        : { tenantId, ...siteFilterForModel("cahierTexte", sessionUser) };
+
+    return runWithTenant(tenantId, siteId, async () => {
+      // Les classes proposées dans le cahier de texte sont celles de l'année en
+      // cours (cf. src/lib/annee-scope.ts).
+      const anneeCourante = await getAnneeCouranteLibelle(tenantId);
+      const anneeFilter = anneeFilterForModel("classe", anneeCourante);
+
+      const [entries, classes, matieres, enseignants] = await Promise.all([
+        prisma.cahierTexte.findMany({
+          where: mergeFilters(
+            entryWhere,
+            anneeFilterForModel("cahierTexte", anneeCourante),
+          ),
+          include: {
+            classe: { select: { nom: true, niveau: true } },
+            matiere: { select: { nom: true, code: true } },
+            enseignant: {
+              select: { id: true, specialite: true, user: { select: { name: true } } },
+            },
+            saisiePar: { select: { name: true } },
+            commentaires: {
+              include: { auteur: { select: { name: true, role: true } } },
+              orderBy: { createdAt: "asc" },
+            },
+            devoirsLiees: {
+              select: {
+                id: true,
+                description: true,
+                type: true,
+                dateRemise: true,
+                statut: true,
+              },
+              orderBy: { dateRemise: "asc" },
+            },
+          },
+          orderBy: { date: "desc" },
+          take: 100,
+        }),
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
+        prisma.classe.findMany({
+          where: mergeFilters(
+            { tenantId },
+            anneeFilter,
+            scope?.isRestricted && scope.classeIds.length > 0
+              ? { id: { in: scope.classeIds } }
+              : scope?.isRestricted
+                ? { id: "__none__" }
+                : {},
+          ),
+          select: { id: true, nom: true, niveau: true },
+          orderBy: { nom: "asc" },
+        }),
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
+        prisma.matiere.findMany({
+          where: {
+            tenantId,
+            ...(scope?.isRestricted && scope.matiereIds.length > 0
+              ? { id: { in: scope.matiereIds } }
+              : {}),
+          },
+          select: { id: true, nom: true, code: true },
+          orderBy: { nom: "asc" },
+        }),
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
+        prisma.enseignant.findMany({
+          where: { tenantId },
+          select: { id: true, specialite: true, user: { select: { name: true } } },
+          orderBy: { user: { name: "asc" } },
+        }),
+      ]);
+
+      return { entries, classes, matieres, enseignants };
+    });
+  },
+  ["cahier-de-texte-data"],
+  { revalidate: 30, tags: ["cahier-de-texte-data"] }
+);
+
 export default async function CahierTextePage() {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/select-tenant");
   const { tenantId, role } = guardPage(session, "cahier-texte:read");
 
-  const [t, siteFilter] = await Promise.all([
-    getTranslations("cahierTexte"),
-    Promise.resolve(siteFilterForModel("cahierTexte", session.user)),
-  ]);
+  const t = await getTranslations("cahierTexte");
 
   // Filtrer par classes de l'enseignant si applicable
   const scope = isTeacherRole(role as Role)
     ? await getTeacherScope(tenantId, session.user.id, role as Role)
     : undefined;
 
-  const teacherClasseFilter = scope?.isRestricted && scope.classeIds.length > 0
-    ? { classeId: { in: scope.classeIds } }
-    : scope?.isRestricted
-      ? { id: "__none__" as const }
-      : {};
+  // Sérialisation du scope pour passage au callback unstable_cache :
+  // le contexte de requête (auth/cookies) n'est pas disponible dans le cache.
+  const scopeHash = scope ? JSON.stringify(scope) : "";
 
-  // Pour les enseignants restreints : filtrer les entrées par classeId
-  // (scope) SANS filtre de site, car un enseignant peut enseigner dans
-  // des classes situées sur des sites auxquels il n'est pas rattaché.
-  // Le scope (classeIds) est la sécurité, pas le site.
-  const entryWhere = scope?.isRestricted && scope.classeIds.length > 0
-    ? { tenantId, ...teacherClasseFilter }
-    : scope?.isRestricted
-      ? { tenantId, id: "__none__" as const }
-      : { tenantId, ...siteFilter };
-
-  // Les classes proposées dans le cahier de texte sont celles de l'année en
-  // cours (cf. src/lib/annee-scope.ts).
-  const anneeFilter = anneeFilterForModel(
-    "classe",
-    await getAnneeCouranteLibelle(tenantId),
+  const { entries, classes, matieres, enseignants } = await getCahierTexteData(
+    tenantId,
+    session.user.siteId ?? null,
+    session.user.id,
+    role as Role,
+    scopeHash,
   );
-
-  const [entries, classes, matieres, enseignants] = await Promise.all([
-    prisma.cahierTexte.findMany({
-      where: entryWhere,
-      include: {
-        classe: { select: { nom: true, niveau: true } },
-        matiere: { select: { nom: true, code: true } },
-        enseignant: {
-          select: { id: true, specialite: true, user: { select: { name: true } } },
-        },
-        saisiePar: { select: { name: true } },
-        commentaires: {
-          include: { auteur: { select: { name: true, role: true } } },
-          orderBy: { createdAt: "asc" },
-        },
-        devoirsLiees: {
-          select: {
-            id: true,
-            description: true,
-            type: true,
-            dateRemise: true,
-            statut: true,
-          },
-          orderBy: { dateRemise: "asc" },
-        },
-      },
-      orderBy: { date: "desc" },
-      take: 100,
-    }),
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-    prisma.classe.findMany({
-      where: mergeFilters(
-        { tenantId },
-        anneeFilter,
-        scope?.isRestricted && scope.classeIds.length > 0
-          ? { id: { in: scope.classeIds } }
-          : scope?.isRestricted
-            ? { id: "__none__" }
-            : {},
-      ),
-      select: { id: true, nom: true, niveau: true },
-      orderBy: { nom: "asc" },
-    }),
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-    prisma.matiere.findMany({
-      where: {
-        tenantId,
-        ...(scope?.isRestricted && scope.matiereIds.length > 0
-          ? { id: { in: scope.matiereIds } }
-          : {}),
-      },
-      select: { id: true, nom: true, code: true },
-      orderBy: { nom: "asc" },
-    }),
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-    prisma.enseignant.findMany({
-      where: { tenantId },
-      select: { id: true, specialite: true, user: { select: { name: true } } },
-      orderBy: { user: { name: "asc" } },
-    }),
-  ]);
 
   const canWrite = roleHasPermission(role as Role, "cahier-texte:write");
   const canDelete = roleHasPermission(role as Role, "cahier-texte:delete");

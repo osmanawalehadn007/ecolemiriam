@@ -9,6 +9,8 @@
 import prisma from "@/lib/prisma";
 import prismaBase from "@/lib/prisma-base";
 import { siteFilterForModel, mergeFilters, type SessionSiteClaims } from "@/lib/site-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
 import {
   analyzeImport,
   parseEnseignantsWorkbook,
@@ -57,7 +59,14 @@ export async function preparerPlan(
     }),
     // Charger les classes pour la résolution enseignant ↔ classe
     prisma.classe.findMany({
-      where: mergeFilters({ tenantId: acteur.tenantId }, siteFilterForModel("classe", acteur)),
+      where: mergeFilters(
+        { tenantId: acteur.tenantId },
+        siteFilterForModel("classe", acteur),
+        anneeFilterForModel(
+          "classe",
+          await getAnneeCouranteLibelle(acteur.tenantId),
+        ),
+      ),
       select: { id: true, nom: true, niveau: true, siteId: true, annee: true },
     }),
   ]);

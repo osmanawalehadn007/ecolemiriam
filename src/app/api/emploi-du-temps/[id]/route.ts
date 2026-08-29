@@ -15,7 +15,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
     const tenantId = session.user.tenantId;
 
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
+    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission ; lookup par id : le créneau porte sa propre année
     const existing = await prisma.emploiTemps.findFirst({ where: { id, tenantId } });
     if (!existing) return NextResponse.json({ error: "Créneau introuvable" }, { status: 404 });
 
@@ -40,7 +40,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const tenantId = session.user.tenantId;
     const body = await req.json();
 
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
+    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission ; lookup par id : le créneau porte sa propre année
     const existing = await prisma.emploiTemps.findFirst({ where: { id, tenantId } });
     if (!existing) return NextResponse.json({ error: "Créneau introuvable" }, { status: 404 });
 
@@ -58,6 +58,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       where: {
         id: { not: id },
         tenantId,
+        annee: existing.annee,
         classeId: existing.classeId,
         jour: newJour,
         OR: [
@@ -94,6 +95,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         where: {
           id: { not: id },
           tenantId,
+          // Même année que le créneau modifié : sans cette borne, un créneau
+          // d'une année révolue déclenchait un faux conflit d'enseignant.
+          annee: existing.annee,
           enseignantId: newEnseignantId,
           jour: newJour,
           OR: [
@@ -115,6 +119,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         where: {
           id: { not: id },
           tenantId,
+          // Idem : un conflit de salle ne se juge qu'à l'intérieur d'une
+          // même année scolaire.
+          annee: existing.annee,
           salle: newSalle,
           jour: newJour,
           OR: [

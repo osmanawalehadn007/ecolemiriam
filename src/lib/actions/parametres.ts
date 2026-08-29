@@ -11,7 +11,10 @@ import {
   siteIdForCreate,
   requireSiteIdForCreate,
   type SessionSiteClaims,
+  mergeFilters,
 } from "@/lib/site-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel, requireAnneeForCreate } from "@/lib/annee-scope";
 import { niveauRequiresProfPrincipal, isNiveauPrimaire } from "@/lib/utils-classe";
 import { ELEVE_NON_ARCHIVE } from "@/lib/eleve-filters";
 import { checkPermission } from "@/lib/rbac";
@@ -244,11 +247,14 @@ export async function createUser(data: UserFormData) {
     if (v.classeIds && v.classeIds.length > 0) {
       // Valider que toutes les classes appartiennent au tenant
       const validClasses = await prisma.classe.findMany({
-        where: {
-          id: { in: v.classeIds },
-          tenantId: session.user.tenantId,
-          ...siteFilterForModel("classe", session.user),
-        },
+        where: mergeFilters(
+          { id: { in: v.classeIds }, tenantId: session.user.tenantId },
+          siteFilterForModel("classe", session.user),
+          anneeFilterForModel(
+            "classe",
+            await getAnneeCouranteLibelle(session.user.tenantId),
+          ),
+        ),
         select: { id: true, niveau: true, siteId: true },
       });
       if (validClasses.length !== v.classeIds.length) {
@@ -413,7 +419,11 @@ const ClasseSchema = z.object({
   niveau: z.string().min(1, "Le niveau est requis"),
   filiere: z.string().optional(),
   effectifMax: z.number().min(1).default(40),
-  annee: z.string().default("2025-2026"),
+  // Pas de littéral par défaut : « 2025-2026 » restait figé après la rentrée
+  // et fabriquait des classes datées d'une année révolue, invisibles dans les
+  // écrans de l'année en cours mais proposées par les anciens sélecteurs.
+  // L'année est résolue côté serveur depuis `annees_scolaires`.
+  annee: z.string().optional(),
   structureId: z.string().optional(),
   profPrincipalId: z.string().optional(),
   siteId: z.string().optional(),
@@ -432,6 +442,7 @@ export async function getClassesForSettings() {
   const siteIds = (session.user as { siteIds?: string[] }).siteIds;
 
   const siteFilter = siteFilterForModel("classe", session.user);
+  // eslint-disable-next-line ecolemiriam/require-annee-filter -- écran de gestion : toutes les années sont listées volontairement (l'année figure sur chaque ligne) pour permettre le nettoyage des structures périmées
   return prisma.classe.findMany({
     where: { tenantId: session.user.tenantId, ...siteFilter },
     include: {
@@ -493,6 +504,13 @@ export async function createClasse(data: ClasseFormData) {
     if (!ens) throw new Error("Enseignant introuvable dans cet établissement");
   }
 
+  // Année de la classe : celle transmise si elle est explicite (création
+  // anticipée de l'année suivante), sinon l'année courante du tenant.
+  const anneeClasse =
+    v.annee?.trim() || (await getAnneeCouranteLibelle(session.user.tenantId));
+  const anneeErreur = requireAnneeForCreate(anneeClasse);
+  if (anneeErreur) throw new Error(anneeErreur);
+
   await prisma.classe.create({
     data: {
       tenantId: session.user.tenantId,
@@ -501,7 +519,7 @@ export async function createClasse(data: ClasseFormData) {
       niveau: v.niveau,
       filiere: v.filiere || null,
       effectifMax: v.effectifMax,
-      annee: v.annee,
+      annee: anneeClasse!,
       structureId: v.structureId || null,
       profPrincipalId: v.profPrincipalId || null,
     },
@@ -525,6 +543,7 @@ export async function deleteClasse(
   const denied = checkPermission(session.user.role, "classes:delete");
   if (denied) throw new Error("Accès refusé");
 
+  // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : on doit pouvoir supprimer une classe d'une année révolue
   const classe = await prisma.classe.findFirst({
     where: {
       id: classeId,
@@ -550,10 +569,13 @@ export async function deleteClasse(
         where: {
           id: options.targetClasseId,
           tenantId: session.user.tenantId,
+          // Même année que la classe supprimée : réaffecter vers une autre
+          // année déplacerait les élèves hors de leur cursus.
+          annee: classe.annee,
           ...siteFilterForModel("classe", session.user),
         },
       });
-      if (!target) throw new Error("Classe cible non trouvée");
+      if (!target) throw new Error("Classe cible non trouvée (même année scolaire requise)");
       if (options.targetClasseId === classeId) throw new Error("La classe cible doit être différente");
 
       await prisma.eleve.updateMany({
@@ -584,7 +606,7 @@ export async function transferClasse(classeId: string, targetSiteId: string) {
   const denied = checkPermission(session.user.role, "classes:write");
   if (denied) throw new Error("Accès refusé");
 
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
+  // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- tenantId dans le where, site filter géré par le caller ; lookup par id : la classe porte sa propre année
   const classe = await prisma.classe.findFirst({
     where: {
       id: classeId,
@@ -1533,7 +1555,14 @@ export async function getClassesForAffectation() {
   if (denied) return [];
   const siteFilter = siteFilterForModel("classe", session.user);
   return prisma.classe.findMany({
-    where: { tenantId: session.user.tenantId, ...siteFilter },
+    where: mergeFilters(
+      { tenantId: session.user.tenantId },
+      siteFilter,
+      anneeFilterForModel(
+        "classe",
+        await getAnneeCouranteLibelle(session.user.tenantId),
+      ),
+    ),
     select: {
       id: true, nom: true, niveau: true,
       structure: { select: { id: true, type: true, nom: true } },
@@ -1625,13 +1654,16 @@ export async function assignEnseignantClasse(
   });
   if (!ens) throw new Error("Enseignant introuvable");
 
-  // Vérifier que la classe appartient au tenant
+  // Vérifier que la classe appartient au tenant, au site et à l'année en cours
   const classe = await prisma.classe.findFirst({
-    where: {
-      id: classeId,
-      tenantId: session.user.tenantId,
-      ...siteFilterForModel("classe", session.user),
-    },
+    where: mergeFilters(
+      { id: classeId, tenantId: session.user.tenantId },
+      siteFilterForModel("classe", session.user),
+      anneeFilterForModel(
+        "classe",
+        await getAnneeCouranteLibelle(session.user.tenantId),
+      ),
+    ),
     select: { id: true, niveau: true },
   });
   if (!classe) throw new Error("Classe introuvable");

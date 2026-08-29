@@ -200,7 +200,9 @@ export async function POST(req: NextRequest) {
       : siteFilterForModel("classe", session.user);
     // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
     const existingClasses = await prisma.classe.findMany({
-      where: mergeFilters({ tenantId }, classeFilter),
+      // Bornées à l'année de l'import : une classe homonyme d'une année
+      // révolue ne doit pas être réutilisée comme structure d'accueil.
+      where: mergeFilters({ tenantId, annee }, classeFilter),
       select: { id: true, nom: true, siteId: true },
     });
     const classByName = new Map(existingClasses.map((c) => [c.nom, { id: c.id, siteId: c.siteId }]));
@@ -224,7 +226,7 @@ export async function POST(req: NextRequest) {
       });
       const created = await prisma.classe.findMany({
         where: mergeFilters(
-          { tenantId, nom: { in: classesToCreate } },
+          { tenantId, annee, nom: { in: classesToCreate } },
           siteFilterForModel("classe", session.user)
         ),
         select: { id: true, nom: true, siteId: true },

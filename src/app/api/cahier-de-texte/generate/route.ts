@@ -3,7 +3,9 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
 import type { Role } from "@prisma/client";
 import type { Jour } from "@prisma/client";
 
@@ -56,12 +58,18 @@ export async function POST(req: NextRequest) {
 
     const siteFilter = siteFilterForModel("emploiTemps", session.user);
 
-    // Récupérer tous les créneaux de l'emploi du temps
+    // Récupérer les créneaux de l'emploi du temps de l'année en cours.
+    // Sans cette borne, la génération repartait aussi des créneaux des
+    // années révolues et fabriquait des séances hors cursus.
     const creneaux = await prisma.emploiTemps.findMany({
-      where: {
-        tenantId: session.user.tenantId,
-        ...siteFilter,
-      },
+      where: mergeFilters(
+        { tenantId: session.user.tenantId },
+        siteFilter,
+        anneeFilterForModel(
+          "emploiTemps",
+          await getAnneeCouranteLibelle(session.user.tenantId),
+        ),
+      ),
     });
 
     if (creneaux.length === 0) {
@@ -96,6 +104,7 @@ export async function POST(req: NextRequest) {
       seanceDate.setUTCHours(0, 0, 0, 0);
 
       // Anti-doublon : vérifier si une séance existe déjà pour ce créneau + cette date
+      // eslint-disable-next-line ecolemiriam/require-annee-filter -- anti-doublon ciblé sur un créneau précis : l'année est celle du créneau
       const existing = await prisma.cahierTexte.findFirst({
         where: {
           tenantId: session.user.tenantId,
@@ -108,7 +117,7 @@ export async function POST(req: NextRequest) {
       if (existing) continue;
 
       // Récupérer le siteId depuis la classe
-      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
+      // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- lookup par ID + tenantId ; lookup par id, la classe est celle du créneau déjà borné à l'année
       const classe = await prisma.classe.findFirst({
         where: { id: creneau.classeId, tenantId: session.user.tenantId },
         select: { siteId: true },
@@ -144,6 +153,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Récupérer les séances créées avec leurs relations pour l'UI
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- relecture des séances qui viennent d'être créées, bornées par emploiTempsId
     const seances = await prisma.cahierTexte.findMany({
       where: {
         tenantId: session.user.tenantId,

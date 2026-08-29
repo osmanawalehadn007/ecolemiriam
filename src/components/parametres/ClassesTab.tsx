@@ -46,7 +46,24 @@ interface SiteItem {
   code: string | null;
 }
 
-export function ClassesTab({ classes, canManage, sites = [] }: { classes: ClasseItem[]; canManage: boolean; sites?: SiteItem[] }) {
+export function ClassesTab({
+  classes,
+  canManage,
+  sites = [],
+  anneeCourante,
+}: {
+  classes: ClasseItem[];
+  canManage: boolean;
+  sites?: SiteItem[];
+  /** Année scolaire courante du tenant, résolue côté serveur. */
+  anneeCourante?: string;
+}) {
+  // Valeur par défaut du formulaire. Elle était figée à « 2025-2026 » : après
+  // la rentrée, toute classe créée depuis cet écran naissait dans une année
+  // révolue — c'est ainsi que « 6ème2 » et les classes de Lycée de l'Annexe
+  // Warabaleh sont apparues dans un sélecteur d'admission 2026-2027.
+  const anneeDefaut =
+    anneeCourante ?? `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
   const t = useTranslations("parametres");
   const tStruct = useTranslations("structures");
   const [showForm, setShowForm] = useState(false);
@@ -58,7 +75,7 @@ export function ClassesTab({ classes, canManage, sites = [] }: { classes: Classe
     niveau: "",
     filiere: "",
     effectifMax: 40,
-    annee: "2025-2026",
+    annee: anneeDefaut,
     structureId: undefined,
     profPrincipalId: undefined,
   });
@@ -81,7 +98,7 @@ export function ClassesTab({ classes, canManage, sites = [] }: { classes: Classe
       await createClasse({ ...form, siteId: selectedSiteId || undefined });
       toast.success(t("classCreated"));
       setShowForm(false);
-      setForm({ nom: "", niveau: "", filiere: "", effectifMax: 40, annee: "2025-2026", structureId: undefined, profPrincipalId: undefined });
+      setForm({ nom: "", niveau: "", filiere: "", effectifMax: 40, annee: anneeDefaut, structureId: undefined, profPrincipalId: undefined });
       setSelectedSiteId("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("genericError"));

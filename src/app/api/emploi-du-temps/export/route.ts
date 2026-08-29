@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
   if (classeId) where.classeId = classeId;
   if (enseignantId) where.enseignantId = enseignantId;
 
+  // eslint-disable-next-line ecolemiriam/require-annee-filter -- `annee` est déjà injecté dans l'objet `where` construit ci-dessus
   const emplois = await prisma.emploiTemps.findMany({
     where,
     include: {

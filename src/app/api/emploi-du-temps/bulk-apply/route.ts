@@ -7,6 +7,8 @@ import { checkPermission } from "@/lib/rbac";
 import { overlaps } from "@/lib/emploi-du-temps/suggest";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { mergeFilters } from "@/lib/site-scope";
 
 const CreneauSchema = z.object({
   matiereId: z.string().min(1),
@@ -47,8 +49,21 @@ export async function POST(req: NextRequest) {
     const tenantId = session.user.tenantId;
 
     // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
-    const classe = await prisma.classe.findFirst({ where: { id: classeId, tenantId }, select: { id: true, nom: true } });
-    if (!classe) return NextResponse.json({ error: "Classe introuvable" }, { status: 404 });
+    const classe = await prisma.classe.findFirst({
+      // On ne construit pas une grille horaire sur une classe d'une année
+      // révolue : les créneaux créés plus bas portent l'année en cours.
+      where: mergeFilters(
+        { id: classeId, tenantId },
+        anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+      ),
+      select: { id: true, nom: true },
+    });
+    if (!classe) {
+      return NextResponse.json(
+        { error: "Classe introuvable pour l'année en cours" },
+        { status: 404 }
+      );
+    }
 
     // Auto-conflit interne au plan fourni (classe, enseignant, salle).
     for (let i = 0; i < creneaux.length; i++) {

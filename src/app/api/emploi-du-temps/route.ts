@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
 
     const annee = await getAnneeCouranteLibelle(tenantId);
 
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- `annee` est déjà injecté dans le where ci-dessous (spread conditionnel non vu par le linter)
     const emplois = await prisma.emploiTemps.findMany({
       where: { tenantId, ...emploiFilter, ...personalClasseFilter,
         ...(classeId ? { classeId } : {}),

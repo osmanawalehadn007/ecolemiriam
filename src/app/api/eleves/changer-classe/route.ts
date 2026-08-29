@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
 import { revalidateTag, revalidatePath } from "next/cache";
 
 export async function POST(req: NextRequest) {
@@ -26,12 +29,25 @@ export async function POST(req: NextRequest) {
 
   const classeFilter = siteFilterForModel("classe", session.user);
   const eleveFilter = siteFilterForModel("eleve", session.user);
+  // La classe de destination doit appartenir à l'année en cours : c'est
+  // exactement le défaut qui avait rattaché des élèves 2026-2027 à une
+  // « 6ème1 » de 2025-2026.
   const targetClasse = await prisma.classe.findFirst({
-    where: { id: nouvelleClasseId, tenantId: session.user.tenantId, ...classeFilter },
+    where: mergeFilters(
+      { id: nouvelleClasseId, tenantId: session.user.tenantId },
+      classeFilter,
+      anneeFilterForModel(
+        "classe",
+        await getAnneeCouranteLibelle(session.user.tenantId),
+      ),
+    ),
   });
 
   if (!targetClasse) {
-    return NextResponse.json({ error: "Classe destination introuvable" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Classe destination introuvable pour l'année en cours" },
+      { status: 404 }
+    );
   }
 
   const result = await prisma.eleve.updateMany({

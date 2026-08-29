@@ -43,6 +43,7 @@ export async function PATCH(
   //    création de l'élève).
 
   const siteFilter = siteFilterForModel("candidature", session.user);
+  // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : la candidature porte sa propre année
   const candidature = await prisma.candidature.findFirst({
     where: { id, tenantId: session.user.tenantId, ...siteFilter },
   });
@@ -96,6 +97,9 @@ export async function PATCH(
         where: {
           tenantId: session.user.tenantId,
           nom: candidature.classeVoulue,
+          // Année de la candidature : une classe homonyme d'une année révolue
+          // donnerait un niveau tarifaire faux.
+          annee: candidature.annee,
           ...(candidature.siteId ? { siteId: candidature.siteId } : {}),
         },
         select: { niveau: true },
@@ -423,6 +427,7 @@ export async function DELETE(
 
   const siteFilter2 = siteFilterForModel("candidature", session.user);
 
+  // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : la candidature porte sa propre année
   const candidature = await prisma.candidature.findFirst({
     where: { id, tenantId: session.user.tenantId, ...siteFilter2 },
   });

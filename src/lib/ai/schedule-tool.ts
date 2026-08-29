@@ -13,6 +13,8 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import type { ToolDefinition } from "@/lib/ai/glm-client";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { mergeFilters } from "@/lib/site-scope";
 import { fuzzyFind, normalizeHeure } from "@/lib/text-match";
 import { suggestSlots, ALL_DAYS, type CreneauSuggestion, type Jour } from "@/lib/emploi-du-temps/suggest";
 import { generateBulkPlan, type MatiereCible, type PaireCible } from "@/lib/emploi-du-temps/bulk-generate";
@@ -274,7 +276,17 @@ export async function resolveCreneauProposal(
   // Recherche floue en mémoire (plutôt qu'un simple ILIKE en base) : le modèle
   // écrit souvent des abréviations sans accent ("maths", "1ere L") qui ne sont
   // pas des sous-chaînes littérales du nom réel ("Mathématiques", "1ère L").
-  const allClasses = await prisma.classe.findMany({ where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) }, select: { id: true, nom: true } });
+  const allClasses = await prisma.classe.findMany({
+    // L'assistant ne manipule que la grille de l'année en cours : sans cette
+    // borne, une classe homonyme d'une année révolue pouvait être retenue par
+    // la recherche floue.
+    where: mergeFilters(
+      { tenantId },
+      siteFilterForModel("classe", siteClaims ?? {}),
+      anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+    ),
+    select: { id: true, nom: true },
+  });
   const classes = fuzzyFind(allClasses, args.classeNom);
   if (classes.length === 0) {
     return { ok: false, message: `Aucune classe ne correspond à "${args.classeNom}".` };
@@ -400,7 +412,17 @@ export async function listCreneaux(
   args: z.infer<typeof ListerArgsSchema>,
   siteClaims?: SessionSiteClaims
 ): Promise<ListerResult> {
-  const allClasses = await prisma.classe.findMany({ where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) }, select: { id: true, nom: true } });
+  const allClasses = await prisma.classe.findMany({
+    // L'assistant ne manipule que la grille de l'année en cours : sans cette
+    // borne, une classe homonyme d'une année révolue pouvait être retenue par
+    // la recherche floue.
+    where: mergeFilters(
+      { tenantId },
+      siteFilterForModel("classe", siteClaims ?? {}),
+      anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+    ),
+    select: { id: true, nom: true },
+  });
   const classes = fuzzyFind(allClasses, args.classeNom);
   if (classes.length === 0) {
     return { ok: false, message: `Aucune classe ne correspond à "${args.classeNom}".` };
@@ -448,7 +470,11 @@ export async function listCreneaux(
 
 export async function listClasses(tenantId: string, args: z.infer<typeof ListerClassesArgsSchema>, siteClaims?: SessionSiteClaims) {
   const allClasses = await prisma.classe.findMany({
-    where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) },
+    where: mergeFilters(
+      { tenantId },
+      siteFilterForModel("classe", siteClaims ?? {}),
+      anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+    ),
     select: { nom: true, niveau: true, effectifMax: true },
     orderBy: { nom: "asc" },
   });
@@ -493,7 +519,17 @@ export async function listSalles(tenantId: string, siteClaims?: SessionSiteClaim
 }
 
 export async function suggererCreneaux(tenantId: string, args: z.infer<typeof SuggererArgsSchema>, siteClaims?: SessionSiteClaims) {
-  const allClasses = await prisma.classe.findMany({ where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) }, select: { id: true, nom: true } });
+  const allClasses = await prisma.classe.findMany({
+    // L'assistant ne manipule que la grille de l'année en cours : sans cette
+    // borne, une classe homonyme d'une année révolue pouvait être retenue par
+    // la recherche floue.
+    where: mergeFilters(
+      { tenantId },
+      siteFilterForModel("classe", siteClaims ?? {}),
+      anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+    ),
+    select: { id: true, nom: true },
+  });
   const classes = fuzzyFind(allClasses, args.classeNom);
   if (classes.length === 0) return { ok: false as const, message: `Aucune classe ne correspond à "${args.classeNom}".` };
   if (classes.length > 1) {
@@ -550,7 +586,17 @@ export async function suggererCreneaux(tenantId: string, args: z.infer<typeof Su
 }
 
 export async function resolveRestructuration(tenantId: string, args: z.infer<typeof RestructurerArgsSchema>, siteClaims?: SessionSiteClaims) {
-  const allClasses = await prisma.classe.findMany({ where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) }, select: { id: true, nom: true } });
+  const allClasses = await prisma.classe.findMany({
+    // L'assistant ne manipule que la grille de l'année en cours : sans cette
+    // borne, une classe homonyme d'une année révolue pouvait être retenue par
+    // la recherche floue.
+    where: mergeFilters(
+      { tenantId },
+      siteFilterForModel("classe", siteClaims ?? {}),
+      anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+    ),
+    select: { id: true, nom: true },
+  });
   const classes = fuzzyFind(allClasses, args.classeNom);
   if (classes.length === 0) return { ok: false as const, message: `Aucune classe ne correspond à "${args.classeNom}".` };
   if (classes.length > 1) {

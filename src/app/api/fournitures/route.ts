@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // eslint-disable-next-line ecolemiriam/require-annee-filter -- `annee` est déjà injecté dans le where ci-dessous (spread conditionnel)
   const listes = await prisma.fournitureListe.findMany({
     where: {
       tenantId,

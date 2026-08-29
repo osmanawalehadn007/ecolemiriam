@@ -16,6 +16,8 @@ import {
   MAX_AUDIENCE,
 } from "@/lib/messaging-audience";
 import { canAccessSite, mergeFilters, siteFilterForModel } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import type { ConversationType, ParticipantRole } from "@prisma/client";
 
 const AudienceSchema = z.object({
@@ -241,7 +243,13 @@ export async function POST(req: NextRequest) {
       // de site de l'émetteur. Le contrôle de site manquait : un personnel du
       // site A pouvait ouvrir une conversation sur une classe du site B en
       // connaissant son identifiant.
-      const classe = await prisma.classe.findFirst({ where: { id: classeId, tenantId, ...siteFilterForModel("classe", actor) } });
+      const classe = await prisma.classe.findFirst({
+        where: mergeFilters(
+          { id: classeId, tenantId },
+          siteFilterForModel("classe", actor),
+          anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+        ),
+      });
       if (!classe) {
         return NextResponse.json({ error: "Classe introuvable" }, { status: 404 });
       }

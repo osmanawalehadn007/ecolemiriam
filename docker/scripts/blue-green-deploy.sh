@@ -182,13 +182,19 @@ switch_caddy() {
   info "Bascule Caddy → $new_service"
 
   # Écrire le fichier upstream complet (pour le handler par défaut)
+  # Le health check actif vit ICI uniquement — un seul checker pour tout
+  # le Caddyfile. upstream-simple.conf (importé 4× par les handlers
+  # rate-limited) n'en a PAS : sinon 5 checkers interrogent /api/health
+  # toutes les 30s, et dès qu'une requête lourde (login bcrypt + SQL)
+  # bloque l'event loop Node.js > 5s, les 5 checkers timeoutent
+  # simultanément, Caddy marque l'upstream "down" → 503 pour tout.
   cat > "$UPSTREAM_FILE" <<EOF
 # Auto-généré par blue-green-deploy.sh — ne pas éditer manuellement
 # Slot actif : $new_color ($(date -u +%Y-%m-%dT%H:%M:%SZ))
 reverse_proxy $new_service:3000 {
     health_uri /api/health
     health_interval 30s
-    health_timeout 5s
+    health_timeout 15s
     health_status 2xx
     transport http {
         read_timeout 60s
@@ -203,14 +209,14 @@ reverse_proxy $new_service:3000 {
 EOF
 
   # Écrire le fichier upstream simple (pour les handlers rate-limited)
+  # PAS de health_uri ici : le handler par défaut (upstream.conf) porte
+  # l'unique health checker. Si on en met un ici, il est dupliqué 4×
+  # (une fois par handler qui importe ce fichier) → 5 checkers total.
   cat > "$upstream_simple" <<EOF
 # Auto-généré par blue-green-deploy.sh — ne pas éditer manuellement
 # Slot actif : $new_color ($(date -u +%Y-%m-%dT%H:%M:%SZ))
+# Pas de health check ici — géré par upstream.conf (handler par défaut)
 reverse_proxy $new_service:3000 {
-    health_uri /api/health
-    health_interval 30s
-    health_timeout 5s
-    health_status 2xx
     transport http {
         read_timeout 60s
         write_timeout 60s

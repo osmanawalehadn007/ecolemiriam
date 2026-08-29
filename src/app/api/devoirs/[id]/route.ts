@@ -39,6 +39,7 @@ export async function PATCH(
     const { id } = await params;
     const siteFilter = siteFilterForModel("devoir", session.user);
 
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : le devoir porte son année via sa classe
     const existing = await prisma.devoir.findFirst({
       where: { id, tenantId: session.user.tenantId, ...siteFilter },
     });
@@ -96,6 +97,7 @@ export async function DELETE(
     const { id } = await params;
     const siteFilter = siteFilterForModel("devoir", session.user);
 
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : le devoir porte son année via sa classe
     const existing = await prisma.devoir.findFirst({
       where: { id, tenantId: session.user.tenantId, ...siteFilter },
     });

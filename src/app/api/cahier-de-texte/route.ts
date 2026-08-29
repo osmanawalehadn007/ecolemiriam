@@ -3,7 +3,9 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForModel, requireSiteIdForCreate } from "@/lib/site-scope";
+import { siteFilterForModel, requireSiteIdForCreate, mergeFilters } from "@/lib/site-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import type { Role } from "@prisma/client";
 
@@ -42,23 +44,32 @@ export async function GET(req: NextRequest) {
         : {};
 
     const entries = await prisma.cahierTexte.findMany({
-      where: {
-        tenantId: session.user.tenantId,
-        ...siteFilter,
-        ...teacherClasseFilter,
-        ...(classeId ? { classeId } : {}),
-        ...(matiereId ? { matiereId } : {}),
-        ...(enseignantId ? { enseignantId } : {}),
-        ...(statut ? { statut: statut as never } : {}),
-        ...(from || to
-          ? {
-              date: {
-                ...(from ? { gte: new Date(from) } : {}),
-                ...(to ? { lte: new Date(to) } : {}),
-              },
-            }
-          : {}),
-      },
+      // mergeFilters : les fragments de site et d'année encapsulent leur
+      // prédicat dans `AND` ; étalés dans le même objet, le second écraserait
+      // le premier.
+      where: mergeFilters(
+        {
+          tenantId: session.user.tenantId,
+          ...teacherClasseFilter,
+          ...(classeId ? { classeId } : {}),
+          ...(matiereId ? { matiereId } : {}),
+          ...(enseignantId ? { enseignantId } : {}),
+          ...(statut ? { statut: statut as never } : {}),
+          ...(from || to
+            ? {
+                date: {
+                  ...(from ? { gte: new Date(from) } : {}),
+                  ...(to ? { lte: new Date(to) } : {}),
+                },
+              }
+            : {}),
+        },
+        siteFilter,
+        anneeFilterForModel(
+          "cahierTexte",
+          await getAnneeCouranteLibelle(session.user.tenantId),
+        ),
+      ),
       include: {
         classe: { select: { nom: true, niveau: true } },
         matiere: { select: { nom: true, code: true } },
@@ -157,11 +168,18 @@ export async function POST(req: NextRequest) {
     // Récupérer le siteId depuis la classe
     // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
     const classe = await prisma.classe.findFirst({
-      where: { id: data.classeId, tenantId: session.user.tenantId },
+      where: mergeFilters(
+        { id: data.classeId, tenantId: session.user.tenantId },
+        // On ne saisit pas une séance dans une classe d'une année révolue.
+        anneeFilterForModel(
+          "classe",
+          await getAnneeCouranteLibelle(session.user.tenantId),
+        ),
+      ),
       select: { siteId: true },
     });
     if (!classe) {
-      return NextResponse.json({ error: "Classe introuvable" }, { status: 404 });
+      return NextResponse.json({ error: "Classe introuvable pour l'année en cours" }, { status: 404 });
     }
 
     const entry = await prisma.cahierTexte.create({

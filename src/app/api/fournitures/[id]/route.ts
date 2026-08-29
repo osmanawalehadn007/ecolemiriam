@@ -43,6 +43,7 @@ export async function GET(
 
   const siteFilter = siteFilterForModel("fournitureListe", gate.session.user);
 
+  // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : la liste porte sa propre année
   const liste = await prisma.fournitureListe.findFirst({
     where: { id, tenantId, ...siteFilter },
     include: {
@@ -85,6 +86,7 @@ export async function PUT(
   const siteFilter = siteFilterForModel("fournitureListe", gate.session.user);
 
   // Vérifier que la liste existe et appartient au tenant
+  // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : la liste porte sa propre année
   const existing = await prisma.fournitureListe.findFirst({
     where: { id, tenantId, ...siteFilter },
     select: { id: true, statut: true, enseignantId: true, niveau: true, matiereId: true },
@@ -190,6 +192,7 @@ export async function DELETE(
 
   const siteFilter = siteFilterForModel("fournitureListe", gate.session.user);
 
+  // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : la liste porte sa propre année
   const liste = await prisma.fournitureListe.findFirst({
     where: { id, tenantId, ...siteFilter },
     select: { id: true, statut: true, enseignantId: true },

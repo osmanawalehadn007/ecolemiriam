@@ -92,3 +92,19 @@ docker/keys/
 .env.supabase-backup
 .env.backup
 .cf-token.env
+
+# VPS — fichiers de diagnostic et backups générés sur le serveur
+# Ces fichiers s'accumulent sur le VPS (sessions SSH, scripts de debug,
+# backups manuels). Sans les ignorer, git stash/pop dans ci-deploy.sh
+# échoue avec "would be overwritten by checkout" → déploiement bloqué.
+*.sql
+*.bak
+*.bak-*
+backups/
+docker/caddy/*.bak*
+docker/postgres/*.bak*
+docker/postgres/rclone/
+docker/postgres/rclone-binary
+docker/postgres/tls/
+docker/caddy/upstream-test.conf
+.env.production.bak*

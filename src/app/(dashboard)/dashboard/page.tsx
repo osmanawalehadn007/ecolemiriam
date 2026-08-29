@@ -11,6 +11,8 @@ import { AbsenceChart } from "@/components/dashboard/AbsenceChart";
 import { getTranslations, getLocale } from "next-intl/server";
 import { unstable_cache } from "next/cache";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { mergeFilters } from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import { getSitesForUserCached } from "@/lib/sites-cached";
@@ -121,7 +123,9 @@ const getDashboardData = unstable_cache(
         _count: true,
       }),
       // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-      prisma.classe.count({ where: classeWhere }),
+      prisma.classe.count({
+        where: mergeFilters(classeWhere, anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId))),
+      }),
       // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
       prisma.absence.count({
         where: {

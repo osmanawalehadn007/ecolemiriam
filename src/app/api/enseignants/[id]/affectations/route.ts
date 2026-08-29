@@ -138,7 +138,7 @@ export async function PUT(
     if (affectations.length > 0) {
       // Récupérer les classes pour vérifier les niveaux
       const classeIds = [...new Set(affectations.map((a) => a.classeId))];
-      // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
+      // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- classes désignées par les affectations elles-mêmes
       const classes = await prisma.classe.findMany({
         where: { id: { in: classeIds }, tenantId: session.user.tenantId },
         select: { id: true, niveau: true },

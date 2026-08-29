@@ -22,6 +22,7 @@ export async function GET(
     const evaluationId = (await params).id;
     const siteFilter = siteFilterForRelation(session.user, "classe");
 
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : l'évaluation porte son année via sa classe
     const evaluation = await prisma.evaluation.findFirst({
       where: { id: evaluationId, tenantId: session.user.tenantId, ...siteFilter },
       include: {
@@ -82,6 +83,7 @@ export async function PUT(
     const evaluationId = (await params).id;
     const siteFilter2 = siteFilterForRelation(session.user, "classe");
 
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : l'évaluation porte son année via sa classe
     const evaluation = await prisma.evaluation.findFirst({
       where: { id: evaluationId, tenantId: session.user.tenantId, ...siteFilter2 }
     });

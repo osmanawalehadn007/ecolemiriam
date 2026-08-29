@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
+import { runWithTenant } from "@/lib/prisma";
+import { unstable_cache } from "next/cache";
 import { Header } from "@/components/layout/Header";
 import { EmploiDuTempsView } from "@/components/emploi-du-temps/EmploiDuTempsView";
 import { fuzzyFind } from "@/lib/text-match";
@@ -13,100 +15,117 @@ import { anneeFilterForModel } from "@/lib/annee-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { getSiteColorMap } from "@/lib/site-colors";
 
-// Les fragments d'isolation sont construits ici, au plus près des requêtes :
-// passés en paramètres, ils n'étaient plus rattachables à leur origine, ni par
-// un relecteur ni par l'analyse statique.
-async function getEmploiData(tenantId: string, claims: SessionSiteClaims & { userId?: string; id?: string }) {
-  // Filtre de périmètre personnel pour PARENT/STUDENT : ne retient que les
-  // classes contenant leurs enfants (ou la classe de l'élève lui-même).
-  const personalEleve = personalScopeFilter(claims, null);
-  const hasPersonalScope = Object.keys(personalEleve).length > 0;
-  const classePersonal = hasPersonalScope ? { eleves: { some: personalEleve } } : {};
-  const emploiPersonal = hasPersonalScope ? { classe: { eleves: { some: personalEleve } } } : {};
+// Cache des données d'emploi du temps — sans ce cache, chaque navigation
+// ré-exécute 6 requêtes prisma en parallèle. Avec cache : hit ~1s.
+// unstable_cache s'exécute hors contexte de requête → auth() indisponible →
+// l'extension RLS ne positionne pas SET LOCAL app.tenant_id. runWithTenant
+// injecte le contexte via AsyncLocalStorage, contournant ce problème.
+const getEmploiData = unstable_cache(
+  async (tenantId: string, siteId: string | null, claimsHash: string) => {
+    const claims = JSON.parse(claimsHash) as SessionSiteClaims & { userId?: string; id?: string };
 
-  const [classes, matieres, enseignants, emplois, salles, disponibilites] = await Promise.all([
-    prisma.classe.findMany({
-      where: mergeFilters(
-        { tenantId, ...siteFilterForModel("classe", claims) },
-        // Une grille horaire se construit sur les classes de l'année en
-        // cours ; les emplois du temps sont déjà bornés à cette année.
-        // Argument distinct de mergeFilters : le fragment d'année encapsule
-        // son prédicat dans `AND`, il écraserait celui du site s'il était
-        // étalé dans le même objet.
-        anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
-        classePersonal
-      ),
-      select: {
-        id: true,
-        nom: true,
-        niveau: true,
-        structure: { select: { id: true, nom: true, type: true } },
-      },
-      orderBy: [{ structure: { type: "asc" } }, { niveau: "asc" }, { nom: "asc" }],
-    }),
-    prisma.matiere.findMany({
-      where: { tenantId, ...siteFilterForModel("matiere", claims) },
-      select: { id: true, nom: true, code: true, couleur: true, coefficient: true },
-      orderBy: { nom: "asc" },
-    }),
-    prisma.enseignant.findMany({
-      where: { tenantId, ...siteFilterForModel("enseignant", claims) },
-      include: { user: { select: { name: true } } },
-      orderBy: { user: { name: "asc" } },
-    }),
-    prisma.emploiTemps.findMany({
-      where: mergeFilters(
-        { tenantId, ...siteFilterForModel("emploiTemps", claims) },
-        emploiPersonal
-      ),
-      include: {
-        matiere: { select: { nom: true, code: true, couleur: true } },
-        classe: { select: { nom: true } },
-        enseignant: { select: { id: true, user: { select: { name: true } } } },
-      },
-      orderBy: [{ jour: "asc" }, { heureDebut: "asc" }],
-    }),
-    prisma.salle.findMany({
-      where: { tenantId, ...siteFilterForModel("salle", claims) },
-      select: { id: true, nom: true, capacite: true, type: true },
-      orderBy: { nom: "asc" },
-    }),
-    prisma.disponibiliteEnseignant.findMany({
-      where: { tenantId, ...siteFilterForModel("disponibiliteEnseignant", claims) },
-      select: { id: true, enseignantId: true, jour: true, heureDebut: true, heureFin: true },
-    }),
-  ]);
-  // flou que le moteur de génération — teacherPoolFor). Sans la spécialité,
-  // une matière jamais planifiée n'offrirait aucun enseignant dans les
-  // listes déroulantes. Volontairement PAS de repli sur "tous les
-  // enseignants" : on ne propose jamais un prof d'une autre matière.
-  const matiereToEnseignants: Record<string, { id: string; user: { name: string | null } }[]> = {};
-  function addEnseignant(matiereId: string, ens: { id: string; user: { name: string | null } }) {
-    if (!matiereToEnseignants[matiereId]) matiereToEnseignants[matiereId] = [];
-    if (!matiereToEnseignants[matiereId].some((e) => e.id === ens.id)) {
-      matiereToEnseignants[matiereId].push({ id: ens.id, user: ens.user });
-    }
-  }
-  for (const emp of emplois) {
-    if (emp.enseignantId && emp.matiereId && emp.enseignant) {
-      addEnseignant(emp.matiereId, emp.enseignant);
-    }
-  }
-  // fuzzyFind matcherait toute matière contre une spécialité vide
-  // (n.includes("") est toujours vrai) — on exclut donc les profs sans spécialité.
-  const enseignantsAvecSpecialite = enseignants
-    .filter((e) => e.specialite && e.specialite.trim() !== "")
-    .map((e) => ({ id: e.id, nom: e.specialite! }));
-  for (const matiere of matieres) {
-    const bySpecialite = fuzzyFind(enseignantsAvecSpecialite, matiere.nom);
-    const ids = new Set(bySpecialite.map((e) => e.id));
-    for (const ens of enseignants) {
-      if (ids.has(ens.id)) addEnseignant(matiere.id, ens);
-    }
-  }
+    // Filtre de périmètre personnel pour PARENT/STUDENT : ne retient que les
+    // classes contenant leurs enfants (ou la classe de l'élève lui-même).
+    const personalEleve = personalScopeFilter(claims, null);
+    const hasPersonalScope = Object.keys(personalEleve).length > 0;
+    const classePersonal = hasPersonalScope ? { eleves: { some: personalEleve } } : {};
+    const emploiPersonal = hasPersonalScope ? { classe: { eleves: { some: personalEleve } } } : {};
 
-  return { classes, matieres, enseignants, emplois, matiereToEnseignants, salles, disponibilites };
-}
+    return runWithTenant(tenantId, siteId, async () => {
+      // Les fragments d'isolation sont construits ici, au plus près des requêtes :
+      // passés en paramètres, ils n'étaient plus rattachables à leur origine, ni par
+      // un relecteur ni par l'analyse statique.
+      const [classes, matieres, enseignants, emplois, salles, disponibilites] = await Promise.all([
+        prisma.classe.findMany({
+          where: mergeFilters(
+            { tenantId, ...siteFilterForModel("classe", claims) },
+            // Une grille horaire se construit sur les classes de l'année en
+            // cours ; les emplois du temps sont déjà bornés à cette année.
+            // Argument distinct de mergeFilters : le fragment d'année encapsule
+            // son prédicat dans `AND`, il écraserait celui du site s'il était
+            // étalé dans le même objet.
+            anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+            classePersonal
+          ),
+          select: {
+            id: true,
+            nom: true,
+            niveau: true,
+            structure: { select: { id: true, nom: true, type: true } },
+          },
+          orderBy: [{ structure: { type: "asc" } }, { niveau: "asc" }, { nom: "asc" }],
+        }),
+        prisma.matiere.findMany({
+          where: { tenantId, ...siteFilterForModel("matiere", claims) },
+          select: { id: true, nom: true, code: true, couleur: true, coefficient: true },
+          orderBy: { nom: "asc" },
+        }),
+        prisma.enseignant.findMany({
+          where: { tenantId, ...siteFilterForModel("enseignant", claims) },
+          include: { user: { select: { name: true } } },
+          orderBy: { user: { name: "asc" } },
+        }),
+        prisma.emploiTemps.findMany({
+          where: mergeFilters(
+            { tenantId, ...siteFilterForModel("emploiTemps", claims) },
+            anneeFilterForModel(
+              "emploiTemps",
+              await getAnneeCouranteLibelle(tenantId),
+            ),
+            emploiPersonal
+          ),
+          include: {
+            matiere: { select: { nom: true, code: true, couleur: true } },
+            classe: { select: { nom: true } },
+            enseignant: { select: { id: true, user: { select: { name: true } } } },
+          },
+          orderBy: [{ jour: "asc" }, { heureDebut: "asc" }],
+        }),
+        prisma.salle.findMany({
+          where: { tenantId, ...siteFilterForModel("salle", claims) },
+          select: { id: true, nom: true, capacite: true, type: true },
+          orderBy: { nom: "asc" },
+        }),
+        prisma.disponibiliteEnseignant.findMany({
+          where: { tenantId, ...siteFilterForModel("disponibiliteEnseignant", claims) },
+          select: { id: true, enseignantId: true, jour: true, heureDebut: true, heureFin: true },
+        }),
+      ]);
+      // flou que le moteur de génération — teacherPoolFor). Sans la spécialité,
+      // une matière jamais planifiée n'offrirait aucun enseignant dans les
+      // listes déroulantes. Volontairement PAS de repli sur "tous les
+      // enseignants" : on ne propose jamais un prof d'une autre matière.
+      const matiereToEnseignants: Record<string, { id: string; user: { name: string | null } }[]> = {};
+      function addEnseignant(matiereId: string, ens: { id: string; user: { name: string | null } }) {
+        if (!matiereToEnseignants[matiereId]) matiereToEnseignants[matiereId] = [];
+        if (!matiereToEnseignants[matiereId].some((e) => e.id === ens.id)) {
+          matiereToEnseignants[matiereId].push({ id: ens.id, user: ens.user });
+        }
+      }
+      for (const emp of emplois) {
+        if (emp.enseignantId && emp.matiereId && emp.enseignant) {
+          addEnseignant(emp.matiereId, emp.enseignant);
+        }
+      }
+      // fuzzyFind matcherait toute matière contre une spécialité vide
+      // (n.includes("") est toujours vrai) — on exclut donc les profs sans spécialité.
+      const enseignantsAvecSpecialite = enseignants
+        .filter((e) => e.specialite && e.specialite.trim() !== "")
+        .map((e) => ({ id: e.id, nom: e.specialite! }));
+      for (const matiere of matieres) {
+        const bySpecialite = fuzzyFind(enseignantsAvecSpecialite, matiere.nom);
+        const ids = new Set(bySpecialite.map((e) => e.id));
+        for (const ens of enseignants) {
+          if (ids.has(ens.id)) addEnseignant(matiere.id, ens);
+        }
+      }
+
+      return { classes, matieres, enseignants, emplois, matiereToEnseignants, salles, disponibilites };
+    });
+  },
+  ["emploi-du-temps-data"],
+  { revalidate: 30, tags: ["emploi-du-temps-data"] }
+);
 
 export default async function EmploiDuTempsPage() {
   const session = await auth();
@@ -120,8 +139,20 @@ export default async function EmploiDuTempsPage() {
     getSiteColorMap(session.user.tenantId),
   ]);
 
+  // Sérialisation des claims pour passage au callback unstable_cache :
+  // le contexte de requête (auth/cookies) n'est pas disponible dans le cache.
+  const claims = {
+    tenantId: session.user.tenantId,
+    siteId: session.user.siteId ?? null,
+    role: session.user.role,
+    id: session.user.id,
+    siteIds: session.user.siteIds,
+    tenantHasSites: session.user.tenantHasSites,
+  } as SessionSiteClaims & { id?: string };
+  const claimsHash = JSON.stringify(claims);
+
   const { classes, matieres, enseignants, emplois, matiereToEnseignants, salles, disponibilites } = await getEmploiData(
-    session.user.tenantId, session.user
+    session.user.tenantId, session.user.siteId ?? null, claimsHash
   );
 
   const currentSiteId = (session.user as { siteId?: string | null }).siteId ?? null;

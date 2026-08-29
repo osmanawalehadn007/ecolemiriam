@@ -8,6 +8,9 @@ import { sendEmail, renderNotificationEmail } from "@/lib/notifications/email";
 import { sendAbsenceWhatsApp, sendRetardWhatsApp } from "@/lib/notifications/whatsapp";
 import { sendAbsenceTelegram, sendRetardTelegram } from "@/lib/notifications/telegram";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
 import { revalidateTag } from "next/cache";
 
 const AppelSchema = z.object({
@@ -35,12 +38,17 @@ export async function POST(req: NextRequest) {
     const tenantId = session.user.tenantId;
     const appelDate = new Date(date);
 
-    // Vérifier que la classe appartient au tenant et au site
+    // Vérifier que la classe appartient au tenant, au site ET à l'année en
+    // cours : on ne fait pas l'appel dans une classe d'une année révolue.
     const classe = await prisma.classe.findFirst({
-      where: { id: classeId, tenantId, ...siteFilterForModel("classe", session.user) },
+      where: mergeFilters(
+        { id: classeId, tenantId },
+        siteFilterForModel("classe", session.user),
+        anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+      ),
     });
     if (!classe) {
-      return NextResponse.json({ error: "Classe introuvable" }, { status: 404 });
+      return NextResponse.json({ error: "Classe introuvable pour l'année en cours" }, { status: 404 });
     }
 
     // Créer les absences pour les absents et retards

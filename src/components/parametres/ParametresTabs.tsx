@@ -142,6 +142,9 @@ export function ParametresTabs({
   availableTenants,
 }: ParametresTabsProps) {
   const t = useTranslations("parametres");
+  // Année courante du tenant : sert de valeur par défaut aux formulaires
+  // (création de classe notamment), à la place d'un libellé écrit en dur.
+  const anneeCourante = annees.find((a) => a.isCurrent)?.libelle ?? annees[0]?.libelle;
   const [activeTab, setActiveTab] = useState<Tab>("etablissement");
 
   // ── Filtrage par rôle : le groupe Sécurité (2FA + Sauvegardes) n'est
@@ -219,7 +222,14 @@ export function ParametresTabs({
         {activeTab === "annees" && <AnneesScolairesTab annees={annees} canManage={canManage} />}
         {activeTab === "utilisateurs" && <UsersTab users={users} canManage={canManage} sessionRole={sessionRole} sessionSiteId={sessionSiteId} availableTenants={availableTenants} sites={sites} />}
         {activeTab === "parents" && <ParentsTab parents={parents} eleves={eleves} canManage={canManage} />}
-        {activeTab === "classes" && <ClassesTab classes={classes} canManage={canManage} sites={sites} />}
+        {activeTab === "classes" && (
+          <ClassesTab
+            classes={classes}
+            canManage={canManage}
+            sites={sites}
+            anneeCourante={anneeCourante}
+          />
+        )}
         {activeTab === "matieres" && <MatieresTab matieres={matieres} canManage={canManage} />}
         {activeTab === "enseignants" && <EnseignantsAffectationTab canManage={canManage} />}
         {activeTab === "edtPersonnels" && <EdtPersonnelsTab canManage={canManage} />}
@@ -251,7 +261,7 @@ export function ParametresTabs({
           />
         )}
         {activeTab === "sites" && <SitesTab sites={sites} canManage={canManage} />}
-        {activeTab === "tarifs" && <TarifsTab />}
+        {activeTab === "tarifs" && <TarifsTab anneeCourante={anneeCourante} />}
         {activeTab === "doublons" && <DoublonsTab />}
         {activeTab === "securite" && <Security2FA />}
         {activeTab === "sauvegardes" && <SauvegardesTab />}

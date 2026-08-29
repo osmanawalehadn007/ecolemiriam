@@ -6,6 +6,8 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { checkPermission } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
 import { getAnneeCourante, getAnneeCouranteLibelle, setAnneeCourante, invalidateAnneeCourante } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { mergeFilters } from "@/lib/site-scope";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { niveauSuivant } from "@/lib/niveau-suivant";
 import { notifyDirection } from "@/lib/notifications/notify-direction";
@@ -72,11 +74,18 @@ export async function preparerApercuReinscription(): Promise<ApercuReinscription
     include: { classe: { select: { id: true, nom: true, niveau: true, site: { select: { nom: true } } } } },
   });
 
-  // 3. Toutes les classes du tenant (pour trouver les classes du niveau suivant)
+  // 3. Classes d'accueil : celles de l'année courante, qui sert de référence
+  //    pour projeter la promotion. Sans cette borne, l'aperçu comptait aussi
+  //    les classes des années révolues et annonçait des places inexistantes.
   const classeSiteFilter = siteFilterForModel("classe", session.user);
+  const anneeReference = anneeCourante?.libelle ?? null;
   // eslint-disable-next-line ecolemiriam/require-site-filter -- where includes ...classeSiteFilter spread
   const classes = await prisma.classe.findMany({
-    where: { tenantId, ...classeSiteFilter },
+    where: mergeFilters(
+      { tenantId },
+      classeSiteFilter,
+      anneeFilterForModel("classe", anneeReference),
+    ),
     select: { id: true, nom: true, niveau: true, site: { select: { nom: true } } },
   });
 
@@ -244,7 +253,11 @@ export async function promouvoirEleves(): Promise<ResultatPromotion> {
   const anneeCible = await getAnneeCouranteLibelle(tenantId);
   // eslint-disable-next-line ecolemiriam/require-site-filter -- where includes ...classeSiteFilter spread
   const allClasses = await prisma.classe.findMany({
-    where: { tenantId, ...classeSiteFilter, ...(anneeCible ? { annee: anneeCible } : {}) },
+    where: mergeFilters(
+      { tenantId },
+      classeSiteFilter,
+      anneeFilterForModel("classe", anneeCible),
+    ),
     select: { id: true, nom: true, niveau: true, siteId: true },
   });
 

@@ -25,6 +25,7 @@ export async function GET(
     const siteFilter = siteFilterForModel("cahierTexte", session.user);
 
     // Vérifier que l'entrée existe et appartient au tenant
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : l'entrée porte sa propre année ; la borner à l'année courante empêcherait de commenter une séance archivée
     const entry = await prisma.cahierTexte.findFirst({
       where: { id, tenantId: session.user.tenantId, ...siteFilter },
     });
@@ -72,6 +73,7 @@ export async function POST(
     const { id } = await params;
     const siteFilter = siteFilterForModel("cahierTexte", session.user);
 
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : l'entrée porte sa propre année ; la borner à l'année courante empêcherait de commenter une séance archivée
     const entry = await prisma.cahierTexte.findFirst({
       where: { id, tenantId: session.user.tenantId, ...siteFilter },
     });

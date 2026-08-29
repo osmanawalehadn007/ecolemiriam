@@ -74,7 +74,7 @@ const getNotesData = unstable_cache(
     );
 
     const [classes, matieres, statsNotes] = await Promise.all([
-      // eslint-disable-next-line ecolemiriam/require-site-filter -- teacher scope: classeWhere uses classeIds for restricted teachers, site filter for others
+      // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- `classeWhere` est construit plus haut avec siteFilterForModel + anneeFilterForModel
       prisma.classe.findMany({
         where: classeWhere,
         select: { id: true, nom: true, niveau: true, siteId: true, site: { select: { nom: true } } },
@@ -98,6 +98,43 @@ const getNotesData = unstable_cache(
   },
   ["notes-data"],
   { revalidate: 60, tags: ["notes-data"] }
+);
+
+// Cache de la liste des évaluations (branche sans evaluationId) — sans ce
+// cache, chaque navigation ré-exécute le findMany. Avant: ~Nms ; avec cache:
+// ~1s (hit suivant).
+const getNotesDirectData = unstable_cache(
+  async (
+    tenantId: string,
+    rlsSiteId: string | null,
+    classeId: string,
+    matiereId: string,
+    activeSite: string,
+    role: string,
+    siteIdsHash: string,
+    tenantHasSites: boolean,
+  ) => {
+    const siteIds = siteIdsHash ? (JSON.parse(siteIdsHash) as string[]) : null;
+    const claims: SessionSiteClaims = {
+      role,
+      siteId: activeSite === "all" ? null : activeSite,
+      siteIds,
+      tenantHasSites,
+    };
+    const evalFilter = siteFilterForModel("evaluation", claims);
+
+    return runWithTenant(tenantId, rlsSiteId, async () => {
+      // eslint-disable-next-line ecolemiriam/require-annee-filter -- évaluations d'une classe précise : l'année est celle de cette classe
+      const evaluations = await prisma.evaluation.findMany({
+        where: { tenantId, ...evalFilter, classeId, matiereId },
+        select: { id: true, titre: true, type: true },
+        orderBy: { date: "desc" },
+      });
+      return evaluations;
+    });
+  },
+  ["notes-direct-data"],
+  { revalidate: 30, tags: ["notes-direct-data"] }
 );
 
 export default async function NotesPage({
@@ -190,11 +227,17 @@ export default async function NotesPage({
         ])
       );
     } else {
-      evaluations = await prisma.evaluation.findMany({
-        where: { tenantId, ...evalFilter, classeId, matiereId },
-        select: { id: true, titre: true, type: true },
-        orderBy: { date: "desc" },
-      });
+      const siteIdsHash = noteClaims.siteIds ? JSON.stringify(noteClaims.siteIds) : "";
+      evaluations = await getNotesDirectData(
+        tenantId,
+        session.user.siteId ?? null,
+        classeId,
+        matiereId,
+        activeSite,
+        session.user.role,
+        siteIdsHash,
+        noteClaims.tenantHasSites ?? false,
+      );
     }
 
     if (evaluation) {

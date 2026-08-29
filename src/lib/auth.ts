@@ -6,7 +6,7 @@ import { z } from "zod";
 import prismaBase, { assertDirectRoleBypassesRls } from "@/lib/prisma-base";
 import type { Role } from "@prisma/client";
 import { authConfig, type AvailableTenant } from "@/auth.config";
-import { deriveClaims, CLAIMS_VERSION } from "@/lib/tenant-claims";
+import { deriveClaims, deriveClaimsFromUser, CLAIMS_VERSION } from "@/lib/tenant-claims";
 import { auditFire } from "@/lib/audit";
 import { verifyTOTP } from "@/lib/security/totp";
 import { registerAuthFetcher } from "@/lib/prisma-rls";
@@ -200,12 +200,18 @@ export const {
         // Mémoïsé : une seule requête par processus. Rend visible une
         // DIRECT_URL pointant sur un rôle soumis à la RLS, configuration qui
         // fait échouer toutes les connexions sans le moindre message.
-        await assertDirectRoleBypassesRls();
+        // Non-bloquant : c'est un check diagnostic, pas une sécurité. Le
+        // fire-and-forget évite qu'il ralentisse le login (11s sur la 1ère
+        // connexion du processus à cause de l'établissement de connexion).
+        assertDirectRoleBypassesRls().catch(() => {});
 
         // eslint-disable-next-line ecolemiriam/require-site-filter -- login: no session exists yet, user must be looked up across all sites
         // Recherche insensible à la casse : l'email est stocké avec une
         // casse arbitraire (ex. "Mohamed…") mais l'utilisateur peut taper
         // "mohamed…" — PostgreSQL + Prisma findUnique est sensible à la casse.
+        // On profite de cette requête pour charger aussi les relations
+        // nécessaires à deriveClaims (userTenants), évitant un second
+        // aller-retour DB.
         const user = await prismaBase.user.findFirst({
           where: { email: { equals: email, mode: "insensitive" } },
           select: {
@@ -219,6 +225,17 @@ export const {
             mfaEnabled: true,
             emailVerified: true,
             role: true,
+            tenantId: true,
+            siteId: true,
+            userTenants: {
+              where: { isActive: true },
+              select: {
+                tenantId: true,
+                role: true,
+                isDefault: true,
+                tenant: { select: { id: true, name: true, slug: true, logoUrl: true } },
+              },
+            },
           },
         });
 
@@ -306,11 +323,12 @@ export const {
           }
         }
 
-        // Mettre à jour lastLoginAt
-        await prismaBase.user.update({
+        // Mettre à jour lastLoginAt — fire-and-forget : non critique pour
+        // la connexion, ne doit pas bloquer l'utilisateur.
+        prismaBase.user.update({
           where: { id: user.id },
           data: { lastLoginAt: new Date() },
-        });
+        }).catch(() => {});
 
         // Le périmètre (tenant, sites, rôle) est dérivé par la même fonction
         // qu'au changement de tenant/site : une seule logique, donc pas de
@@ -319,7 +337,9 @@ export const {
         // `UserSite`, sans les affectations d'enseignants et sans borner au
         // tenant actif : un enseignant se connectait avec `siteIds` vide et
         // échappait donc au filtrage par site.
-        const claims = await deriveClaims(user.id);
+        // On passe l'utilisateur déjà chargé ci-dessus pour éviter un second
+        // aller-retour DB (deriveClaimsFromUser au lieu de deriveClaims).
+        const claims = await deriveClaimsFromUser(user);
         if (!claims) {
           auditFire({
             userId: user.id,

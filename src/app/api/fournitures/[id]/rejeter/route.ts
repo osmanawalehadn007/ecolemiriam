@@ -21,6 +21,7 @@ export async function POST(
 
   const siteFilter = siteFilterForModel("fournitureListe", gate.session.user);
 
+  // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : la liste porte sa propre année
   const liste = await prisma.fournitureListe.findFirst({
     where: { id, tenantId, ...siteFilter },
     select: { id: true, statut: true },

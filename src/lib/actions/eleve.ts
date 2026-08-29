@@ -5,6 +5,8 @@ import prisma from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { siteFilterForModel, requireSiteIdForCreate } from "@/lib/site-filter";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { mergeFilters } from "@/lib/site-scope";
 import { checkPermission } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
 import { trouverDoublon, resoudreIdentiteKey, cleDepuisFiche } from "@/lib/eleve-identity-server";
@@ -77,7 +79,14 @@ export async function getClassesForTenant() {
   if (denied) return [];
 
   return prisma.classe.findMany({
-    where: { tenantId: session.user.tenantId, ...siteFilterForModel("classe", session.user) },
+    where: mergeFilters(
+      { tenantId: session.user.tenantId },
+      siteFilterForModel("classe", session.user),
+      anneeFilterForModel(
+        "classe",
+        await getAnneeCouranteLibelle(session.user.tenantId),
+      ),
+    ),
     orderBy: { nom: "asc" },
   });
 }
@@ -225,7 +234,7 @@ export async function createEleve(
   let classeNiveau: string | null = null;
   let classeNom: string | null = null;
   if (values.classeId) {
-    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-tenant-id -- findUnique pour récupérer le siteId et le niveau de la classe
+    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-tenant-id, ecolemiriam/require-annee-filter -- findUnique pour récupérer le siteId et le niveau de la classe ; lookup par id : la classe visée est déjà validée par l'appelant
     const classe = await prisma.classe.findUnique({
       where: { id: values.classeId },
       select: { siteId: true, niveau: true, nom: true },
@@ -410,11 +419,16 @@ export async function updateEleve(
   let resolvedSiteId = existing.siteId;
   if (values.classeId) {
     const classe = await prisma.classe.findFirst({
-      where: {
-        id: values.classeId,
-        tenantId: session.user.tenantId,
-        ...siteFilterForModel("classe", session.user),
-      },
+      // Site ET année : réaffecter un élève à une classe d'une année révolue
+      // le sortait des écrans de l'année en cours.
+      where: mergeFilters(
+        { id: values.classeId, tenantId: session.user.tenantId },
+        siteFilterForModel("classe", session.user),
+        anneeFilterForModel(
+          "classe",
+          await getAnneeCouranteLibelle(session.user.tenantId),
+        ),
+      ),
       select: { siteId: true },
     });
     if (classe?.siteId) resolvedSiteId = classe.siteId;
