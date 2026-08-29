@@ -71,10 +71,9 @@ export async function POST(req: Request) {
     select: { password: true, isActive: true, mfaEnabled: true, emailVerified: true, role: true },
   });
 
-  // Si l'utilisateur n'existe pas, est inactif, ou mot de passe incorrect :
-  // retourner requires2FA=false et emailVerified=true pour ne pas révéler
-  // l'existence du compte.
-  if (!user || !user.password || !user.isActive) {
+  // Si l'utilisateur n'existe pas ou mot de passe incorrect : réponse neutre,
+  // pour ne rien révéler de l'existence du compte.
+  if (!user || !user.password) {
     return NextResponse.json({ requires2FA: false, emailVerified: true }, { status: 200 });
   }
 
@@ -83,12 +82,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ requires2FA: false, emailVerified: true }, { status: 200 });
   }
 
-  // L'utilisateur est authentifié : on peut révéler le statut 2FA et email.
+  // À partir d'ici le mot de passe est prouvé : on peut révéler l'état du
+  // compte sans risque d'énumération.
+  //
+  // `accountDisabled` est nouveau. Un compte désactivé faisait échouer
+  // `authorize()` silencieusement, et l'écran de login affichait « Email ou
+  // mot de passe incorrect » — un message faux, qui envoyait l'utilisateur
+  // ressaisir indéfiniment un mot de passe pourtant correct.
+  if (!user.isActive) {
+    return NextResponse.json(
+      { requires2FA: false, emailVerified: true, accountDisabled: true },
+      { status: 200 }
+    );
+  }
+
   // SUPER_ADMIN est toujours considéré comme vérifié (exemption).
   const isEmailVerified = !!user.emailVerified || user.role === "SUPER_ADMIN";
 
   return NextResponse.json(
-    { requires2FA: user.mfaEnabled, emailVerified: isEmailVerified },
+    { requires2FA: user.mfaEnabled, emailVerified: isEmailVerified, accountDisabled: false },
     { status: 200 }
   );
 }

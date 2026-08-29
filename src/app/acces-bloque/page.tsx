@@ -6,6 +6,17 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { getTranslations } from "next-intl/server";
 
+/**
+ * Page de blocage financier.
+ *
+ * Elle vit à la racine de `app/`, et NON dans le groupe `(dashboard)`.
+ * Placée sous `(dashboard)`, elle héritait d'un layout qui refait lui-même le
+ * contrôle de blocage et appelle `redirect("/acces-bloque")` : la page se
+ * redirigeait donc vers elle-même à l'infini (ERR_TOO_MANY_REDIRECTS) pour
+ * exactement les utilisateurs qu'elle devait informer. Elle rend de toute
+ * façon sa propre mise en page plein écran et n'a jamais eu besoin de la
+ * barre latérale.
+ */
 export default async function AccessBlockedPage() {
   const [session, t] = await Promise.all([
     auth(),

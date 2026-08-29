@@ -32,8 +32,21 @@ function createRedisClient(): Redis | null {
 
   const client = new Redis(url, {
     // Connection pooling : un seul client partagé par processus (singleton)
-    maxRetriesPerRequest: 3,
+    //
+    // DÉGRADATION RAPIDE — le cache ne doit JAMAIS ralentir une page.
+    // Avec `maxRetriesPerRequest: 3` et un backoff jusqu'à 2 s, une panne
+    // Redis ajoutait plusieurs secondes à CHAQUE `cacheGet` puis `cacheSet`,
+    // et l'erreur finissait avalée par le `catch` : la page s'affichait, très
+    // lentement, sans qu'aucun log n'explique pourquoi. Avec les réglages
+    // ci-dessous, une commande émise alors que Redis est indisponible échoue
+    // immédiatement et l'application poursuit sans cache.
+    maxRetriesPerRequest: 1,
+    connectTimeout: 1000,
+    commandTimeout: 1000,
     retryStrategy: (times) => Math.min(times * 200, 2000),
+    // Ne pas mettre les commandes en file d'attente quand la connexion est
+    // tombée : sans cela elles patientent jusqu'au rétablissement.
+    enableOfflineQueue: false,
     enableReadyCheck: true,
     lazyConnect: false,
   });
@@ -149,7 +162,10 @@ export async function cached<T>(
   if (hit !== null) return hit;
 
   const value = await fn();
-  await cacheSet(key, value, ttlSeconds);
+  // L'écriture du cache n'est pas attendue : elle n'apporte rien à CETTE
+  // requête, et l'attendre ajoutait la latence d'un aller-retour Redis à
+  // chaque défaut de cache — jusqu'au timeout complet si Redis est en panne.
+  void cacheSet(key, value, ttlSeconds);
   return value;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, Suspense } from "react";
+import { useState, useTransition, Suspense, useCallback } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -33,12 +33,24 @@ function LoginForm() {
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  // Incrémenté après chaque échec : un token Turnstile est à usage unique,
+  // le resoumettre garantissait l'échec de toutes les tentatives suivantes.
+  const [turnstileReset, setTurnstileReset] = useState(0);
+  const [accountDisabled, setAccountDisabled] = useState(false);
   const t = useTranslations("login");
+  const isEn = t("title") === "Sign In";
+
+  // Callbacks stables : passées en fonctions fléchées inline, elles
+  // remontaient le widget Turnstile à chaque frappe clavier et détruisaient
+  // le token déjà obtenu.
+  const handleTurnstileToken = useCallback((token: string) => setTurnstileToken(token), []);
+  const handleTurnstileCleared = useCallback(() => setTurnstileToken(null), []);
 
   // Vérifier si l'utilisateur a 2FA activée (après saisie email + password)
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrors({});
+    setAccountDisabled(false);
 
     const parsed = LoginSchema.safeParse(form);
     if (!parsed.success) {
@@ -64,13 +76,21 @@ function LoginForm() {
         });
         if (res.ok) {
           const data = await res.json();
-          // 1. Vérifier si l'email est vérifié (avant tout)
+          // 1. Compte désactivé : le mot de passe est bon mais la connexion
+          //    échouera. Sans ce cas, l'utilisateur voyait « mot de passe
+          //    incorrect » et ressaisissait indéfiniment un mot de passe juste.
+          if (data.accountDisabled === true) {
+            setAccountDisabled(true);
+            setChecking2FA(false);
+            return;
+          }
+          // 2. Vérifier si l'email est vérifié
           if (data.emailVerified === false) {
             setEmailNotVerified(true);
             setChecking2FA(false);
             return;
           }
-          // 2. Vérifier si la 2FA est requise
+          // 3. Vérifier si la 2FA est requise
           if (data.requires2FA) {
             setNeed2FA(true);
             setChecking2FA(false);
@@ -79,7 +99,7 @@ function LoginForm() {
         } else if (res.status === 429) {
           // Rate limité — informer l'utilisateur au lieu d'avaler l'erreur
           toast.error(
-            t("title") === "Sign In"
+            isEn
               ? "Too many attempts. Please wait a moment."
               : "Trop de tentatives. Patientez un instant."
           );
@@ -113,20 +133,37 @@ function LoginForm() {
       } catch (err) {
         console.error("[login] signIn a échoué:", err);
         toast.error(
-          t("title") === "Sign In"
+          isEn
             ? "Service temporarily unavailable. Please try again."
             : "Service momentanément indisponible. Réessayez."
         );
         setTotp("");
+        // Le token a pu être consommé côté serveur : en redemander un neuf.
+        setTurnstileToken(null);
+        setTurnstileReset((n) => n + 1);
         return;
       }
 
       if (result?.error) {
-        toast.error(t("title") === "Sign In" ? "Invalid email or password" : "Email ou mot de passe incorrect");
-        // Réinitialiser le code 2FA en cas d'erreur
+        // `check-required` a déjà validé le mot de passe plus haut. Si on
+        // arrive ici, la cause est donc ailleurs — code 2FA erroné le plus
+        // souvent. Le message le dit, au lieu d'accuser à tort le mot de passe.
+        toast.error(
+          need2FA
+            ? isEn
+              ? "Incorrect verification code"
+              : "Code de vérification incorrect"
+            : isEn
+              ? "Sign-in failed. Please try again."
+              : "Connexion impossible. Réessayez."
+        );
         setTotp("");
+        // Un token Turnstile ne vaut qu'une fois : sans ce reset, toutes les
+        // tentatives suivantes échouaient quel que soit le mot de passe.
+        setTurnstileToken(null);
+        setTurnstileReset((n) => n + 1);
       } else {
-        toast.success(t("title") === "Sign In" ? "Signed in!" : "Connexion réussie !");
+        toast.success(isEn ? "Signed in!" : "Connexion réussie !");
         // Préserver callbackUrl à travers /select-tenant pour que
         // l'utilisateur atterrisse sur la page demandée, pas /dashboard.
         const dest = callbackUrl && callbackUrl !== "/" ? `/select-tenant?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/select-tenant";
@@ -257,6 +294,26 @@ function LoginForm() {
           </div>
         )}
 
+        {/* Bannière : compte désactivé — le mot de passe est bon, mais la
+            connexion ne peut pas aboutir. Sans ce retour explicite, l'écran
+            affichait « mot de passe incorrect » et l'utilisateur réessayait
+            en boucle un mot de passe pourtant valide. */}
+        {accountDisabled && (
+          <div className="rounded-lg border-2 border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950 p-4 flex items-start gap-2">
+            <Shield className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-red-900 dark:text-red-200">
+                {isEn ? "Account deactivated" : "Compte désactivé"}
+              </p>
+              <p className="text-xs text-red-700 dark:text-red-300">
+                {isEn
+                  ? "Your password is correct, but this account has been deactivated. Contact your school administrator."
+                  : "Votre mot de passe est correct, mais ce compte a été désactivé. Contactez l'administrateur de votre établissement."}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Bannière : email non vérifié */}
         {emailNotVerified && (
           <div className="space-y-3 rounded-lg border-2 border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950 p-4">
@@ -302,9 +359,10 @@ function LoginForm() {
         {/* Widget Turnstile (anti-bot) — invisible si pas de site key */}
         <TurnstileWidget
           action="login"
-          onToken={setTurnstileToken}
-          onExpire={() => setTurnstileToken(null)}
-          onError={() => setTurnstileToken(null)}
+          onToken={handleTurnstileToken}
+          onExpire={handleTurnstileCleared}
+          onError={handleTurnstileCleared}
+          resetSignal={turnstileReset}
           className="flex justify-center"
         />
 

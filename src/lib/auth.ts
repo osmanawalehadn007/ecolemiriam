@@ -1,3 +1,4 @@
+import { cache } from "react";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
@@ -49,7 +50,13 @@ const LoginSchema = z.object({
   turnstileToken: z.string().optional(), // token Cloudflare Turnstile (anti-bot)
 });
 
-export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
+export const {
+  handlers,
+  auth: uncachedAuth,
+  signIn,
+  signOut,
+  unstable_update,
+} = NextAuth({
   ...authConfig,
   callbacks: {
     ...authConfig.callbacks,
@@ -145,22 +152,49 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         }
 
         // ── Vérification Turnstile (anti-bot) ────────────────────────────
-        // Si TURNSTILE_SECRET est configuré, le token doit être valide.
+        // Si TURNSTILE_SECRET est configuré, un token PRÉSENT doit être valide.
         // Mode dégradé : sans secret, la vérification est ignorée.
-        const turnstileResult = await verifyTurnstileToken(
-          turnstileToken,
-          request as unknown as Request
-        );
-        if (!turnstileResult.success) {
-          recordLoginFailure(ip);
+        //
+        // Un token ABSENT ne bloque plus la connexion. Raison : le widget est
+        // rendu par un script tiers (challenges.cloudflare.com) qui peut être
+        // indisponible pour des motifs totalement étrangers à l'utilisateur —
+        // CSP trop stricte (c'était le cas ici), extension de navigateur,
+        // réseau d'école filtrant, script simplement pas encore chargé au
+        // moment de la soumission. Refuser dans ce cas rendait la connexion
+        // impossible pour des comptes parfaitement légitimes, avec pour seul
+        // retour « Email ou mot de passe incorrect ».
+        //
+        // La protection anti-force-brute ne repose donc PAS sur Turnstile :
+        // elle est assurée par le lockout progressif par IP ci-dessus, le
+        // rate limit Caddy et l'anti-énumération par email. Turnstile ajoute
+        // une couche quand il fonctionne ; il ne peut plus fermer la porte
+        // quand il est en panne.
+        if (turnstileToken) {
+          const turnstileResult = await verifyTurnstileToken(
+            turnstileToken,
+            request as unknown as Request
+          );
+          if (!turnstileResult.success) {
+            recordLoginFailure(ip);
+            auditFire({
+              action: "auth:login",
+              verdict: "DENIED",
+              resource: "user",
+              reason: "Vérification Turnstile échouée",
+              metadata: { email, ip, errorCodes: turnstileResult.errorCodes },
+            });
+            return null;
+          }
+        } else if (process.env.TURNSTILE_SECRET) {
+          // Journalisé, jamais bloquant : permet de mesurer la proportion de
+          // connexions sans token et de détecter une panne du widget.
           auditFire({
             action: "auth:login",
-            verdict: "DENIED",
+            verdict: "ALLOWED",
             resource: "user",
-            reason: "Vérification Turnstile échouée",
-            metadata: { email, ip, errorCodes: turnstileResult.errorCodes },
+            reason: "Connexion sans token Turnstile (widget indisponible)",
+            metadata: { email, ip },
           });
-          return null;
         }
 
         // eslint-disable-next-line ecolemiriam/require-site-filter -- login: no session exists yet, user must be looked up across all sites
@@ -311,6 +345,31 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
     }),
   ],
 });
+
+/**
+ * `auth()` mémoïsé pour la durée d'une requête.
+ *
+ * POURQUOI
+ * --------
+ * `auth()` était appelé un très grand nombre de fois par requête :
+ *   - une fois dans le layout racine (app/layout.tsx) ;
+ *   - une fois dans le layout du dashboard ;
+ *   - une fois dans la page elle-même, plus une par garde d'autorisation ;
+ *   - **et une fois par opération Prisma**, l'extension RLS l'utilisant comme
+ *     source de contexte tenant quand aucun `runWithTenant` n'est posé.
+ *
+ * Chaque appel déchiffre le JWE de session (dérivation HKDF + AES-GCM) et,
+ * si le jeton porte un `claimsVersion` périmé, déclenche `deriveClaims` —
+ * soit quatre requêtes SQL supplémentaires. Une page affichant quinze
+ * requêtes Prisma payait donc quinze déchiffrements et, potentiellement,
+ * soixante requêtes SQL parasites.
+ *
+ * `cache()` de React déduplique par requête : le travail n'est fait qu'une
+ * fois, et tous les appelants suivants reçoivent la même promesse. En dehors
+ * d'un contexte de requête React (scripts, tâches de fond), `cache()` se
+ * comporte comme un simple passe-plat.
+ */
+export const auth = cache(uncachedAuth);
 
 // Types augmentés NextAuth
 declare module "next-auth" {

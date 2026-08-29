@@ -229,9 +229,17 @@ export const prismaWithRls = prismaApp.$extends(rlsExtension);
 export async function runWithTenant<T>(
   tenantId: string | null,
   siteId: string | null,
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
+  role?: string | null
 ): Promise<T> {
-  return rlsStorage.run({ tenantId, siteId, role: null }, fn);
+  // Le rôle était figé à `null`. Conséquence : à l'intérieur d'un
+  // `runWithTenant`, `isSuperAdmin` valait toujours faux et `app.is_super_admin`
+  // n'était jamais posé — un SUPER_ADMIN se voyait donc filtré par les
+  // policies RLS comme un utilisateur ordinaire, et récupérait des listes
+  // vides. On conserve d'abord un rôle déjà présent dans le contexte
+  // englobant, sinon celui passé explicitement.
+  const inherited = rlsStorage.getStore()?.role ?? null;
+  return rlsStorage.run({ tenantId, siteId, role: role ?? inherited }, fn);
 }
 
 /**
