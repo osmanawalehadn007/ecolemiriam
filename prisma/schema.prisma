@@ -589,9 +589,16 @@ model Classe {
   chapitres    Chapitre[]
   sessionsExamen SessionExamen[]
 
+  // Une classe est identifiée par son site ET son année scolaire : deux
+  // sites peuvent avoir une « 6ème1 », et la « 6ème1 » de 2025-2026 est une
+  // structure différente de celle de 2026-2027. Sans cette contrainte, des
+  // doublons se créaient et rendaient tout sélecteur de classe ambigu.
+  // Index créé par migration_classe_unicite_site_annee.sql.
+  @@unique([tenantId, siteId, annee, nom], map: "classes_tenant_site_annee_nom_key")
   @@index([tenantId])
   @@index([siteId])
   @@index([structureId])
+  @@index([siteId, annee])
   @@map("classes")
 }
 

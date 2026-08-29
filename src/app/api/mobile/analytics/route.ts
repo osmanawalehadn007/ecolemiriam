@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { withMobileScope } from "@/lib/mobile-auth";
-import { siteFilterForModel, siteFilterForRelation } from "@/lib/site-scope";
+import { siteFilterForModel, siteFilterForRelation, mergeFilters } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 
 export async function GET(req: NextRequest) {
   return withMobileScope(req, async (user) => {
@@ -33,7 +35,11 @@ export async function GET(req: NextRequest) {
   ]);
 
   const classes = await prisma.classe.findMany({
-    where: { tenantId, ...eleveFilter },
+    where: mergeFilters(
+      { tenantId },
+      eleveFilter,
+      anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+    ),
     select: { id: true, nom: true, niveau: true },
     orderBy: { nom: "asc" },
   });

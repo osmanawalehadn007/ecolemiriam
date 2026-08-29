@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -18,6 +20,11 @@ export async function GET(req: NextRequest) {
   const eleveFilter = siteFilterForModel("eleve", session.user);
   const classeFilter = siteFilterForModel("classe", session.user);
   const examenFilter = siteFilterForModel("examen", session.user);
+  const anneeFilter = anneeFilterForModel(
+    "classe",
+    await getAnneeCouranteLibelle(tenantId),
+  );
+
   const [
     totalEleves,
     elevesParClasse,
@@ -30,9 +37,10 @@ export async function GET(req: NextRequest) {
     // Total élèves actifs
     prisma.eleve.count({ where: { tenantId, ...eleveFilter, statut: "ACTIF" } }),
 
-    // Élèves par classe
+    // Élèves par classe. Borné à l'année en cours : sinon les classes des
+    // années révolues gonflaient le nombre de classes de l'établissement.
     prisma.classe.findMany({
-      where: { tenantId, ...classeFilter },
+      where: mergeFilters({ tenantId }, classeFilter, anneeFilter),
       select: {
         nom: true, niveau: true,
         _count: { select: { eleves: { where: { statut: "ACTIF" } } } },

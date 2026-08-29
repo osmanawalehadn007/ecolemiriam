@@ -2,7 +2,9 @@ import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { Header } from "@/components/layout/Header";
 import { TransfertClasseForm } from "@/components/eleves/TransfertClasseForm";
 
@@ -13,8 +15,14 @@ export default async function TransfertClassePage() {
 
 
   const siteFilter = siteFilterForModel("classe", session.user);
+  // Un transfert vise toujours une classe de l'année en cours : proposer les
+  // classes des années révolues y déplacerait des élèves hors de leur cursus.
+  const anneeFilter = anneeFilterForModel(
+    "classe",
+    await getAnneeCouranteLibelle(session.user.tenantId),
+  );
   const classes = await prisma.classe.findMany({
-    where: { tenantId: session.user.tenantId, ...siteFilter },
+    where: mergeFilters({ tenantId: session.user.tenantId }, siteFilter, anneeFilter),
     select: {
       id: true, nom: true, niveau: true,
       eleves: {

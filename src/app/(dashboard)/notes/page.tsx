@@ -14,6 +14,8 @@ import { SiteTabs } from "@/components/sites/SiteTabs";
 import { getTranslations } from "next-intl/server";
 import { unstable_cache } from "next/cache";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import type { Role, Prisma } from "@prisma/client";
 import { siteFilterForModel, eleveScopeFilter, mergeFilters, isRelationScopedRole, type SessionSiteClaims } from "@/lib/site-scope";
 import { getSitesForUserCached } from "@/lib/sites-cached";
@@ -39,11 +41,21 @@ const getNotesData = unstable_cache(
     // (classeIds) SANS filtre de site, car un enseignant peut enseigner
     // dans des classes situées sur des sites auxquels il n'est pas
     // explicitement rattaché. Le scope est la sécurité.
+    // Année en cours : la saisie de notes ne concerne jamais une classe
+    // d'une année révolue (l'historique se consulte via les bulletins).
+    const anneeFilter = anneeFilterForModel(
+      "classe",
+      await getAnneeCouranteLibelle(tenantId),
+    );
     const classeWhere = scope?.isRestricted && scope.classeIds.length > 0
-      ? { tenantId, id: { in: scope.classeIds } }
+      ? mergeFilters({ tenantId, id: { in: scope.classeIds } }, anneeFilter)
       : scope?.isRestricted
         ? { tenantId, id: "__none__" as const }
-        : { tenantId, ...siteFilterForModel("classe", claims) };
+        : mergeFilters(
+            { tenantId },
+            siteFilterForModel("classe", claims),
+            anneeFilter,
+          );
     const matiereWhere = { tenantId, ...siteFilterForModel("matiere", claims), ...(scope?.isRestricted && scope.matiereIds.length > 0 ? { id: { in: scope.matiereIds } } : scope?.isRestricted ? { id: "__none__" } : {}) };
     // Le filtre de site s'applique dans tous les cas : auparavant il sautait dès
     // qu'une `classeId` était fournie dans l'URL, ce qui laissait lire les

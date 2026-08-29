@@ -11,8 +11,10 @@ import { Eye, Edit, Star, PenLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getTranslations } from "next-intl/server";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { getSitesForUserCached } from "@/lib/sites-cached";
 import { getSiteColorMap } from "@/lib/site-colors";
 import type { Role } from "@prisma/client";
@@ -61,11 +63,19 @@ export default async function EvaluationsPage({
   // Pour les enseignants restreints : filtrer les classes par scope (classeIds)
   // SANS filtre de site, car un enseignant peut enseigner dans des classes
   // situées sur des sites auxquels il n'est pas explicitement rattaché.
+  const anneeFilter = anneeFilterForModel(
+    "classe",
+    await getAnneeCouranteLibelle(tenantId),
+  );
   const classeWhere = scope?.isRestricted && scope.classeIds.length > 0
-    ? { tenantId, id: { in: scope.classeIds } }
+    ? mergeFilters({ tenantId, id: { in: scope.classeIds } }, anneeFilter)
     : scope?.isRestricted
       ? { tenantId, id: "__none__" as const }
-      : { tenantId, ...siteFilterForModel("classe", session.user) };
+      : mergeFilters(
+          { tenantId },
+          siteFilterForModel("classe", session.user),
+          anneeFilter,
+        );
 
   // OPTIMISATION: exécuter les 4 requêtes dans UNE SEULE transaction RLS
   // au lieu de 4 séparées → 1 SET LOCAL + 4 queries = 5 round trips

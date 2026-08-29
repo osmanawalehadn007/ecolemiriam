@@ -2,7 +2,9 @@ import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
-import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-scope";
+import { siteFilterForModel, type SessionSiteClaims, mergeFilters } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import type { Role } from "@prisma/client";
 import { Header } from "@/components/layout/Header";
@@ -19,17 +21,30 @@ async function getClasses(
   const isScoped = scope?.isRestricted && scope.classeIds.length > 0;
   const scopeDenyAll = scope?.isRestricted && scope.classeIds.length === 0;
 
+  // L'appel ne se fait que dans les classes de l'année en cours. Sans cette
+  // borne, les classes des années révolues apparaissaient dans la liste avec
+  // leurs anciens effectifs.
+  const anneeFilter = anneeFilterForModel(
+    "classe",
+    await getAnneeCouranteLibelle(tenantId),
+  );
+
   // eslint-disable-next-line ecolemiriam/require-site-filter -- teacher scope: classeIds is the security boundary for restricted teachers, not siteId
   return prisma.classe.findMany({
-    where: {
-      tenantId,
-      ...(isScoped || scopeDenyAll ? {} : siteFilterForModel("classe", claims)),
-      ...(isScoped
+    // mergeFilters, et non un étalement : les fragments de site et d'année
+    // encapsulent tous deux leurs prédicats dans `AND`. Étalés côte à côte,
+    // le second écraserait silencieusement le premier — et le filtre de site
+    // disparaîtrait.
+    where: mergeFilters(
+      { tenantId },
+      isScoped || scopeDenyAll ? {} : siteFilterForModel("classe", claims),
+      anneeFilter,
+      isScoped
         ? { id: { in: scope.classeIds } }
         : scopeDenyAll
           ? { id: "__none__" }
-          : {}),
-    },
+          : {},
+    ),
     include: {
       // eslint-disable-next-line ecolemiriam/require-site-filter -- eleves filtered via classe scope (classeIds), not site
       eleves: {

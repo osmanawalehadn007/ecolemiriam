@@ -5,10 +5,12 @@ import prisma from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { ExamensManager } from "@/components/examens/ExamensManager";
 import { SiteTabs } from "@/components/sites/SiteTabs";
-import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-scope";
+import { siteFilterForModel, type SessionSiteClaims, mergeFilters } from "@/lib/site-scope";
 import { getSitesForUser } from "@/lib/actions/eleve";
 import { getSiteColorMap } from "@/lib/site-colors";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import type { Role } from "@prisma/client";
 import { getTranslations } from "next-intl/server";
 
@@ -52,11 +54,11 @@ async function getExamensData(
       orderBy: { dateDebut: "desc" },
     }),
     prisma.classe.findMany({
-      where: {
-        tenantId,
-        ...siteFilterForModel("classe", claims),
-        ...teacherClasseFilter,
-      },
+      where: mergeFilters(
+        { tenantId, ...teacherClasseFilter },
+        siteFilterForModel("classe", claims),
+        anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+      ),
       select: { id: true, nom: true, niveau: true, siteId: true, site: { select: { nom: true } } },
       orderBy: { nom: "asc" },
     }),

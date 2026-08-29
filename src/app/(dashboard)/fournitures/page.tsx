@@ -6,6 +6,7 @@ import { guardPage } from "@/lib/guard-page";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { niveauToLabel } from "@/lib/niveau";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 
 export const metadata = { title: "Fournitures scolaires | École Miriam" };
 
@@ -16,12 +17,17 @@ export default async function FournituresPage() {
   ]);
   const { tenantId, role } = guardPage(session, "fournitures:read");
 
-  // Récupérer l'année courante du tenant
+  // Année courante : table `annees_scolaires` (source de vérité), avec repli
+  // sur le champ dénormalisé `Tenant.currentYear` (déprécié). L'ancien repli
+  // était la constante « 2025-2026 », qui devenait fausse à chaque rentrée.
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { currentYear: true },
   });
-  const currentYear = tenant?.currentYear ?? "2025-2026";
+  const currentYear =
+    (await getAnneeCouranteLibelle(tenantId)) ??
+    tenant?.currentYear ??
+    `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
 
   // Récupérer les matières et niveaux
   const siteFilter = siteFilterForModel("matiere", session!.user);

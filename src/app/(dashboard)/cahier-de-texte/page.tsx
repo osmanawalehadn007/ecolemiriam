@@ -6,8 +6,10 @@ import { Header } from "@/components/layout/Header";
 import { CahierTextView } from "@/components/cahier-texte/CahierTextView";
 import { getTranslations } from "next-intl/server";
 import { roleHasPermission } from "@/lib/rbac";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import type { Role } from "@prisma/client";
 
 export const metadata = { title: "Cahier de texte — École Miriam" };
@@ -43,6 +45,13 @@ export default async function CahierTextePage() {
       ? { tenantId, id: "__none__" as const }
       : { tenantId, ...siteFilter };
 
+  // Les classes proposées dans le cahier de texte sont celles de l'année en
+  // cours (cf. src/lib/annee-scope.ts).
+  const anneeFilter = anneeFilterForModel(
+    "classe",
+    await getAnneeCouranteLibelle(tenantId),
+  );
+
   const [entries, classes, matieres, enseignants] = await Promise.all([
     prisma.cahierTexte.findMany({
       where: entryWhere,
@@ -73,14 +82,15 @@ export default async function CahierTextePage() {
     }),
     // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.classe.findMany({
-      where: {
-        tenantId,
-        ...(scope?.isRestricted && scope.classeIds.length > 0
+      where: mergeFilters(
+        { tenantId },
+        anneeFilter,
+        scope?.isRestricted && scope.classeIds.length > 0
           ? { id: { in: scope.classeIds } }
           : scope?.isRestricted
             ? { id: "__none__" }
-            : {}),
-      },
+            : {},
+      ),
       select: { id: true, nom: true, niveau: true },
       orderBy: { nom: "asc" },
     }),

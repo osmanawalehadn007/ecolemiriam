@@ -26,10 +26,17 @@ import * as dotenv from "dotenv";
 
 dotenv.config();
 
+const directUrl = process.env.DIRECT_URL;
+if (!directUrl) {
+  console.error("❌ DIRECT_URL manquant dans .env");
+  process.exit(1);
+}
+
 const prisma = new PrismaClient({
   datasources: {
-    db: { url: process.env.DIRECT_URL },
+    db: { url: directUrl },
   },
+  log: ["error"],
 });
 
 async function main() {

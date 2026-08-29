@@ -4,8 +4,10 @@ import { Header } from "@/components/layout/Header";
 import { CommunicationView } from "@/components/communication/CommunicationView";
 import { getTranslations } from "next-intl/server";
 import { guardPage } from "@/lib/guard-page";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import type { Role } from "@prisma/client";
 
 export default async function CommunicationPage() {
@@ -22,6 +24,11 @@ export default async function CommunicationPage() {
 
   const notifFilter = siteFilterForModel("notification", session!.user);
   const classeFilter = siteFilterForModel("classe", session!.user);
+  // Une annonce s'adresse aux classes de l'année en cours.
+  const anneeFilter = anneeFilterForModel(
+    "classe",
+    await getAnneeCouranteLibelle(session!.user.tenantId!),
+  );
   const [notifications, classes] = await Promise.all([
     prisma.notification.findMany({
       where: { tenantId: session!.user.tenantId!, ...notifFilter },
@@ -30,15 +37,16 @@ export default async function CommunicationPage() {
       take: 50,
     }),
     prisma.classe.findMany({
-      where: {
-        tenantId: session!.user.tenantId!,
-        ...classeFilter,
-        ...(scope?.isRestricted && scope.classeIds.length > 0
+      where: mergeFilters(
+        { tenantId: session!.user.tenantId! },
+        classeFilter,
+        anneeFilter,
+        scope?.isRestricted && scope.classeIds.length > 0
           ? { id: { in: scope.classeIds } }
           : scope?.isRestricted
             ? { id: "__none__" }
-            : {}),
-      },
+            : {},
+      ),
       select: { id: true, nom: true, niveau: true },
       orderBy: { nom: "asc" },
     }),

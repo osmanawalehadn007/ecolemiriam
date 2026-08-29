@@ -4,8 +4,10 @@ import { Header } from "@/components/layout/Header";
 import { VieScolaireView } from "@/components/vie-scolaire/VieScolaireView";
 import { getTranslations } from "next-intl/server";
 import { guardPage } from "@/lib/guard-page";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import type { Role } from "@prisma/client";
 
 async function getVieScolaireData(
@@ -20,6 +22,12 @@ async function getVieScolaireData(
     : scope?.isRestricted
       ? { id: "__none__" as const }
       : {};
+
+  // Les classes proposées sont celles de l'année en cours (cf. annee-scope).
+  const anneeFilter = anneeFilterForModel(
+    "classe",
+    await getAnneeCouranteLibelle(tenantId),
+  );
 
   const [incidents, eleves, classes] = await Promise.all([
     // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
@@ -55,7 +63,11 @@ async function getVieScolaireData(
     }),
     // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.classe.findMany({
-      where: { tenantId, ...classeFilter, ...teacherClasseFilter },
+      where: mergeFilters(
+        { tenantId, ...teacherClasseFilter },
+        classeFilter,
+        anneeFilter,
+      ),
       select: { id: true, nom: true },
       orderBy: { nom: "asc" },
     }),

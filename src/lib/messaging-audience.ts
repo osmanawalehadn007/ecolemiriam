@@ -42,6 +42,8 @@ import {
   siteFilterForModel,
   type SessionSiteClaims,
 } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 
 // ------------------------------------------------------------
 // Modèle d'audience
@@ -240,6 +242,10 @@ async function classeIdsForScope(actor: Actor, scope: AudienceScope): Promise<st
   const base = mergeFilters(
     { tenantId: actor.tenantId },
     siteFilterForModel("classe", actor),
+    // On n'écrit qu'aux classes de l'année en cours : cibler « NIVEAU 6ème »
+    // ramenait aussi les classes homonymes des années révolues, donc des
+    // destinataires qui ne sont plus scolarisés là.
+    anneeFilterForModel("classe", await getAnneeCouranteLibelle(actor.tenantId)),
     await teacherClasseFilter(actor),
     await parentClasseFilter(actor)
   );
@@ -607,6 +613,7 @@ export async function listTargetingOptions(actor: Actor): Promise<TargetingOptio
   const classeWhere = mergeFilters(
     { tenantId: actor.tenantId },
     siteFilterForModel("classe", actor),
+    anneeFilterForModel("classe", await getAnneeCouranteLibelle(actor.tenantId)),
     await teacherClasseFilter(actor),
     await parentClasseFilter(actor)
   );

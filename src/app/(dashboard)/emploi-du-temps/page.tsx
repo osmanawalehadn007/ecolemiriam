@@ -9,6 +9,8 @@ import { fuzzyFind } from "@/lib/text-match";
 import { getTranslations } from "next-intl/server";
 import { siteFilterForModel, personalScopeFilter, mergeFilters, type SessionSiteClaims } from "@/lib/site-scope";
 import { getSitesForUser } from "@/lib/actions/eleve";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { getSiteColorMap } from "@/lib/site-colors";
 
 // Les fragments d'isolation sont construits ici, au plus près des requêtes :
@@ -26,6 +28,12 @@ async function getEmploiData(tenantId: string, claims: SessionSiteClaims & { use
     prisma.classe.findMany({
       where: mergeFilters(
         { tenantId, ...siteFilterForModel("classe", claims) },
+        // Une grille horaire se construit sur les classes de l'année en
+        // cours ; les emplois du temps sont déjà bornés à cette année.
+        // Argument distinct de mergeFilters : le fragment d'année encapsule
+        // son prédicat dans `AND`, il écraserait celui du site s'il était
+        // étalé dans le même objet.
+        anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
         classePersonal
       ),
       select: {

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withMobileScope } from "@/lib/mobile-auth";
 import prisma from "@/lib/prisma";
-import { eleveScopeFilter, siteFilterForModel } from "@/lib/site-scope";
+import { eleveScopeFilter, siteFilterForModel, mergeFilters } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,8 +14,13 @@ export async function GET(req: NextRequest) {
     // `Classe` porte `siteId` ; les élèves imbriqués sont filtrés séparément
     // pour qu'un parent ne récupère pas la liste complète de la classe.
 
+    const anneeFilter = anneeFilterForModel(
+      "classe",
+      await getAnneeCouranteLibelle(user.tenantId),
+    );
+
     const classes = await prisma.classe.findMany({
-      where: { tenantId: user.tenantId, ...classeFilter },
+      where: mergeFilters({ tenantId: user.tenantId }, classeFilter, anneeFilter),
       include: {
         eleves: {
           where: { statut: "ACTIF", ...eleveFilter },

@@ -2,7 +2,9 @@ import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import type { Role } from "@prisma/client";
 import { Header } from "@/components/layout/Header";
@@ -19,17 +21,22 @@ export default async function AttestationsPage() {
     : undefined;
 
   const siteFilter = siteFilterForModel("classe", session.user);
+  const anneeFilter = anneeFilterForModel(
+    "classe",
+    await getAnneeCouranteLibelle(session.user.tenantId!),
+  );
   const [classes, tenant] = await Promise.all([
     prisma.classe.findMany({
-      where: {
-        tenantId: session.user.tenantId,
-        ...siteFilter,
-        ...(scope?.isRestricted && scope.classeIds.length > 0
+      where: mergeFilters(
+        { tenantId: session.user.tenantId },
+        siteFilter,
+        anneeFilter,
+        scope?.isRestricted && scope.classeIds.length > 0
           ? { id: { in: scope.classeIds } }
           : scope?.isRestricted
             ? { id: "__none__" }
-            : {}),
-      },
+            : {},
+      ),
       include: {
         // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
         eleves: {

@@ -23,12 +23,15 @@ export default async function TarifsPage() {
 
   const siteFilter = siteFilterForModel("classe", session.user);
 
-  const [tarifs, sites, anneeCourante, classes] = await Promise.all([
+  // Résolue avant la requête : les niveaux tarifés sont ceux des classes de
+  // l'année en cours, pas ceux d'une année révolue.
+  const anneeCourante = await getAnneeCouranteLibelle(tenantId);
+
+  const [tarifs, sites, classes] = await Promise.all([
     getTarifsForTenant(),
     getSitesForSettings(),
-    getAnneeCouranteLibelle(tenantId),
     prisma.classe.findMany({
-      where: { tenantId, ...siteFilter },
+      where: { tenantId, ...siteFilter, ...(anneeCourante ? { annee: anneeCourante } : {}) },
       select: { id: true, nom: true, niveau: true, siteId: true },
       orderBy: [{ niveau: "asc" }, { nom: "asc" }],
     }),

@@ -117,13 +117,20 @@ async function getEffectifsParClasse(where: Prisma.EleveWhereInput, tenantId: st
 }
 
 const getClassesList = unstable_cache(
-  async (tenantId: string, siteId: string | null, siteFilter: Record<string, unknown>) => {
+  async (
+    tenantId: string,
+    siteId: string | null,
+    siteFilter: Record<string, unknown>,
+    // L'année fait partie de la clé de cache : changer d'année scolaire
+    // invalide naturellement la liste.
+    annee: string | null,
+  ) => {
     // N-4 : unstable_cache détache le contexte requête → auth() échoue →
     // RLS non positionnée. runWithTenant injecte le contexte via ALS.
     return runWithTenant(tenantId, siteId, async () => {
     // eslint-disable-next-line ecolemiriam/require-site-filter -- where includes ...siteFilter spread, not detectable inside unstable_cache
     const classes = await prisma.classe.findMany({
-      where: { tenantId, ...siteFilter } as Prisma.ClasseWhereInput,
+      where: { tenantId, ...siteFilter, ...(annee ? { annee } : {}) } as Prisma.ClasseWhereInput,
       select: { id: true, nom: true, site: { select: { nom: true } } },
       orderBy: [{ site: { nom: "asc" } }, { nom: "asc" }],
     });
@@ -260,7 +267,12 @@ async function getElevesData(
         });
         return classes.map((c) => ({ id: c.id, nom: c.nom, siteNom: c.site?.nom ?? null }));
       })
-    : await getClassesList(tenantId, siteId, classeSiteFilter);
+    : await getClassesList(
+        tenantId,
+        siteId,
+        classeSiteFilter,
+        await getAnneeCouranteLibelle(tenantId),
+      );
 
   return { eleves, total, stats, classeNoms, effectifs };
 }

@@ -4,7 +4,9 @@ import { Header } from "@/components/layout/Header";
 import { RHView } from "@/components/rh/RHView";
 import { getTranslations } from "next-intl/server";
 import { guardPage } from "@/lib/guard-page";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 
 async function getEnseignantsRH(
   tenantId: string,
@@ -78,7 +80,11 @@ async function getEnseignantsRH(
     // Classes pour le dialog d'affectation
     // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
     prisma.classe.findMany({
-      where: { tenantId, ...classeFilter },
+      where: mergeFilters(
+        { tenantId },
+        classeFilter,
+        anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+      ),
       select: { id: true, nom: true, niveau: true, siteId: true },
       orderBy: { nom: "asc" },
     }),

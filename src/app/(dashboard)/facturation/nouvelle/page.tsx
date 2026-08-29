@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { FactureForm } from "@/components/facturation/FactureForm";
 import prisma from "@/lib/prisma";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
 
 export default async function NouvelleFacturePage({
   searchParams,
@@ -15,7 +17,13 @@ export default async function NouvelleFacturePage({
   if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "finance:write");
 
-  const anneeActuelle = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+  // Année courante du tenant (table `annees_scolaires`) plutôt qu'un calcul
+  // calendaire local : les deux divergent dès qu'un établissement décale sa
+  // rentrée, et la grille tarifaire lue ci-dessous serait alors introuvable.
+  const anneeActuelle =
+    (await getAnneeCouranteLibelle(session.user.tenantId)) ??
+    `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+  const anneeFilter = anneeFilterForModel("classe", anneeActuelle);
   const siteFilter = siteFilterForModel("eleve", session.user);
   const [eleves, classes, tarifs] = await Promise.all([
     prisma.eleve.findMany({
@@ -30,7 +38,14 @@ export default async function NouvelleFacturePage({
       orderBy: [{ nom: "asc" }],
     }),
     prisma.classe.findMany({
-      where: { tenantId: session.user.tenantId, ...siteFilterForModel("classe", session.user) },
+      // mergeFilters : les fragments de site et d'année encapsulent tous deux
+      // leur prédicat dans `AND`. Étalés dans le même objet, le second
+      // écraserait le premier et le filtre de site disparaîtrait.
+      where: mergeFilters(
+        { tenantId: session.user.tenantId },
+        siteFilterForModel("classe", session.user),
+        anneeFilter,
+      ),
       select: { id: true, nom: true, niveau: true },
       orderBy: { nom: "asc" },
     }),

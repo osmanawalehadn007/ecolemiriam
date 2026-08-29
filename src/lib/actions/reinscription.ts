@@ -235,11 +235,16 @@ export async function promouvoirEleves(): Promise<ResultatPromotion> {
     include: { classe: { select: { id: true, nom: true, niveau: true, siteId: true } } },
   });
 
-  // 2. Charger toutes les classes (pour trouver la classe du niveau suivant)
+  // 2. Charger les classes d'ACCUEIL (pour trouver la classe du niveau suivant).
+  //    La promotion vise l'année scolaire nouvellement activée : sans cette
+  //    borne, un élève pouvait être promu vers une classe homonyme d'une
+  //    année révolue restée en base — exactement le défaut qui avait rattaché
+  //    des inscriptions 2026-2027 à des structures 2025-2026.
   const classeSiteFilter = siteFilterForModel("classe", session.user);
+  const anneeCible = await getAnneeCouranteLibelle(tenantId);
   // eslint-disable-next-line ecolemiriam/require-site-filter -- where includes ...classeSiteFilter spread
   const allClasses = await prisma.classe.findMany({
-    where: { tenantId, ...classeSiteFilter },
+    where: { tenantId, ...classeSiteFilter, ...(anneeCible ? { annee: anneeCible } : {}) },
     select: { id: true, nom: true, niveau: true, siteId: true },
   });
 
