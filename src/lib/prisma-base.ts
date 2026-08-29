@@ -44,4 +44,57 @@ export const prismaBase =
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prismaBase = prismaBase;
 
+// ------------------------------------------------------------
+// Garde-fou : le rôle de DIRECT_URL doit CONTOURNER la RLS
+// ------------------------------------------------------------
+/**
+ * Vérifie une fois par processus que `prismaBase` se connecte bien avec un
+ * rôle capable de contourner les policies RLS.
+ *
+ * C'est le contrôle symétrique de `assertRlsEnforceable()` dans prisma-app.ts,
+ * qui vérifie l'inverse pour le client applicatif. Il manquait de ce côté-ci,
+ * et son absence coûtait cher : si `DIRECT_URL` désigne `ecolemiriam_app`
+ * (NOBYPASSRLS), les lectures d'authentification — recherche de l'utilisateur
+ * par email, `deriveClaims` — s'exécutent sans `SET LOCAL app.tenant_id`. Les
+ * policies fail-closed renvoient alors zéro ligne, `authorize()` conclut
+ * « identifiants incorrects », et PLUS PERSONNE ne peut se connecter.
+ *
+ * La panne est totalement muette : pas d'exception, pas de log, juste un
+ * `findFirst` qui retourne `null`. Ce contrôle la rend immédiatement lisible.
+ *
+ * On ne lève PAS d'exception : contrairement à une isolation tenant
+ * silencieusement inopérante (où refuser de servir est le bon arbitrage), ici
+ * le risque est l'indisponibilité, pas la fuite. On journalise donc une erreur
+ * impossible à manquer et on laisse le processus vivre — si la configuration
+ * est en réalité correcte, rien n'est cassé.
+ */
+let baseRoleCheck: Promise<void> | null = null;
+
+export function assertDirectRoleBypassesRls(): Promise<void> {
+  baseRoleCheck ??= (async () => {
+    const rows = await prismaBase.$queryRaw<
+      { rolname: string; rolsuper: boolean; rolbypassrls: boolean }[]
+    >`SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user`;
+
+    const role = rows[0];
+    if (!role) return;
+
+    if (!role.rolsuper && !role.rolbypassrls) {
+      console.error(
+        `[prisma-base] CONFIGURATION CRITIQUE — le rôle « ${role.rolname} » ` +
+          `est soumis aux policies RLS (superuser=${role.rolsuper}, ` +
+          `bypassrls=${role.rolbypassrls}). Les lectures d'authentification ` +
+          `s'exécutent sans contexte tenant et renverront zéro ligne : AUCUNE ` +
+          `CONNEXION NE POURRA ABOUTIR. DIRECT_URL doit utiliser ecolemiriam_owner.`
+      );
+    }
+  })().catch((err) => {
+    // Ne pas mémoriser un échec transitoire (base indisponible au démarrage).
+    baseRoleCheck = null;
+    console.error("[prisma-base] Vérification du rôle impossible:", err);
+  });
+
+  return baseRoleCheck;
+}
+
 export default prismaBase;

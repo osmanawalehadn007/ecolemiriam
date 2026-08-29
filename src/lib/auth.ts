@@ -3,7 +3,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import prismaBase from "@/lib/prisma-base";
+import prismaBase, { assertDirectRoleBypassesRls } from "@/lib/prisma-base";
 import type { Role } from "@prisma/client";
 import { authConfig, type AvailableTenant } from "@/auth.config";
 import { deriveClaims, CLAIMS_VERSION } from "@/lib/tenant-claims";
@@ -196,6 +196,11 @@ export const {
             metadata: { email, ip },
           });
         }
+
+        // Mémoïsé : une seule requête par processus. Rend visible une
+        // DIRECT_URL pointant sur un rôle soumis à la RLS, configuration qui
+        // fait échouer toutes les connexions sans le moindre message.
+        await assertDirectRoleBypassesRls();
 
         // eslint-disable-next-line ecolemiriam/require-site-filter -- login: no session exists yet, user must be looked up across all sites
         // Recherche insensible à la casse : l'email est stocké avec une
