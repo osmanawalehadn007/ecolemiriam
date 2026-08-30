@@ -1,9 +1,9 @@
-name: Build & Deploy
+name: Build & Deploy (VPS — deprecated, use deploy-gcp.yml)
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch: # Déclenchement manuel possible
+  # Désactivé : la production est maintenant sur GCP.
+  # Utiliser deploy-gcp.yml ou workflow_dispatch manuel uniquement.
+  workflow_dispatch:
 
 # Éviter deux déploiements simultanés sur le VPS
 concurrency:
