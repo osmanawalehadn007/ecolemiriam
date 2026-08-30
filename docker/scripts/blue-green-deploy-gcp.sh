@@ -311,12 +311,28 @@ healthcheck_container() {
   return 1
 }
 
+# Résolution du fichier token GHCR.
+# Ordre : $GHCR_TOKEN_FILE, emplacement partagé, home (legacy).
+# L'emplacement partagé est requis en OS Login : le SA se connecte en
+# sa_<id>, dont le home n'est pas celui où le token a été écrit.
+ghcr_token_file() {
+  local f
+  for f in "${GHCR_TOKEN_FILE:-}" /etc/ecolemiriam/ghcr-token ~/.config/ghcr-token; do
+    if [ -n "$f" ] && [ -r "$f" ]; then
+      echo "$f"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Login GHCR
 ghcr_login() {
-  if [ -f ~/.config/ghcr-token ]; then
-    cat ~/.config/ghcr-token | docker login ghcr.io -u wilsan007 --password-stdin 2>/dev/null
+  local token_file
+  if token_file=$(ghcr_token_file); then
+    docker login ghcr.io -u wilsan007 --password-stdin < "$token_file" 2>/dev/null
   else
-    err "Token GHCR manquant (~/.config/ghcr-token). Lancer : docker/scripts/setup-vps-ghcr.sh"
+    err "Token GHCR introuvable (/etc/ecolemiriam/ghcr-token ou ~/.config/ghcr-token). Lancer : docker/scripts/setup-vps-ghcr.sh"
   fi
 }
 

@@ -56,11 +56,21 @@ fi
 # Pas de régénération PgBouncer userlist sur GCP (pas de PgBouncer)
 
 # --- 2. Login GHCR ---
+# Ordre : $GHCR_TOKEN_FILE, emplacement partagé, home (legacy).
+# L'emplacement partagé est requis en OS Login : le SA se connecte en
+# sa_<id>, dont le home n'est pas celui où le token a été écrit.
 echo "=== 2/3 — Login GHCR ==="
-if [ -f ~/.config/ghcr-token ]; then
-  cat ~/.config/ghcr-token | docker login ghcr.io -u wilsan007 --password-stdin
+GHCR_TOKEN_PATH=""
+for f in "${GHCR_TOKEN_FILE:-}" /etc/ecolemiriam/ghcr-token ~/.config/ghcr-token; do
+  if [ -n "$f" ] && [ -r "$f" ]; then
+    GHCR_TOKEN_PATH="$f"
+    break
+  fi
+done
+if [ -n "$GHCR_TOKEN_PATH" ]; then
+  docker login ghcr.io -u wilsan007 --password-stdin < "$GHCR_TOKEN_PATH"
 else
-  echo "ERREUR: Token GHCR manquant (~/.config/ghcr-token)"
+  echo "ERREUR: Token GHCR introuvable (/etc/ecolemiriam/ghcr-token ou ~/.config/ghcr-token)"
   exit 1
 fi
 
