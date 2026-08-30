@@ -17,6 +17,7 @@ env:
   GCP_INSTANCE: ecolpro-prod
   WIF_PROVIDER: projects/994656035611/locations/global/workloadIdentityPools/github-pool/providers/github-provider
   SA_EMAIL: github-actions-deploy@ecole-miriam.iam.gserviceaccount.com
+  GCP_PROJECT_ID: "994656035611"
 
 permissions:
   contents: read
@@ -152,6 +153,11 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Enable IAM Service Account Credentials API
+        run: |
+          gcloud services enable iamcredentials.googleapis.com \
+            --project=${{ env.GCP_PROJECT_ID }}
+
       - name: Deploy to staging slot via IAP
         run: |
           gcloud compute ssh ${{ env.GCP_INSTANCE }} \
@@ -194,6 +200,11 @@ jobs:
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
+
+      - name: Enable IAM Service Account Credentials API
+        run: |
+          gcloud services enable iamcredentials.googleapis.com \
+            --project=${{ env.GCP_PROJECT_ID }}
 
       - name: Promote staging to production via IAP
         run: |
