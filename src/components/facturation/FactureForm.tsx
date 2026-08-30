@@ -9,12 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Loader2, Save, Sparkles } from "lucide-react";
+import { ArrowLeft, Loader2, Save, Sparkles, AlertCircle, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { createFacture, type FactureFormData } from "@/lib/actions/facture";
+import { createFacturesCombinees, getExistingFacturesForEleve, type FacturesCombineesData } from "@/lib/actions/facture";
 import { StudentSearch } from "./StudentSearch";
 import { useTranslations } from "next-intl";
+import { niveauToLabel } from "@/lib/niveau";
 
 interface EleveOption {
   id: string;
@@ -43,16 +44,29 @@ interface TarifOption {
 
 type FactureType = "MENSUALITE" | "INSCRIPTION" | "RENOUVELLEMENT" | "CANTINE" | "TRANSPORT" | "LIBRE";
 
+interface ExistingFacture {
+  id: string;
+  type: FactureType;
+  mois: string | null;
+  statut: string;
+  numero: string;
+  montant: number;
+}
+
 const MOIS_NOMS = [
   "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
 ];
 
-const FormSchema = z.object({
-  eleveId: z.string().min(1, "formErrStudent"),
-  libelle: z.string().min(1, "formErrLabel"),
-  montant: z.number().min(0.01, "formErrAmount"),
-});
+const TYPES_MENSUELS: FactureType[] = ["MENSUALITE", "CANTINE", "TRANSPORT"];
+const TYPE_EXCLUSIVE: Record<FactureType, FactureType[]> = {
+  MENSUALITE: [],
+  INSCRIPTION: ["RENOUVELLEMENT"],
+  RENOUVELLEMENT: ["INSCRIPTION"],
+  CANTINE: [],
+  TRANSPORT: [],
+  LIBRE: [],
+};
 
 export function FactureForm({
   eleves,
@@ -68,18 +82,16 @@ export function FactureForm({
   const t = useTranslations("facturation");
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
-  const [factureType, setFactureType] = useState<FactureType>("MENSUALITE");
+  const [selectedServices, setSelectedServices] = useState<FactureType[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  const [form, setForm] = useState<FactureFormData>({
+  const [form, setForm] = useState<{ eleveId: string }>({
     eleveId: eleveIdPreselected ?? "",
-    libelle: "",
-    montant: 0,
-    devise: "DJF",
-    mois: null,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedClasseId, setSelectedClasseId] = useState("");
+  const [existing, setExisting] = useState<ExistingFacture[]>([]);
+  const [existingLoading, setExistingLoading] = useState(false);
 
   useEffect(() => {
     if (eleveIdPreselected) {
@@ -93,7 +105,6 @@ export function FactureForm({
     return eleves.filter((e) => e.classe?.id === selectedClasseId);
   }, [eleves, selectedClasseId]);
 
-  // Trouver le tarif correspondant au niveau de l'élève sélectionné
   const selectedEleve = useMemo(
     () => eleves.find((e) => e.id === form.eleveId),
     [eleves, form.eleveId]
@@ -106,101 +117,164 @@ export function FactureForm({
     ) ?? null;
   }, [tarifs, selectedEleve]);
 
-  // Auto-remplir le montant et le libellé quand le type ou l'élève change
-  function autoFillFromTarif(type: FactureType, eleveId: string) {
+  // Charger les factures existantes de l'élève sélectionné
+  useEffect(() => {
+    if (!form.eleveId) {
+      setExisting([]);
+      return;
+    }
+    setExistingLoading(true);
+    getExistingFacturesForEleve(form.eleveId)
+      .then((data) => setExisting(data as ExistingFacture[]))
+      .catch(() => setExisting([]))
+      .finally(() => setExistingLoading(false));
+  }, [form.eleveId]);
+
+  const existingByKey = useMemo(() => {
+    const map = new Map<string, ExistingFacture>();
+    for (const f of existing) {
+      const key = TYPES_MENSUELS.includes(f.type) && f.mois ? `${f.type}:${f.mois}` : f.type;
+      map.set(key, f);
+    }
+    return map;
+  }, [existing]);
+
+  const moisKey = useMemo(() => `${selectedYear}-${String(selectedMonth).padStart(2, "0")}`, [selectedYear, selectedMonth]);
+
+  // Bloque un service s'il est déjà facturé (non annulé) — et définit son statut
+  function getExistingFor(type: FactureType, mois?: string) {
+    const key = TYPES_MENSUELS.includes(type) && mois ? `${type}:${mois}` : type;
+    return existingByKey.get(key) ?? null;
+  }
+
+  function isLocked(type: FactureType, mois?: string) {
+    const f = getExistingFor(type, mois);
+    if (!f) return false;
+    return f.statut !== "ANNULEE";
+  }
+
+  function isPaid(f: ExistingFacture | null) {
+    return f?.statut === "PAYEE";
+  }
+
+  function handleStudentChange(eleveId: string) {
+    setForm({ eleveId });
+    setSelectedServices([]);
+    setErrors({});
     const eleve = eleves.find((e) => e.id === eleveId);
-    if (!eleve?.classe?.niveau) return;
-    const tarif = tarifs.find(
-      (t) => t.niveau.toLowerCase() === eleve.classe!.niveau.toLowerCase()
-    );
-    if (!tarif) return;
+    if (eleve?.classe?.id) setSelectedClasseId(eleve.classe.id);
+  }
 
+  function toggleService(type: FactureType) {
+    setSelectedServices((prev) => {
+      if (prev.includes(type)) {
+        return prev.filter((s) => s !== type);
+      }
+
+      // Exclusions mutuelles : inscription / réinscription
+      const exclusive = TYPE_EXCLUSIVE[type];
+      const next = [...prev.filter((s) => !exclusive.includes(s)), type];
+
+      // Si on active une inscription/réinscription, on supprime l'autre
+      return next;
+    });
+  }
+
+  // Construction des factures à créer à partir des services sélectionnés
+  const drafts = useMemo(() => {
+    if (!selectedEleve || !matchedTarif) return [];
     const moisNom = MOIS_NOMS[selectedMonth - 1];
-    const moisKey = `${selectedYear}-${String(selectedMonth).padStart(2, "0")}`;
-    let montant = 0;
-    let libelle = "";
 
-    switch (type) {
-      case "MENSUALITE":
-        montant = tarif.mensualite;
-        libelle = `Scolarité ${moisNom} ${selectedYear}`;
-        setForm((prev) => ({ ...prev, montant, libelle, mois: moisKey, devise: tarif.devise }));
-        break;
-      case "INSCRIPTION":
-        montant = tarif.fraisInscription;
-        libelle = `Frais d'inscription ${selectedYear}-${selectedYear + 1}`;
-        setForm((prev) => ({ ...prev, montant, libelle, mois: null, devise: tarif.devise }));
-        break;
-      case "RENOUVELLEMENT":
-        montant = tarif.fraisRenouvellement;
-        libelle = `Frais de renouvellement ${selectedYear}-${selectedYear + 1}`;
-        setForm((prev) => ({ ...prev, montant, libelle, mois: null, devise: tarif.devise }));
-        break;
-      case "CANTINE":
-        montant = tarif.fraisCantine ?? 0;
-        libelle = `Cantine ${moisNom} ${selectedYear}`;
-        setForm((prev) => ({ ...prev, montant, libelle, mois: moisKey, devise: tarif.devise }));
-        break;
-      case "TRANSPORT":
-        montant = tarif.fraisTransport ?? 0;
-        libelle = `Transport ${moisNom} ${selectedYear}`;
-        setForm((prev) => ({ ...prev, montant, libelle, mois: moisKey, devise: tarif.devise }));
-        break;
-      case "LIBRE":
-        // Ne pas auto-remplir pour le mode libre
-        break;
+    const result: { type: FactureType; libelle: string; montant: number; devise: string; mois: string | null }[] = [];
+
+    for (const service of selectedServices) {
+      let libelle = "";
+      let montant = 0;
+      let mois: string | null = null;
+
+      switch (service) {
+        case "MENSUALITE":
+          montant = matchedTarif.mensualite;
+          libelle = `Scolarité ${moisNom} ${selectedYear}`;
+          mois = moisKey;
+          break;
+        case "INSCRIPTION":
+          montant = matchedTarif.fraisInscription;
+          libelle = `Frais d'inscription ${selectedYear}-${selectedYear + 1}`;
+          break;
+        case "RENOUVELLEMENT":
+          montant = matchedTarif.fraisRenouvellement;
+          libelle = `Frais de réinscription ${selectedYear}-${selectedYear + 1}`;
+          break;
+        case "CANTINE":
+          montant = matchedTarif.fraisCantine ?? 0;
+          libelle = `Cantine ${moisNom} ${selectedYear}`;
+          mois = moisKey;
+          break;
+        case "TRANSPORT":
+          montant = matchedTarif.fraisTransport ?? 0;
+          libelle = `Transport ${moisNom} ${selectedYear}`;
+          mois = moisKey;
+          break;
+        case "LIBRE":
+          continue; // Pas de draft automatique pour le type libre
+      }
+
+      const key = TYPES_MENSUELS.includes(service) && mois ? `${service}:${mois}` : service;
+      const existingFor = existingByKey.get(key) ?? null;
+      const locked = existingFor !== null && existingFor.statut !== "ANNULEE";
+
+      if (montant > 0 && !locked) {
+        result.push({ type: service, libelle, montant, devise: matchedTarif.devise, mois });
+      }
     }
-  }
 
-  // Quand l'élève change, auto-remplir si pas en mode libre
-  useEffect(() => {
-    if (form.eleveId && factureType !== "LIBRE") {
-      autoFillFromTarif(factureType, form.eleveId);
-    }
-  }, [form.eleveId, factureType]); // eslint-disable-line react-hooks/exhaustive-deps
+    return result;
+  }, [selectedServices, selectedEleve, matchedTarif, selectedMonth, selectedYear, moisKey, existingByKey]);
 
-  // Quand le mois ou l'année change, re-remplir si mensualité/cantine/transport
-  useEffect(() => {
-    if (form.eleveId && ["MENSUALITE", "CANTINE", "TRANSPORT"].includes(factureType)) {
-      autoFillFromTarif(factureType, form.eleveId);
-    }
-  }, [selectedMonth, selectedYear]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function updateField<K extends keyof FactureFormData>(field: K, value: FactureFormData[K]) {
-    setForm((prev) => ({ ...prev, [field]: value }));
-    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }));
-  }
-
-  function handleTypeChange(type: FactureType) {
-    setFactureType(type);
-    if (form.eleveId && type !== "LIBRE") {
-      autoFillFromTarif(type, form.eleveId);
-    } else if (type === "LIBRE") {
-      setForm((prev) => ({ ...prev, montant: 0, libelle: "", mois: null }));
-    }
-  }
+  const totalAmount = useMemo(() => drafts.reduce((sum, d) => sum + d.montant, 0), [drafts]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrors({});
 
-    const parsed = FormSchema.safeParse(form);
-    if (!parsed.success) {
-      const next: Record<string, string> = {};
-      parsed.error.issues.forEach((issue) => {
-        next[issue.path[0]] = t(issue.message);
-      });
-      setErrors(next);
+    if (!form.eleveId) {
+      setErrors({ eleveId: t("formErrStudent") });
       toast.error(t("formErrors"));
       return;
     }
 
+    if (selectedServices.length === 0) {
+      toast.error(t("selectAtLeastOneService"));
+      return;
+    }
+
+    if (drafts.length === 0) {
+      toast.error(t("noDraftInvoices"));
+      return;
+    }
+
+    const payload: FacturesCombineesData = {
+      eleveId: form.eleveId,
+      factures: drafts.map((d) => ({
+        type: d.type,
+        libelle: d.libelle,
+        montant: d.montant,
+        devise: d.devise,
+        mois: d.mois,
+      })),
+    };
+
     setIsPending(true);
     try {
-      const result = await createFacture(form);
-      toast.success(t("formCreated"));
-      router.push(`/facturation/${result.id}`);
-      router.refresh();
+      const result = await createFacturesCombinees(payload);
+      if (result.success && result.created.length > 0) {
+        toast.success(t("formCreatedPlural", { count: result.created.length }));
+        router.push(`/facturation/${result.created[0].id}`);
+        router.refresh();
+      } else {
+        toast.error(t("allServicesAlreadyInvoiced"));
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("genericError"));
     } finally {
@@ -208,19 +282,16 @@ export function FactureForm({
     }
   }
 
-  const inputClass = (field: string) => cn("h-10", errors[field] && "border-destructive");
-
-  const typeOptions: { value: FactureType; labelKey: string }[] = [
-    { value: "MENSUALITE", labelKey: "typeMensualite" },
-    { value: "INSCRIPTION", labelKey: "typeInscription" },
-    { value: "RENOUVELLEMENT", labelKey: "typeRenouvellement" },
-    { value: "CANTINE", labelKey: "typeCantine" },
-    { value: "TRANSPORT", labelKey: "typeTransport" },
-    { value: "LIBRE", labelKey: "typeLibre" },
+  const serviceOptions: { value: FactureType; labelKey: string; requiresMonth: boolean }[] = [
+    { value: "MENSUALITE", labelKey: "typeMensualite", requiresMonth: true },
+    { value: "INSCRIPTION", labelKey: "typeInscription", requiresMonth: false },
+    { value: "RENOUVELLEMENT", labelKey: "typeRenouvellement", requiresMonth: false },
+    { value: "CANTINE", labelKey: "typeCantine", requiresMonth: true },
+    { value: "TRANSPORT", labelKey: "typeTransport", requiresMonth: true },
   ];
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
+    <form onSubmit={handleSubmit} className="space-y-6 max-w-3xl">
       <div className="flex items-center justify-between">
         <Button asChild variant="outline" size="sm" className="gap-2">
           <Link href="/facturation">
@@ -228,7 +299,7 @@ export function FactureForm({
             {t("formBack")}
           </Link>
         </Button>
-        <Button type="submit" size="sm" className="gap-2" disabled={isPending}>
+        <Button type="submit" size="sm" className="gap-2" disabled={isPending || drafts.length === 0}>
           {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {t("formCreate")}
         </Button>
@@ -239,28 +310,6 @@ export function FactureForm({
           <CardTitle>{t("formNewInvoice")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
-          {/* Type de facture */}
-          <div className="space-y-1.5">
-            <Label>{t("formType")}</Label>
-            <div className="flex flex-wrap gap-2">
-              {typeOptions.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => handleTypeChange(opt.value)}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-sm font-medium border transition-all",
-                    factureType === opt.value
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-input bg-background hover:bg-muted/50"
-                  )}
-                >
-                  {t(opt.labelKey)}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Sélection classe + élève */}
           <div className="space-y-1.5">
             <Label htmlFor="eleveId">{t("formStudent")}</Label>
@@ -271,7 +320,7 @@ export function FactureForm({
                   value={selectedClasseId}
                   onChange={(e) => {
                     setSelectedClasseId(e.target.value);
-                    updateField("eleveId", "");
+                    handleStudentChange("");
                   }}
                   className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 >
@@ -287,7 +336,7 @@ export function FactureForm({
                 <StudentSearch
                   students={filteredEleves}
                   value={form.eleveId}
-                  onChange={(id) => updateField("eleveId", id)}
+                  onChange={handleStudentChange}
                   placeholder={t("studentSearchPlaceholder")}
                   emptyMessage={t("noStudentFound")}
                   className={cn(errors.eleveId && "[&_input]:border-destructive")}
@@ -298,7 +347,7 @@ export function FactureForm({
           </div>
 
           {/* Info tarif trouvé */}
-          {selectedEleve && matchedTarif && factureType !== "LIBRE" && (
+          {selectedEleve && matchedTarif && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20">
               <Sparkles className="h-4 w-4 text-primary flex-shrink-0" />
               <div className="text-sm">
@@ -306,18 +355,18 @@ export function FactureForm({
                 <span className="font-semibold">
                   {matchedTarif.mensualite.toLocaleString()} {matchedTarif.devise}/{t("month")}
                 </span>
-                <span className="text-muted-foreground ml-2">({matchedTarif.niveau})</span>
+                <span className="text-muted-foreground ml-2">({niveauToLabel(matchedTarif.niveau)})</span>
               </div>
             </div>
           )}
-          {selectedEleve && !matchedTarif && factureType !== "LIBRE" && (
+          {selectedEleve && !matchedTarif && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
               {t("noTarifFound")}
             </div>
           )}
 
-          {/* Sélection mois (pour mensualité, cantine, transport) */}
-          {["MENSUALITE", "CANTINE", "TRANSPORT"].includes(factureType) && (
+          {/* Sélection mois (si au moins un service mensuel est sélectionné) */}
+          {selectedServices.some((s) => TYPES_MENSUELS.includes(s)) && (
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>{t("formMonth")}</Label>
@@ -343,61 +392,78 @@ export function FactureForm({
             </div>
           )}
 
-          {/* Libellé */}
+          {/* Services cliquables */}
           <div className="space-y-1.5">
-            <Label htmlFor="libelle">{t("formLabel")}</Label>
-            <Input
-              id="libelle"
-              placeholder={t("formLabelPlaceholder")}
-              value={form.libelle}
-              onChange={(e) => updateField("libelle", e.target.value)}
-              className={inputClass("libelle")}
-            />
-            {errors.libelle && <p className="text-xs text-destructive">{errors.libelle}</p>}
+            <Label>{t("servicesToInvoice")}</Label>
+            {existingLoading && (
+              <p className="text-xs text-muted-foreground">{t("loadingExistingInvoices")}...</p>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {serviceOptions.map((opt) => {
+                const isSelected = selectedServices.includes(opt.value);
+                const existingFor = getExistingFor(opt.value, opt.requiresMonth ? moisKey : undefined);
+                const locked = isLocked(opt.value, opt.requiresMonth ? moisKey : undefined);
+                const paid = isPaid(existingFor);
+
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => !locked && toggleService(opt.value)}
+                    disabled={locked || existingLoading}
+                    className={cn(
+                      "relative flex flex-col items-start gap-1 p-3 rounded-lg border text-left transition-all",
+                      isSelected && !locked
+                        ? "border-primary bg-primary/10 text-primary"
+                        : locked
+                          ? "border-muted bg-muted/40 text-muted-foreground cursor-not-allowed"
+                          : "border-input bg-background hover:bg-muted/50",
+                      locked && "opacity-80"
+                    )}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="font-medium text-sm">{t(opt.labelKey)}</span>
+                      {isSelected && !locked && <CheckCircle2 className="h-4 w-4" />}
+                      {locked && paid && <AlertCircle className="h-4 w-4 text-amber-600" />}
+                    </div>
+                    {locked && existingFor && (
+                      <span className="text-[10px] leading-tight text-muted-foreground">
+                        {paid
+                          ? t("invoiceAlreadyPaid", { numero: existingFor.numero })
+                          : t("invoiceAlreadyPending", { numero: existingFor.numero })}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">{t("inscriptionRenouvellementExclusive")}</p>
           </div>
 
-          {/* Montant + devise */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-1.5 col-span-2">
-              <Label htmlFor="montant">{t("formAmount")}</Label>
-              <Input
-                id="montant"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.montant || ""}
-                onChange={(e) => updateField("montant", parseFloat(e.target.value) || 0)}
-                className={inputClass("montant")}
-              />
-              {errors.montant && <p className="text-xs text-destructive">{errors.montant}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="devise">{t("formDevise")}</Label>
-              <Input
-                id="devise"
-                value={form.devise}
-                onChange={(e) => updateField("devise", e.target.value)}
-                className="h-10"
-              />
-            </div>
-          </div>
-
-          {/* Résumé */}
-          {form.montant > 0 && form.eleveId && form.libelle && (
-            <div className="p-4 rounded-lg bg-muted/30 border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground">{t("formSummary")}</p>
-                  <p className="font-semibold text-sm mt-1">{form.libelle}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedEleve && `${selectedEleve.prenom} ${selectedEleve.nom} · ${selectedEleve.classe?.nom ?? "N/A"}`}
-                  </p>
+          {/* Résumé des factures à créer */}
+          {drafts.length > 0 && (
+            <div className="p-4 rounded-lg bg-muted/30 border space-y-2">
+              <p className="text-xs text-muted-foreground">{t("formSummary")}</p>
+              {drafts.map((d) => (
+                <div key={d.type} className="flex items-center justify-between text-sm">
+                  <div>
+                    <span className="font-medium">{d.libelle}</span>
+                    {d.mois && <Badge variant="secondary" className="text-[10px] ml-2">{d.mois}</Badge>}
+                  </div>
+                  <span className="font-semibold">{d.montant.toLocaleString()} {d.devise}</span>
                 </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold">{form.montant.toLocaleString()} {form.devise}</p>
-                  {form.mois && <Badge variant="secondary" className="text-xs mt-1">{form.mois}</Badge>}
-                </div>
+              ))}
+              <div className="pt-2 border-t flex items-center justify-between">
+                <span className="text-sm">{t("totalToInvoice")}</span>
+                <span className="text-lg font-bold">{totalAmount.toLocaleString()} {drafts[0]?.devise}</span>
               </div>
+            </div>
+          )}
+
+          {drafts.length === 0 && selectedServices.length > 0 && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              {t("selectedServicesAlreadyInvoiced")}
             </div>
           )}
         </CardContent>

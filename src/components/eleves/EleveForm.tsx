@@ -13,6 +13,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import { niveauToLabel } from "@/lib/niveau";
 import type { ResultatEleve } from "@/lib/actions/eleve";
 
 interface Classe {
@@ -306,7 +307,7 @@ export function EleveForm({ classes, sites = [], currentSiteId = null, tenantHas
             <select id="classeId" value={form.classeId} onChange={(e) => updateField("classeId", e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
               <option value="">{t("unassigned")}</option>
               {classes.map((c) => (
-                <option key={c.id} value={c.id}>{c.nom} — {c.niveau}</option>
+                <option key={c.id} value={c.id}>{c.nom} — {niveauToLabel(c.niveau)}</option>
               ))}
             </select>
           </div>

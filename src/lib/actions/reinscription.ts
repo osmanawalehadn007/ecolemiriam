@@ -446,7 +446,8 @@ export async function genererFraisRenouvellement(annee: string) {
     where: {
       tenantId,
       eleveId: { in: elevesAvecTarif.map((e) => e.id) },
-      libelle,
+      type: "RENOUVELLEMENT",
+      mois: null,
     },
     select: { eleveId: true },
   });
@@ -465,6 +466,7 @@ export async function genererFraisRenouvellement(annee: string) {
     montant: number;
     devise: string;
     statut: "EN_ATTENTE";
+    type: "RENOUVELLEMENT";
     echeance: Date;
     siteId: string | null;
     createdById: string;
@@ -484,6 +486,7 @@ export async function genererFraisRenouvellement(annee: string) {
       montant: tarif.fraisRenouvellement,
       devise: tarif.devise,
       statut: "EN_ATTENTE",
+      type: "RENOUVELLEMENT",
       echeance,
       siteId: eleve.siteId ?? null,
       createdById: session.user.id,

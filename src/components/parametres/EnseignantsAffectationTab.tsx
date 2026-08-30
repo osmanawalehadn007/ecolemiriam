@@ -18,6 +18,7 @@ import {
   unassignEnseignantClasse,
 } from "@/lib/actions/parametres";
 import { isNiveauPrimaire } from "@/lib/utils-classe";
+import { niveauToLabel } from "@/lib/niveau";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
@@ -345,7 +346,7 @@ export function EnseignantsAffectationTab({ canManage }: { canManage: boolean })
                             {aff.classe.nom}
                           </Badge>
                           <span className="text-xs text-muted-foreground">
-                            {aff.classe.niveau}
+                            {niveauToLabel(aff.classe.niveau)}
                           </span>
                           {aff.matiere ? (
                             <Badge variant="outline" className="text-xs">
@@ -390,7 +391,7 @@ export function EnseignantsAffectationTab({ canManage }: { canManage: boolean })
                           <option value="">— Sélectionner —</option>
                           {classes.map((c) => (
                             <option key={c.id} value={c.id}>
-                              {c.nom} ({c.niveau})
+                              {c.nom} ({niveauToLabel(c.niveau)})
                               {c.structure ? ` — ${c.structure.nom}` : ""}
                             </option>
                           ))}

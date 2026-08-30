@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { cn, formatDate, timeAgo } from "@/lib/utils";
 import { hasPermission } from "@/lib/client-permissions";
 import { useTranslations } from "next-intl";
+import { niveauToLabel } from "@/lib/niveau";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -216,7 +217,7 @@ function ComposeModal({
               >
                 <option value="">{t("chooseLevel")}</option>
                 {niveaux.map((n) => (
-                  <option key={n} value={n}>{n}</option>
+                  <option key={n} value={n}>{niveauToLabel(n)}</option>
                 ))}
               </select>
             </div>

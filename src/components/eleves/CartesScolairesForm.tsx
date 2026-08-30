@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CreditCard, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
+import { niveauToLabel } from "@/lib/niveau";
 
 interface Classe {
   id: string;
@@ -61,7 +62,7 @@ export function CartesScolairesForm({ classes }: { classes: Classe[] }) {
             <SelectTrigger><SelectValue placeholder={t("cardsSelectClass")} /></SelectTrigger>
             <SelectContent>
               {classes.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.nom} ({c.niveau})</SelectItem>
+                <SelectItem key={c.id} value={c.id}>{c.nom} ({niveauToLabel(c.niveau)})</SelectItem>
               ))}
             </SelectContent>
           </Select>

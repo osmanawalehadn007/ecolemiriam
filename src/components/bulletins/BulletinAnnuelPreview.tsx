@@ -39,8 +39,30 @@ export function BulletinAnnuelPreview({ data }: Props) {
     >
       {/* Header Info */}
       <div className="flex flex-col mb-4">
-        <div className="text-center text-red-600 font-bold mb-2">
-          Email: ecoleprivee@gmail.com
+        {/* En-tête : Logo + Infos établissement */}
+        <div className="flex justify-between items-start mb-2">
+          {/*
+            `next/image` est inapplicable ici : le logo est téléversé par
+            chaque établissement (URL de stockage arbitraire ou `data:`),
+            hors des `remotePatterns` de next.config, et ce bloc est
+            dimensionné en millimètres pour l'impression.
+          */}
+          {data.ecoleLogo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={data.ecoleLogo}
+              alt="Logo"
+              className="max-h-[20mm] max-w-[30mm] object-contain"
+            />
+          ) : (
+            <div style={{ width: "30mm" }} />
+          )}
+          <div className="text-right text-[10px] leading-tight">
+            <div className="font-bold text-[14px] text-[#1e40af]">{data.ecoleName}</div>
+            {data.ecoleVille && (
+              <div>{data.ecoleVille}{data.ecolePays ? `, ${data.ecolePays}` : ""}</div>
+            )}
+          </div>
         </div>
 
         <table className="w-full border-collapse border border-black text-center mb-1">

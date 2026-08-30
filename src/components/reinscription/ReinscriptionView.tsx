@@ -20,6 +20,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { niveauToLabel } from "@/lib/niveau";
 import {
   activerAnneePourReinscription,
   promouvoirEleves,
@@ -310,7 +311,7 @@ export function ReinscriptionView({ apercu, userRole }: ReinscriptionViewProps) 
                       const classes = apercu.classesParNiveau.find((c) => c.niveau === row.niveauSuivant)?.classes ?? [];
                       return (
                         <tr key={row.niveau} className="border-b hover:bg-muted/30">
-                          <td className="px-3 py-2 font-medium">{row.niveau}</td>
+                          <td className="px-3 py-2 font-medium">{niveauToLabel(row.niveau)}</td>
                           <td className="px-3 py-2 text-center">{row.count}</td>
                           <td className="px-3 py-2">
                             {row.niveauSuivant === null
@@ -406,7 +407,7 @@ export function ReinscriptionView({ apercu, userRole }: ReinscriptionViewProps) 
                     <tbody>
                       {apercu.tarifsConfigures.map((tarif) => (
                         <tr key={tarif.niveau} className="border-b hover:bg-muted/30">
-                          <td className="px-3 py-2 font-medium">{tarif.niveau}</td>
+                          <td className="px-3 py-2 font-medium">{niveauToLabel(tarif.niveau)}</td>
                           <td className="px-3 py-2 text-right">{tarif.mensualite.toLocaleString()} DJF</td>
                           <td className="px-3 py-2 text-right font-bold text-primary">
                             {tarif.fraisRenouvellement.toLocaleString()} DJF

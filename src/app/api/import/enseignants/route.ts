@@ -13,7 +13,9 @@ import type { Action, LignePlan } from "@/lib/import-enseignants";
 
 /**
  * Infère le niveau scolaire à partir du nom de la classe.
- * Ex: "1ère A" → "1", "PS/MS" → "Maternelle", "5ème C" → "5"
+ * Système djiboutien : 1ère-5ème (Primaire), 6ème-9ème (Collège),
+ * Seconde/Première/Terminale (Lycée).
+ * Ex: "1ère A" → "1ère", "PS/MS" → "Maternelle", "5ème C" → "5ème"
  */
 function inferNiveauFromClasseName(nom: string): string {
   const lower = nom.toLowerCase().trim();
@@ -22,25 +24,24 @@ function inferNiveauFromClasseName(nom: string): string {
       /^(gs|grande section)/.test(lower) || /crèche|creche|garderie/.test(lower)) {
     return "Maternelle";
   }
-  // Primaire (1ère à 5ème dans le système djiboutien)
-  const primaireMatch = lower.match(/(\d+)\s*(?:ère|ere|e|ème|eme)/);
-  if (primaireMatch) {
-    const num = parseInt(primaireMatch[1]);
-    if (num >= 1 && num <= 5) return String(num);
-    if (num >= 6 && num <= 9) return String(num); // Collège
-    if (num === 10) return "10"; // 2nde
-    if (num === 11) return "11"; // 1ère
-    if (num === 12) return "12"; // Terminale
+  // Lycée : Seconde, Première, Terminale (noms complets uniquement,
+  // PAS "1ère" qui en Djibouti = 1ère année = Primaire)
+  if (/seconde|2nde|2nd\b/.test(lower)) return "Seconde";
+  if (/première|premiere/.test(lower)) return "Première";
+  if (/terminale|term\b|tle\b/.test(lower)) return "Terminale";
+  // Primaire + Collège : 1ère à 9ème (système djiboutien)
+  const niveauMatch = lower.match(/(\d+)\s*(?:ère|ere|e|ème|eme)?/);
+  if (niveauMatch) {
+    const num = parseInt(niveauMatch[1]);
+    if (num === 1) return "1ère";                  // 1ère année (Primaire)
+    if (num >= 2 && num <= 9) return `${num}ème`;  // 2ème-9ème année
   }
-  // CP, CE1, CE2, CM1, CM2
-  if (/^cp\b/.test(lower)) return "CP";
-  if (/^ce1\b/.test(lower)) return "CE1";
-  if (/^ce2\b/.test(lower)) return "CE2";
-  if (/^cm1\b/.test(lower)) return "CM1";
-  if (/^cm2\b/.test(lower)) return "CM2";
-  // 6ème à 9ème (collège)
-  if (/^6/.test(lower)) return "6";
-  if (/^5/.test(lower)) return "5";
+  // Compatibilité anciens formats français (CP, CE1, CE2, CM1, CM2)
+  if (/^cp\b/.test(lower)) return "1ère";
+  if (/^ce1\b/.test(lower)) return "2ème";
+  if (/^ce2\b/.test(lower)) return "3ème";
+  if (/^cm1\b/.test(lower)) return "4ème";
+  if (/^cm2\b/.test(lower)) return "5ème";
   // Fallback
   return nom;
 }

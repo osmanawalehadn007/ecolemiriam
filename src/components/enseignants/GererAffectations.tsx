@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Settings2, Plus, Trash2, Loader2, BookOpen, Layers } from "lucide-react";
 import { toast } from "sonner";
+import { niveauToLabel } from "@/lib/niveau";
 
 // ------------------------------------------------------------
 // Types
@@ -326,7 +327,7 @@ export function GererAffectations({
                     <SelectContent>
                       {availableClasses.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
-                          {c.nom} ({c.niveau})
+                          {c.nom} ({niveauToLabel(c.niveau)})
                         </SelectItem>
                       ))}
                     </SelectContent>

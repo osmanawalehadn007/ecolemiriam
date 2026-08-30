@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { niveauToLabel } from "@/lib/niveau";
 import {
   BookOpen,
   Plus,
@@ -547,7 +548,7 @@ export function CahierTextView({
               <SelectItem value="all">{t("allClasses")}</SelectItem>
               {classes.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
-                  {c.nom} ({c.niveau})
+                  {c.nom} ({niveauToLabel(c.niveau)})
                 </SelectItem>
               ))}
             </SelectContent>
@@ -957,7 +958,7 @@ export function CahierTextView({
                     <SelectContent>
                       {classes.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
-                          {c.nom} ({c.niveau})
+                          {c.nom} ({niveauToLabel(c.niveau)})
                         </SelectItem>
                       ))}
                     </SelectContent>

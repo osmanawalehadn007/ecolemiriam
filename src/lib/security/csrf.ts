@@ -73,7 +73,8 @@ export function checkCSRF(req: Request): string | null {
   // Les méthodes non-mutatives (GET, HEAD, OPTIONS) sont exemptées
   if (!MUTATIVE_METHODS.has(method)) return null;
 
-  const pathname = new URL(req.url).pathname;
+  const reqUrl = new URL(req.url);
+  const pathname = reqUrl.pathname;
 
   // Routes exemptées
   if (EXEMPT_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return null;
@@ -95,9 +96,17 @@ export function checkCSRF(req: Request): string | null {
 
   const allowedOrigins = getAllowedOrigins();
 
+  // Same-origin : l'Origin de la requête correspond au Host qu'elle cible.
+  // C'est la vérification la plus fiable — un attaquant cross-origin ne peut
+  // pas faire correspondre son Origin au Host de la destination. On l'ajoute
+  // en plus de la liste d'origins autorisés dérivée des variables d'env,
+  // ce qui évite les faux positifs en dev (localhost, tunnel, preview, etc.).
+  const selfOrigin = `${reqUrl.protocol}//${reqUrl.host}`;
+  const effectiveAllowed = [...allowedOrigins, selfOrigin];
+
   // Vérifier Origin (priorité) ou Referer
   if (origin) {
-    if (allowedOrigins.includes(origin)) return null;
+    if (effectiveAllowed.includes(origin)) return null;
     return `Origin non autorisée: ${origin}`;
   }
 
@@ -106,7 +115,7 @@ export function checkCSRF(req: Request): string | null {
     try {
       const refererUrl = new URL(referer);
       const refererOrigin = refererUrl.origin;
-      if (allowedOrigins.includes(refererOrigin)) return null;
+      if (effectiveAllowed.includes(refererOrigin)) return null;
       return `Referer non autorisé: ${refererOrigin}`;
     } catch {
       return "Referer invalide";

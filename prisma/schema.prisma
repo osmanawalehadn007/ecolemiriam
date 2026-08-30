@@ -1248,6 +1248,15 @@ enum StatutFacture {
   ANNULEE
 }
 
+enum TypeFacture {
+  MENSUALITE
+  INSCRIPTION
+  RENOUVELLEMENT
+  CANTINE
+  TRANSPORT
+  LIBRE
+}
+
 model Facture {
   id       String @id @default(cuid())
   tenantId String
@@ -1270,6 +1279,7 @@ model Facture {
   montant  Float
   devise   String        @default("DJF")
   statut   StatutFacture @default(EN_ATTENTE)
+  type     TypeFacture   @default(LIBRE) // type de facture pour le dédoublonnage
   echeance DateTime?
   mois     String? // "2025-10" pour le classement mensuel des factures
 
@@ -1288,6 +1298,7 @@ model Facture {
   @@index([tenantId, statut])
   @@index([tenantId, mois])
   @@index([siteId])
+  @@index([tenantId, eleveId, type, mois])
   @@map("factures")
 }
 

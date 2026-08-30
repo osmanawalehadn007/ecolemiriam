@@ -4,6 +4,7 @@ import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { canAccessSite } from "@/lib/site-filter";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { niveauToLabel } from "@/lib/niveau";
 
 export async function GET(
   _req: NextRequest,
@@ -132,9 +133,12 @@ export async function GET(
 <body>
   <div class="invoice">
     <div class="header">
-      <div>
-        <h1>FACTURE</h1>
-        <div class="inv-num">N° ${facture.numero}</div>
+      <div style="display:flex;align-items:center;gap:16px">
+        ${tenant.logoUrl ? `<img src="${tenant.logoUrl}" alt="Logo" style="max-height:56px;max-width:120px;object-fit:contain;background:white;border-radius:6px;padding:4px" />` : ""}
+        <div>
+          <h1>FACTURE</h1>
+          <div class="inv-num">N° ${facture.numero}</div>
+        </div>
       </div>
       <div style="text-align:right">
         <div style="font-size:13px;opacity:0.9">${new Date(facture.createdAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}</div>
@@ -159,7 +163,7 @@ export async function GET(
           <div class="section-title">Élève</div>
           <div class="row"><span class="label">Nom & Prénom</span><span class="value">${eleve?.prenom ?? ""} ${eleve?.nom ?? ""}</span></div>
           <div class="row"><span class="label">Matricule</span><span class="value">${eleve?.matricule ?? ""}</span></div>
-          <div class="row"><span class="label">Classe</span><span class="value">${eleve?.classe?.nom ?? "N/A"} — ${eleve?.classe?.niveau ?? ""}</span></div>
+          <div class="row"><span class="label">Classe</span><span class="value">${eleve?.classe?.nom ?? "N/A"} — ${eleve?.classe?.niveau ? niveauToLabel(eleve.classe.niveau) : ""}</span></div>
         </div>
         <div>
           ${tuteur ? `

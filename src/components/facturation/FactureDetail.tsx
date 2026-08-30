@@ -18,6 +18,7 @@ import {
   Printer,
   Wallet,
 } from "lucide-react";
+import { niveauToLabel } from "@/lib/niveau";
 import Link from "next/link";
 import { enregistrerPaiement, annulerFacture, type PaiementFormData } from "@/lib/actions/facture";
 import { getPaymentMethodsForSelect, getPaymentMethodType, getPaymentMethodColor } from "@/lib/payment-methods";
@@ -129,7 +130,7 @@ export function FactureDetail({ facture }: FactureDetailProps) {
       : "";
   const classeLabel =
     facture.eleve?.classe?.nom ?? facture.candidature?.classeVoulue ?? "N/A";
-  const niveauLabel = facture.eleve?.classe?.niveau ?? "";
+  const niveauLabel = facture.eleve?.classe?.niveau ? niveauToLabel(facture.eleve.classe.niveau) : "";
   const matriculeLabel = facture.eleve?.matricule ?? (facture.candidature ? t("candidatePending") : "");
   const tuteur = facture.eleve?.parents[0]?.parent
     ?? (facture.candidature

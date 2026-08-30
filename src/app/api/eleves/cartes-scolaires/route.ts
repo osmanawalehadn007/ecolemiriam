@@ -8,6 +8,7 @@ import { siteFilterForModel } from "@/lib/site-scope";
 import { anneeFilterForModel } from "@/lib/annee-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { mergeFilters } from "@/lib/site-scope";
+import { niveauToLabel } from "@/lib/niveau";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -68,7 +69,7 @@ export async function GET(req: NextRequest) {
         <div class="eleve-info">
           <div class="nom">${e.nom} ${e.prenom}</div>
           <div class="matricule">N° ${e.matricule}</div>
-          <div class="classe">${classe.nom} — ${classe.niveau}</div>
+          <div class="classe">${classe.nom} — ${niveauToLabel(classe.niveau)}</div>
         </div>
         <div class="annee">Année ${tenant.currentYear}</div>
       </div>

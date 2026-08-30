@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getInitials, formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { niveauToLabel } from "@/lib/niveau";
 import {
   ArrowLeft, Edit, User, Phone, MapPin, BookOpen,
   CalendarX, AlertTriangle, CreditCard, TrendingUp,
@@ -349,7 +350,7 @@ export function EleveDetailView({
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-3">
               <InfoRow label={t("matricule")} value={eleve.matricule} />
               <InfoRow label={t("class")} value={eleve.classe?.nom ?? t("notAssigned")} />
-              <InfoRow label={t("level")} value={eleve.classe?.niveau} />
+              <InfoRow label={t("level")} value={eleve.classe?.niveau ? niveauToLabel(eleve.classe.niveau) : undefined} />
               <InfoRow label={t("regime")} value={eleve.regime ?? t("external")} />
               <InfoRow label={t("birthDate")} value={formatDate(eleve.dateNaissance)} />
               <InfoRow label={t("placeOfBirth")} value={eleve.lieuNaissance} />
@@ -782,7 +783,7 @@ export function EleveDetailView({
                     <div>
                       <p className="font-semibold">{p.annee}</p>
                       <p className="text-sm text-muted-foreground">
-                        {p.classe} · {p.niveau}
+                        {p.classe} · {niveauToLabel(p.niveau)}
                       </p>
                     </div>
                     <div className="flex items-center gap-4">

@@ -330,6 +330,7 @@ export async function createEleve(
       montant: montantTotal,
       devise,
       statut: "EN_ATTENTE",
+      type: "INSCRIPTION",
     },
   });
 

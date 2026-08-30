@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { SiteTabs } from "@/components/sites/SiteTabs";
 import { Users, BookOpen, GraduationCap, Calendar, School } from "lucide-react";
 import type { SiteColor } from "@/lib/site-colors";
+import { niveauToLabel } from "@/lib/niveau";
 
 interface ClassItem {
   id: string;
@@ -61,7 +62,7 @@ export function MesClassesView({
                   <div>
                     <CardTitle className="text-lg">{c.nom}</CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      {c.niveau ? `${c.niveau} — ` : ""}
+                      {c.niveau ? `${niveauToLabel(c.niveau)} — ` : ""}
                       {c.site?.nom ?? "Site non défini"}
                     </p>
                   </div>

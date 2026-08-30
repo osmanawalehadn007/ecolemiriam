@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getSchoolGroup, SCHOOL_GROUP_ORDER, type SchoolGroup } from "@/lib/school-groups";
+import { niveauToLabel } from "@/lib/niveau";
 import { useTranslations } from "next-intl";
 import type { SiteColor } from "@/lib/site-colors";
 
@@ -401,7 +402,7 @@ export function ElevesTable({ eleves, total, effectifs, classes, siteColors, ini
                           {niveauEntries.map(([niveau, classes]) => (
                             <div key={niveau} className="flex items-center gap-2">
                               <span className="text-xs font-semibold text-muted-foreground min-w-[60px] flex-shrink-0">
-                                {niveau}
+                                {niveauToLabel(niveau)}
                               </span>
                               <div className="flex flex-wrap gap-1.5">
                                 {classes.map(({ id, nom, eleves: classeEleves }) => (

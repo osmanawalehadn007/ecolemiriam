@@ -4,6 +4,9 @@
 
 Ce document décrit le déploiement complet d'École Miriam sur un VPS avec Docker, Cloudflare Tunnel, et une architecture de sécurité zero-trust.
 
+> Pour un déploiement sur **Google Cloud Compute Engine**, voir [DEPLOYMENT-GCP.md](./DEPLOYMENT-GCP.md) :
+> seules les étapes 0 (création du serveur) et 8 (firewall) diffèrent, le reste de ce guide s'applique tel quel.
+
 ## Architecture
 
 ```

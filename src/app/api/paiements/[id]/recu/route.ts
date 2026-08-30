@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { canAccessSite } from "@/lib/site-filter";
+import { niveauToLabel } from "@/lib/niveau";
 
 export async function GET(
   req: NextRequest,
@@ -130,7 +131,7 @@ export async function GET(
       <div class="section-title">Élève</div>
       <div class="row"><span class="label">Nom & Prénom</span><span class="value">${eleve?.prenom ?? ""} ${eleve?.nom ?? ""}</span></div>
       <div class="row"><span class="label">Matricule</span><span class="value">${eleve?.matricule ?? ""}</span></div>
-      <div class="row"><span class="label">Classe</span><span class="value">${eleve?.classe?.nom ?? "N/A"} — ${eleve?.classe?.niveau ?? ""}</span></div>
+      <div class="row"><span class="label">Classe</span><span class="value">${eleve?.classe?.nom ?? "N/A"} — ${eleve?.classe?.niveau ? niveauToLabel(eleve.classe.niveau) : ""}</span></div>
 
       ${tuteur ? `
       <div class="section-title">Tuteur légal</div>

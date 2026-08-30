@@ -78,6 +78,19 @@ export const EXEMPT_MODELS = new Set([
   // chaque requête, et la policy tenant_isolation filtre correctement.
 ]);
 
+/**
+ * Convertit un nom de modèle Prisma vers la propriété du client.
+ *
+ * `$allOperations` reçoit le nom tel qu'écrit dans le schéma — en PascalCase
+ * (`Eleve`, `SessionExamen`) — alors que le délégué du client est en camelCase
+ * (`prisma.eleve`, `prisma.sessionExamen`). Sans cette conversion,
+ * `client["Eleve"]` vaut `undefined` et l'on retombe systématiquement sur le
+ * chemin de repli.
+ */
+function uncapitalize(name: string): string {
+  return name.charAt(0).toLowerCase() + name.slice(1);
+}
+
 // Opérations qui ne portent pas sur des données métier
 const META_OPERATIONS = new Set([
   "$executeRaw",
@@ -173,22 +186,55 @@ const rlsExtension = Prisma.defineExtension((client) => {
 
         const isSuperAdmin = ctx.role === "SUPER_ADMIN";
         const ctxRef = ctx;
+
+        // Fragment SQL posant le contexte tenant, construit sur le client NON
+        // étendu : le repasser par `prismaWithRls` relancerait l'extension.
+        const setContext = isSuperAdmin
+          ? prismaApp.$executeRaw`SELECT set_config('app.is_super_admin', 'true', true)`
+          : prismaApp.$executeRaw`SELECT set_config('app.tenant_id', ${ctxRef.tenantId!}, true), set_config('app.site_id', ${ctxRef.siteId ?? ''}, true)`;
+
+        // ---- Chemin rapide : transaction « batch » --------------------------
+        // La forme interactive `$transaction(async tx => …)` impose à Node de
+        // piloter la transaction pas à pas : BEGIN, puis set_config, puis la
+        // requête, puis COMMIT — quatre allers-retours, chacun repassant par
+        // l'event loop. Mesuré en production : 8,4 ms par aller-retour, soit
+        // ~34 ms de protocole pour ~16 ms de travail utile. Les deux tiers du
+        // temps passé en base ne servaient à rien.
+        //
+        // La forme tableau confie la séquence entière au moteur de requêtes en
+        // un seul appel : Node n'attend plus qu'une fois. La sémantique est
+        // identique — même transaction, donc `set_config(..., true)` reste
+        // bien local à celle-ci et ne peut pas fuir vers une autre requête via
+        // PgBouncer.
+        const baseDelegates = prismaApp as unknown as Record<
+          string,
+          Record<string, (a: unknown) => Promise<unknown>> | undefined
+        >;
+        const delegate = baseDelegates[uncapitalize(model)];
+
+        if (delegate && typeof delegate[operation] === "function") {
+          const [, result] = await prismaApp.$transaction([
+            setContext,
+            delegate[operation](args) as never,
+          ]);
+          return result;
+        }
+
+        // ---- Repli : transaction interactive -------------------------------
+        // Opération sans délégué correspondant (cas rares : `$runCommandRaw`,
+        // nouveautés du client). On garde l'ancien chemin plutôt que d'exécuter
+        // sans contexte tenant, ce qui renverrait 0 ligne en silence.
         return inRlsTx.run(true, () =>
           (client as PrismaClient).$transaction(
             async (tx) => {
               if (isSuperAdmin) {
                 await tx.$executeRaw`SELECT set_config('app.is_super_admin', 'true', true)`;
               } else {
-                // Fusion des deux SET LOCAL en une seule requête SQL
-                // — économise un round trip complet par opération Prisma.
                 await tx.$executeRaw`SELECT set_config('app.tenant_id', ${ctxRef.tenantId!}, true), set_config('app.site_id', ${ctxRef.siteId ?? ''}, true)`;
               }
-              // Exécuter l'opération sur le tx (pas sur le client outer)
-              // On accède au modèle via le tx qui est le client Prisma dans la transaction
               const txAny = tx as unknown as Record<string, Record<string, (a: unknown) => Promise<unknown>>>;
-              const modelDelegate = txAny[model!];
+              const modelDelegate = txAny[uncapitalize(model!)];
               if (!modelDelegate || typeof modelDelegate[operation] !== "function") {
-                // Fallback: utiliser query (le contexte SET LOCAL est actif)
                 return query(args);
               }
               return modelDelegate[operation](args);

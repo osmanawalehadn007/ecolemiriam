@@ -257,6 +257,7 @@ export function ParametresTabs({
               chefEtablissement: etablissement.chefEtablissement,
               signatureUrl: etablissement.signatureUrl,
               cachetUrl: etablissement.cachetUrl,
+              logoUrl: etablissement.logoUrl,
             }}
           />
         )}

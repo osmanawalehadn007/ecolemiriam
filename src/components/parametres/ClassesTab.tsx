@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, Trash2, AlertTriangle, ArrowRightCircle, MinusCircle, ArrowLeftRight } from "lucide-react";
 import { createClasse, deleteClasse, transferClasse, getEnseignantsForClasse, type ClasseFormData } from "@/lib/actions/parametres";
 import { niveauRequiresProfPrincipal } from "@/lib/utils-classe";
+import { niveauToLabel } from "@/lib/niveau";
 import { useTranslations } from "next-intl";
 import { StructureManager } from "./StructureManager";
 import {
@@ -305,7 +306,7 @@ export function ClassesTab({
                   classes.map((c) => (
                     <tr key={c.id} className="border-b hover:bg-muted/30">
                       <td className="px-4 py-3 font-medium">{c.nom}</td>
-                      <td className="px-4 py-3">{c.niveau}</td>
+                      <td className="px-4 py-3">{niveauToLabel(c.niveau)}</td>
                       <td className="px-4 py-3 text-muted-foreground">{c.structure?.nom ?? "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{c.filiere ?? "—"}</td>
                       <td className="px-4 py-3 text-right">
@@ -376,7 +377,7 @@ export function ClassesTab({
                         {classes
                           .filter((c) => c.id !== deleteTarget.id)
                           .map((c) => (
-                            <option key={c.id} value={c.id}>{c.nom} ({c.niveau})</option>
+                            <option key={c.id} value={c.id}>{c.nom} ({niveauToLabel(c.niveau)})</option>
                           ))}
                       </select>
                     )}

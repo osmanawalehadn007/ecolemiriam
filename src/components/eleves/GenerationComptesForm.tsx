@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Users, Loader2, KeyRound } from "lucide-react";
+import { niveauToLabel } from "@/lib/niveau";
 import { toast } from "sonner";
 import { ExportMenu } from "@/components/ui/ExportMenu";
 import type { ExportColumn } from "@/lib/export";
@@ -87,7 +88,7 @@ export function GenerationComptesForm({ classes }: { classes: Classe[] }) {
                 <SelectTrigger><SelectValue placeholder={t("genAccountsSelectClass")} /></SelectTrigger>
                 <SelectContent>
                   {classes.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.nom} ({c.niveau})</SelectItem>
+                    <SelectItem key={c.id} value={c.id}>{c.nom} ({niveauToLabel(c.niveau)})</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

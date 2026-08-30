@@ -20,6 +20,7 @@ import type { Role, Prisma } from "@prisma/client";
 import { siteFilterForModel, eleveScopeFilter, mergeFilters, isRelationScopedRole, type SessionSiteClaims } from "@/lib/site-scope";
 import { getSitesForUserCached } from "@/lib/sites-cached";
 import { getSiteColorMap } from "@/lib/site-colors";
+import { niveauToLabel } from "@/lib/niveau";
 
 const getNotesData = unstable_cache(
   async (
@@ -345,7 +346,7 @@ export default async function NotesPage({
                     <Link key={c.id} href={`/notes?matiereId=${matiereId}&classeId=${c.id}`}>
                       <div className="p-4 border rounded-xl hover:border-blue-500 hover:bg-blue-50/30 dark:hover:bg-blue-950/20 transition-all cursor-pointer flex flex-col justify-between h-28 shadow-sm">
                         <span className="font-bold text-gray-800 dark:text-gray-100 text-base">{c.nom}</span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400 uppercase font-semibold">{c.niveau ?? "Collège"}</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 uppercase font-semibold">{c.niveau ? niveauToLabel(c.niveau) : "Collège"}</span>
                       </div>
                     </Link>
                   ))}

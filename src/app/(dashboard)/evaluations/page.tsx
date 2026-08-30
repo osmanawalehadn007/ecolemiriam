@@ -19,6 +19,7 @@ import { getSitesForUserCached } from "@/lib/sites-cached";
 import { getSiteColorMap } from "@/lib/site-colors";
 import type { Role } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
+import { niveauToLabel } from "@/lib/niveau";
 
 export const metadata = {
   title: "Liste des examens | École Miriam",
@@ -177,7 +178,7 @@ export default async function EvaluationsPage({
                   <td className="px-4 py-3 font-bold text-gray-800 dark:text-gray-100">{ev.titre}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{ev.classe.nom}</td>
                   <td className="px-4 py-3">
-                    <Badge className="bg-orange-500 hover:bg-orange-600">{ev.classe.niveau ?? "Collège"}</Badge>
+                    <Badge className="bg-orange-500 hover:bg-orange-600">{ev.classe.niveau ? niveauToLabel(ev.classe.niveau) : "Collège"}</Badge>
                   </td>
                   <td className="px-4 py-3">
                     <div className="font-semibold text-gray-800 dark:text-gray-100">{ev.matiere.nom}</div>

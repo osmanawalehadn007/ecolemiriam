@@ -215,13 +215,14 @@ export async function genererMensualites(params: {
     return findTarif(niveau, e.siteId ?? null) !== undefined;
   });
 
-  // 2. Batch : vérifier quelles factures existent déjà (1 seule requête)
+  // 2. Batch : vérifier quelles factures mensuelles existent déjà pour ce mois
   // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
   const existingFactures = await prisma.facture.findMany({
     where: {
       tenantId,
       eleveId: { in: elevesAvecTarif.map((e) => e.id) },
-      libelle,
+      type: "MENSUALITE",
+      mois: moisKey,
     },
     select: { eleveId: true },
   });
@@ -240,6 +241,7 @@ export async function genererMensualites(params: {
     montant: number;
     devise: string;
     statut: "EN_ATTENTE";
+    type: "MENSUALITE";
     echeance: Date;
     mois: string;
     siteId: string | null;
@@ -269,6 +271,7 @@ export async function genererMensualites(params: {
       montant,
       devise: tarif.devise,
       statut: "EN_ATTENTE",
+      type: "MENSUALITE",
       echeance,
       mois: moisKey,
       siteId: eleve.siteId ?? null,
@@ -365,6 +368,7 @@ export async function genererFacturesAnnuelles(params: {
     where: {
       tenantId,
       eleveId: { in: elevesAvecTarif.map((e) => e.id) },
+      type: "MENSUALITE",
       mois: { in: moisKeys },
     },
     select: { eleveId: true, mois: true, libelle: true },
@@ -383,6 +387,7 @@ export async function genererFacturesAnnuelles(params: {
     montant: number;
     devise: string;
     statut: "EN_ATTENTE";
+    type: "MENSUALITE";
     echeance: Date;
     mois: string;
     siteId: string | null;
@@ -426,6 +431,7 @@ export async function genererFacturesAnnuelles(params: {
         montant,
         devise: tarif.devise,
         statut: "EN_ATTENTE",
+        type: "MENSUALITE",
         echeance,
         mois: moisKey,
         siteId: eleve.siteId ?? null,
@@ -530,7 +536,8 @@ export async function genererFraisInscription(params: {
     where: {
       tenantId,
       eleveId: { in: elevesAvecTarif.map((e) => e.id) },
-      libelle,
+      type,
+      mois: null,
     },
     select: { eleveId: true },
   });
@@ -549,6 +556,7 @@ export async function genererFraisInscription(params: {
     montant: number;
     devise: string;
     statut: "EN_ATTENTE";
+    type: "INSCRIPTION" | "RENOUVELLEMENT";
     echeance: Date;
     siteId: string | null;
     createdById: string;
@@ -570,6 +578,7 @@ export async function genererFraisInscription(params: {
       montant,
       devise: tarif.devise,
       statut: "EN_ATTENTE",
+      type,
       echeance,
       siteId: eleve.siteId ?? null,
       createdById: session.user.id,

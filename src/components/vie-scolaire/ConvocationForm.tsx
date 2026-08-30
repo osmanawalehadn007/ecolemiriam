@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Printer, Loader2, FileText } from "lucide-react";
+import { niveauToLabel } from "@/lib/niveau";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -113,7 +114,7 @@ export function ConvocationForm({ classes, tenant }: { classes: Classe[]; tenant
               <SelectTrigger><SelectValue placeholder={t("convocationSelect")} /></SelectTrigger>
               <SelectContent>
                 {classes.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.nom} ({c.niveau})</SelectItem>
+                  <SelectItem key={c.id} value={c.id}>{c.nom} ({niveauToLabel(c.niveau)})</SelectItem>
                 ))}
               </SelectContent>
             </Select>

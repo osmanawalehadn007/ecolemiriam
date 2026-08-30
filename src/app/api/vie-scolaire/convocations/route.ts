@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
   @page { size: A4; margin: 20mm; }
   body { font-family: 'Times New Roman', serif; color: #1a1a1a; margin: 0; padding: 20px; }
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; }
+  .logo { max-width: 80px; max-height: 80px; }
   .ecole-info { text-align: right; font-size: 11px; line-height: 1.4; }
   .ecole-info .name { font-size: 16px; font-weight: bold; }
   .title { text-align: center; font-size: 20px; font-weight: bold; text-transform: uppercase; margin: 20px 0; letter-spacing: 1px; }
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
 </head>
 <body>
   <div class="header">
-    <div style="width:80px"></div>
+    ${tenant.logoUrl ? `<img src="${tenant.logoUrl}" class="logo" alt="Logo" />` : '<div style="width:80px"></div>'}
     <div class="ecole-info">
       <div class="name">${tenant.name}</div>
       ${tenant.address ? `<div>${tenant.address}</div>` : ''}

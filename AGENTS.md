@@ -165,3 +165,46 @@ git push origin main
 5. **caddy reload avant docker restart** — zero downtime en premier, fallback seulement
 6. **ensure_upstream_files() avant toute opération Caddy** — prévient le bug répertoires Docker
 7. **Vérifier Required reviewers GitHub** — sans ça, le gate humain est inefficace
+
+### Règles d'import d'emploi du temps (système djiboutien)
+
+**Système scolaire djiboutien :**
+- Maternelle : Maternelle, PS, MS, GS
+- Primaire : 1ère à 5ème année (niveaux "1ère" à "5ème")
+- Collège : 6ème à 9ème année (niveaux "6ème" à "9ème")
+- Lycée : Seconde, Première, Terminale
+
+**Règles de parsing (import-parser.ts) :**
+
+8. **Nettoyer les durées des noms de matières** — `cleanMatiereName()` supprime
+   "40 min", "30 ou 40 min", "50 à 60 min" etc. avant le matching.
+   "Lecture 40 min" → "Lecture", jamais "Lecture 40 min" en base.
+9. **Préserver les numéros de séance** — "Lecture 1", "Lecture 2" sont des
+   séances distinctes d'une même matière. Le matching cherche d'abord le nom
+   complet ("Lecture 1"), puis le nom base ("Lecture") en fallback seulement.
+10. **Snapping non-destructif (tolérance 5 min)** — `snapCreneauToGrid()` conserve
+    l'heure originale si l'écart avec la grille est ≤ 5 min. 12:45 reste 12:45,
+    n'est pas déformé en 12:50.
+11. **Fuzzy matching strict pour l'import** — `fuzzyFindStrict()` exige ≥ 4 chars
+    pour le needle et ≥ 5 chars de préfixe commun. "Graphisme" ne matche PAS
+    "Écriture". "EM" ne matche PAS "EMT" ni "EMCI".
+12. **"1ère" = Primaire, "Première" = Lycée** — ne JAMAIS confondre. Le système
+    djiboutien utilise "1ère" pour "1ère année" (primaire) et "Première" pour
+    la classe de Première (lycée). Ces deux chaînes sont distinctes en base.
+
+### Règles d'affichage des matières
+
+13. **Afficher le nom complet, jamais le code** — Dans la grille d'emploi du
+    temps, `creneau.matiere.nom` est affiché en grand (ex: "Lecture", "Arabe",
+    "Graphisme"). Le code ("G", "AE", "AS") n'est qu'un complément minuscule.
+14. **Numéro suffixe = niveau** — Quand une matière a un numéro suffixe
+    ("Lecture 1", "Lecture 2", "Graphisme 3"), ce numéro indique le NIVEAU
+    (1-5 pour le primaire, 6-9 pour le collège, 10-12 pour le lycée).
+    `parseMatiereNiveau()` sépare le nom ("Lecture") du niveau ("1").
+    Le niveau va dans la colonne `niveau` de la matière, pas dans son nom.
+15. **Couleurs obligatoires** — Chaque matière doit avoir une couleur (`couleur`)
+    pour la distinction visuelle dans la grille. La palette étendue (15 couleurs)
+    est dans `matiereColor()` du composant `EmploiDuTempsView`.
+16. **Noms normalisés** — Les matières sont écrites en nom complet proprement :
+    "Arabe" (pas "ARABE" ni "AE"), "Anglais" (pas "ANGLAIS" ni "AS"),
+    "Poésie-Chant" (pas "POESIE/ CHANT"), "Graphisme" (pas "G").

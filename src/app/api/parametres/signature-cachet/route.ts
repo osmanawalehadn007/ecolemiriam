@@ -12,7 +12,7 @@ export async function PUT(req: NextRequest) {
   if (denied) return denied;
 
   const body = await req.json();
-  const { chefEtablissement, signatureUrl, cachetUrl } = body;
+  const { chefEtablissement, signatureUrl, cachetUrl, logoUrl } = body;
 
   const tenant = await prisma.tenant.update({
     where: { id: session.user.tenantId },
@@ -20,8 +20,9 @@ export async function PUT(req: NextRequest) {
       chefEtablissement: chefEtablissement || null,
       signatureUrl: signatureUrl || null,
       cachetUrl: cachetUrl || null,
+      logoUrl: logoUrl || null,
     },
-    select: { name: true, chefEtablissement: true, signatureUrl: true, cachetUrl: true },
+    select: { name: true, chefEtablissement: true, signatureUrl: true, cachetUrl: true, logoUrl: true },
   });
 
   return NextResponse.json(tenant);

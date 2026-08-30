@@ -43,7 +43,8 @@ const RECOM_CONFIG: Record<TypeRecom, { labelKey: string; color: string; emoji: 
   REDOUBLEMENT:         { labelKey: "recomTypes.REDOUBLEMENT",         color: "bg-red-50 text-red-800 border-red-300",          emoji: "🔄" },
 };
 
-const NIVEAU_OPTIONS = ["Seconde", "2nde", "2nd", "Troisième", "Quatrième", "Cinquième", "Sixième"];
+// Système djiboutien : 6ème-9ème (Collège), Seconde/Première/Terminale (Lycée)
+const NIVEAU_OPTIONS = ["Seconde", "Première", "Terminale", "9ème", "8ème", "7ème", "6ème"];
 
 interface NoteApi {
   valeur: number;

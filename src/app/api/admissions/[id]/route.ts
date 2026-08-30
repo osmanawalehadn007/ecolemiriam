@@ -8,6 +8,7 @@ import { auditFire } from "@/lib/audit";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { notifyDirection } from "@/lib/notifications/notify-direction";
 import { piecesRequisesPresentes } from "@/lib/admissions/pieces-justificatives";
+import { niveauToLabel } from "@/lib/niveau";
 import { formatMoisScolarite, moisScolariteDefaut, isMoisScolariteValide } from "@/lib/admissions/mois-scolarite";
 
 const UpdateSchema = z.object({
@@ -133,7 +134,7 @@ export async function PATCH(
       if (!tarif || montantTotal <= 0) {
         return NextResponse.json(
           {
-            error: `Aucun tarif actif n'est configuré pour le niveau « ${niveauTarif} » (année ${candidature.annee}). Renseignez les frais d'inscription et la mensualité dans Paramètres → Tarifs avant d'admettre ce candidat.`,
+            error: `Aucun tarif actif n'est configuré pour le niveau « ${niveauToLabel(niveauTarif)} » (année ${candidature.annee}). Renseignez les frais d'inscription et la mensualité dans Paramètres → Tarifs avant d'admettre ce candidat.`,
           },
           { status: 400 }
         );
@@ -163,6 +164,7 @@ export async function PATCH(
           montant: montantTotal,
           devise,
           statut: "EN_ATTENTE",
+          type: "INSCRIPTION",
           createdById: session.user.id,
         },
       });

@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     if (!file) {
       return NextResponse.json({ error: "Aucun fichier" }, { status: 400 });
     }
-    if (type !== "signature" && type !== "cachet") {
+    if (type !== "signature" && type !== "cachet" && type !== "logo") {
       return NextResponse.json({ error: "Type invalide" }, { status: 400 });
     }
 

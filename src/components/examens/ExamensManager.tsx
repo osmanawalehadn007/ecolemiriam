@@ -15,6 +15,7 @@ import { cn, formatDate } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { ClassSelector } from "@/components/sites/ClassSelector";
 import type { SiteColor } from "@/lib/site-colors";
+import { niveauToLabel } from "@/lib/niveau";
 
 type StatutExamen = "PROGRAMME" | "EN_COURS" | "TERMINE" | "ANNULE";
 
@@ -508,7 +509,7 @@ function ExamenCard({
                           {s.niveau && (
                             <span className="flex items-center gap-1">
                               <Users className="w-3 h-3" />
-                              {s.niveau}
+                              {niveauToLabel(s.niveau)}
                             </span>
                           )}
                         </div>
