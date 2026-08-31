@@ -329,7 +329,7 @@
     "uploading": "Téléchargement...",
     "uploadPhoto": "Télécharger une photo",
     "removePhoto": "Retirer la photo",
-    "photoHint": "JPG, PNG. 2 Mo max.",
+    "photoHint": "JPG, PNG. 5 Mo max.",
     "firstName": "Prénom",
     "lastName": "Nom",
     "firstNameRequired": "Prénom *",

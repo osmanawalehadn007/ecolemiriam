@@ -329,7 +329,7 @@
     "uploading": "Uploading...",
     "uploadPhoto": "Upload a photo",
     "removePhoto": "Remove photo",
-    "photoHint": "JPG, PNG. 2 MB max.",
+    "photoHint": "JPG, PNG. 5 MB max.",
     "firstName": "First name",
     "lastName": "Last name",
     "firstNameRequired": "First name *",

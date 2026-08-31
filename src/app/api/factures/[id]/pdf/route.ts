@@ -132,20 +132,20 @@ export async function GET(
 </head>
 <body>
   <div class="invoice">
-    <div class="header">
-      <div style="display:flex;align-items:center;gap:16px">
-        ${tenant.logoUrl ? `<img src="${tenant.logoUrl}" alt="Logo" style="max-height:56px;max-width:120px;object-fit:contain;background:white;border-radius:6px;padding:4px" />` : ""}
+    <div class="header" style="flex-direction:column;align-items:stretch">
+      ${tenant.logoUrl ? `<img src="${tenant.logoUrl}" alt="Logo" style="max-width:100%;max-height:40mm;object-fit:contain;margin:0 auto 8px" />` : ""}
+      <div style="display:flex;justify-content:space-between;align-items:center">
         <div>
           <h1>FACTURE</h1>
           <div class="inv-num">N° ${facture.numero}</div>
         </div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:13px;opacity:0.9">${new Date(facture.createdAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}</div>
-        <div style="margin-top:6px">
-          <span class="status-badge" style="background:${statutColors[facture.statut] ?? "#6b7280"}">
-            ${statutLabels[facture.statut] ?? facture.statut}
-          </span>
+        <div style="text-align:right">
+          <div style="font-size:13px;opacity:0.9">${new Date(facture.createdAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}</div>
+          <div style="margin-top:6px">
+            <span class="status-badge" style="background:${statutColors[facture.statut] ?? "#6b7280"}">
+              ${statutLabels[facture.statut] ?? facture.statut}
+            </span>
+          </div>
         </div>
       </div>
     </div>

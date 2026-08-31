@@ -33,7 +33,7 @@ export const PIECES_JUSTIFICATIVES: PieceJustificative[] = [
     id: "photo_identite",
     label: "Photo d'identité",
     accept: ["image/jpeg", "image/png", "image/webp"],
-    maxSize: 2 * 1024 * 1024, // 2 MB
+    maxSize: 5 * 1024 * 1024, // 5 MB
     required: true,
     description: "Photo d'identité récente de l'élève",
   },

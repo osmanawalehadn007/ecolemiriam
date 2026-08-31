@@ -39,6 +39,11 @@ function generateAttestationHTML(data: ReturnType<typeof getAttestationData> ext
   const dateFr = format(d.dateDelivrance, "dd MMMM yyyy", { locale: fr });
   const dateNaissance = d.eleveDateNaissance ? format(new Date(d.eleveDateNaissance), "dd/MM/yyyy", { locale: fr }) : "—";
 
+  // Accord selon le sexe de l'élève
+  const isMale = d.eleveSexe === "M";
+  const ne = isMale ? "né" : "née";
+  const inscrit = isMale ? "inscrit" : "inscrite";
+
   return `<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -47,9 +52,9 @@ function generateAttestationHTML(data: ReturnType<typeof getAttestationData> ext
 <style>
   @page { size: A4; margin: 15mm; }
   body { font-family: 'Times New Roman', serif; color: #1a1a1a; margin: 0; padding: 20px; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; }
-  .logo { max-width: 80px; max-height: 80px; }
-  .ecole-info { text-align: right; font-size: 11px; line-height: 1.4; }
+  .header { display: flex; flex-direction: column; align-items: center; margin-bottom: 30px; border-bottom: 2px solid #1e40af; padding-bottom: 10px; }
+  .logo { max-width: 100%; max-height: 40mm; object-fit: contain; }
+  .ecole-info { text-align: center; font-size: 11px; line-height: 1.4; margin-top: 6px; }
   .ecole-info .name { font-size: 16px; font-weight: bold; }
   .title { text-align: center; font-size: 22px; font-weight: bold; text-transform: uppercase; margin: 20px 0; letter-spacing: 1px; }
   .body { text-align: justify; font-size: 14px; line-height: 1.8; margin: 30px auto; max-width: 170mm; }
@@ -68,7 +73,7 @@ function generateAttestationHTML(data: ReturnType<typeof getAttestationData> ext
 </head>
 <body>
   <div class="header">
-    ${d.ecoleLogo ? `<img src="${d.ecoleLogo}" class="logo" alt="Logo" />` : '<div style="width:80px"></div>'}
+    ${d.ecoleLogo ? `<img src="${d.ecoleLogo}" class="logo" alt="Logo" />` : '<div style="height:30mm"></div>'}
     <div class="ecole-info">
       <div class="name">${d.ecoleName}</div>
       ${d.ecoleAddress ? `<div>${d.ecoleAddress}</div>` : ''}
@@ -87,7 +92,7 @@ function generateAttestationHTML(data: ReturnType<typeof getAttestationData> ext
         <td class="label">Matricule:</td><td>${d.eleveMatricule}</td>
       </tr>
       <tr>
-        <td class="label">Né(e) le:</td><td>${dateNaissance}</td>
+        <td class="label">${isMale ? "Né" : "Née"} le:</td><td>${dateNaissance}</td>
         <td class="label">Sexe:</td><td>${d.eleveSexe === "M" ? "Masculin" : "Féminin"}</td>
       </tr>
       <tr>
@@ -101,11 +106,11 @@ function generateAttestationHTML(data: ReturnType<typeof getAttestationData> ext
   </div>
 
   <div class="body">
-    <p>Je soussigné(e) <strong>${d.honorifique} ${d.chefEtablissement ?? "_______________"}</strong>,
-    Directeur(trice) de l'établissement <strong>${d.ecoleName}</strong>,</p>
+    <p>Je soussigné <strong>${d.honorifique} ${d.chefEtablissement ?? "_______________"}</strong>,
+    Directeur de l'établissement <strong>${d.ecoleName}</strong>,</p>
     <p>atteste par la présente que l'élève <strong>${d.eleveNom} ${d.elevePrenom}</strong>,
-    ${d.eleveDateNaissance ? `né(e) le ${dateNaissance},` : ""} matricule N° <strong>${d.eleveMatricule}</strong>,
-    est régulièrement inscrit(e) en classe de <strong>${d.eleveClasse}</strong> (${d.eleveNiveau})
+    ${d.eleveDateNaissance ? `${ne} le ${dateNaissance},` : ""} matricule N° <strong>${d.eleveMatricule}</strong>,
+    est régulièrement ${inscrit} en classe de <strong>${d.eleveClasse}</strong> (${d.eleveNiveau})
     pour l'année scolaire <strong>${d.annee}</strong>.</p>
     <p>En foi de quoi la présente ${d.titre.toLowerCase()} lui est délivrée pour servir et valoir ce que de droit.</p>
   </div>

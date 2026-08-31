@@ -39,8 +39,8 @@ export function BulletinAnnuelPreview({ data }: Props) {
     >
       {/* Header Info */}
       <div className="flex flex-col mb-4">
-        {/* En-tête : Logo + Infos établissement */}
-        <div className="flex justify-between items-start mb-2">
+        {/* En-tête : Logo pleine largeur + Infos établissement centrées */}
+        <div className="flex flex-col items-center mb-2 border-b-2 border-[#1e40af] pb-2">
           {/*
             `next/image` est inapplicable ici : le logo est téléversé par
             chaque établissement (URL de stockage arbitraire ou `data:`),
@@ -52,12 +52,12 @@ export function BulletinAnnuelPreview({ data }: Props) {
             <img
               src={data.ecoleLogo}
               alt="Logo"
-              className="max-h-[20mm] max-w-[30mm] object-contain"
+              className="max-h-[40mm] w-full object-contain"
             />
           ) : (
-            <div style={{ width: "30mm" }} />
+            <div style={{ height: "20mm" }} />
           )}
-          <div className="text-right text-[10px] leading-tight">
+          <div className="text-center text-[10px] leading-tight mt-1">
             <div className="font-bold text-[14px] text-[#1e40af]">{data.ecoleName}</div>
             {data.ecoleVille && (
               <div>{data.ecoleVille}{data.ecolePays ? `, ${data.ecolePays}` : ""}</div>
