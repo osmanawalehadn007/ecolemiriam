@@ -13,6 +13,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Le runner Ubuntu fournit postgresql-client-16, alors que la base
+      # Supabase tourne en 17.x. pg_dump refuse de sauvegarder un serveur plus
+      # récent que lui (« aborting because of server version mismatch ») : un
+      # dump produit par un client plus ancien pourrait être incomplet. On
+      # installe donc le client 17 depuis le dépôt PGDG.
+      # À faire évoluer si Supabase passe en 18.
+      - name: Install postgresql-client 17
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
       - name: Install age + rclone
         run: |
           wget -qO- https://github.com/FiloSottile/age/releases/download/v1.2.1/age-v1.2.1-linux-amd64.tar.gz | tar xzf - -C /tmp
