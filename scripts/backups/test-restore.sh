@@ -85,10 +85,20 @@ done
 
 # 4. Restaurer le dump
 echo "  → restauration..."
-docker cp "${TMPDIR}/dump.sql.gz" "${CONTAINER}:/tmp/dump.sql.gz"
-docker exec "$CONTAINER" bash -c \
-  "gunzip -c /tmp/dump.sql.gz | psql -U postgres -d ecolemiriam_restore_test 2>&1" \
-  | grep -v "^SET$" || true
+# backup.sh produit un dump `pg_dump --format=custom` : ce n'est pas un fichier
+# gzip malgré l'extension .sql.gz, et `gunzip | psql` échoue dessus. La
+# restauration passe par pg_restore.
+docker cp "${TMPDIR}/dump.sql.gz" "${CONTAINER}:/tmp/dump.pgcustom"
+RESTORE_RC=0
+docker exec "$CONTAINER" pg_restore \
+  --username=postgres \
+  --dbname=ecolemiriam_restore_test \
+  --no-owner \
+  --no-privileges \
+  /tmp/dump.pgcustom || RESTORE_RC=$?
+if [ "$RESTORE_RC" -ne 0 ]; then
+  echo "  ⚠ pg_restore est sorti en $RESTORE_RC — les vérifications ci-dessous trancheront."
+fi
 
 # 5. Vérifications d'intégrité
 echo "  → vérifications d'intégrité..."
@@ -109,11 +119,34 @@ USERS=$(docker exec "$CONTAINER" psql -U postgres -d ecolemiriam_restore_test -t
   -c "SELECT count(*) FROM users" 2>/dev/null || echo "N/A")
 echo "  → utilisateurs: ${USERS}"
 
-# Vérifier que les tables critiques ne sont pas vides (si la prod a des données)
-if [ "${ELEVES}" -gt 0 ] 2>/dev/null; then
-  echo "  ✓ Données élèves présentes"
+# Ces vérifications doivent pouvoir ÉCHOUER : sans cela le test sort en succès
+# même sur une base vide, et un backup jamais restauré passe pour valide.
+MIN_ELEVES="${BACKUP_MIN_ELEVES:-1}"
+ECHECS=0
+
+if ! [ "${TABLES}" -gt 0 ] 2>/dev/null; then
+  echo "  ✗ ÉCHEC: aucune table restaurée (tables=${TABLES})"
+  ECHECS=$((ECHECS + 1))
+fi
+
+if [ "${ELEVES}" -ge "${MIN_ELEVES}" ] 2>/dev/null; then
+  echo "  ✓ Données élèves présentes (${ELEVES})"
 else
-  echo "  ⚠ Aucun élève dans le backup (vérifier si c'est normal)"
+  echo "  ✗ ÉCHEC: élèves=${ELEVES}, attendu ≥ ${MIN_ELEVES}"
+  ECHECS=$((ECHECS + 1))
+fi
+
+if ! [ "${TENANTS}" -gt 0 ] 2>/dev/null; then
+  echo "  ✗ ÉCHEC: aucun tenant (tenants=${TENANTS})"
+  ECHECS=$((ECHECS + 1))
+fi
+
+if [ "$ECHECS" -gt 0 ]; then
+  echo ""
+  echo "ERREUR: la restauration n'a pas produit une base exploitable."
+  echo "RÉSUMÉ: tables=${TABLES} tenants=${TENANTS} users=${USERS} élèves=${ELEVES}"
+  docker rm -f "$CONTAINER" 2>/dev/null || true
+  exit 1
 fi
 
 # 6. Nettoyage
