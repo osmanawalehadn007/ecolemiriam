@@ -101,6 +101,10 @@ docker/keys/
 *.bak
 *.bak-*
 backups/
+# Le motif ci-dessus n'est pas ancré : il attrape aussi scripts/backups/, qui
+# contient les scripts de sauvegarde et non des dumps. Les fichiers déjà suivis
+# y survivent, mais tout nouveau fichier y serait silencieusement ignoré.
+!scripts/backups/
 docker/caddy/*.bak*
 docker/postgres/*.bak*
 docker/postgres/rclone/
