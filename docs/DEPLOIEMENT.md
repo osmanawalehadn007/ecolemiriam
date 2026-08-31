@@ -111,6 +111,19 @@ pouvait lire le PAT dans `.git/config`, et il apparaissait dans la sortie de
 `.github/scripts/ssh-retry.sh` ne réessaie que le code de sortie `255`, qui
 signale un échec de `ssh` lui-même — la commande distante n'a alors pas démarré.
 
+## Vercel
+
+Le dépôt n'est pas déployé sur Vercel. La production tourne sur GCP, décrite
+plus bas. Quatre projets Vercel (`ecol-pro`, `ecol-pro-5b6e`,
+`ecol-pro-5b6enext`, `ecolpro`) restaient branchés sur le dépôt et déclenchaient
+à chaque push des déploiements en échec, qui polluaient les pull requests d'un
+rouge permanent — le meilleur moyen de finir par ignorer les vrais échecs.
+
+`vercel.json` désactive les déploiements Git côté dépôt. Pour un nettoyage
+définitif, supprimer ou déconnecter les projets sur
+https://vercel.com/dashboard : chaque projet → *Settings* → *Git* →
+*Disconnect*.
+
 ## En cas d'incident — désactiver la protection
 
 Une barrière sans issue de secours devient un problème le jour où la
