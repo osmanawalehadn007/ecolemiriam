@@ -5,10 +5,20 @@ export interface AvailableTenant {
   tenantId: string;
   tenantName: string;
   tenantSlug: string;
-  tenantLogo: string | null;
+  /** Logo du tenant — exclu du JWT (data URL base64 trop volumineux).
+   * Chargé séparément côté client quand nécessaire. */
+  tenantLogo?: string | null;
   role: Role;
   isDefault: boolean;
 }
+
+/**
+ * Version allégée d'AvailableTenant sans le logo base64.
+ * Le logo est exclu du JWT de session car un data URL base64
+ * peut dépasser 400KB et faire exploser les cookies (>307KB limite HTTP).
+ * Le logo est chargé séparément côté client via /api/tenant-logo.
+ */
+export type AvailableTenantSlim = Omit<AvailableTenant, "tenantLogo">;
 
 /**
  * URL publique de l'application, source de vérité unique.
@@ -128,8 +138,8 @@ export const authConfig: NextAuthConfig = {
         token.siteIds = (user as { siteIds?: string[] }).siteIds ?? [];
         token.tenantHasSites = (user as { tenantHasSites?: boolean }).tenantHasSites ?? true;
         token.claimsVersion = (user as { claimsVersion?: number }).claimsVersion;
-        // Stocker la liste des tenants accessibles pour le switcher
-        const availableTenants = (user as { availableTenants?: AvailableTenant[] }).availableTenants;
+        // Stocker la liste des tenants accessibles pour le switcher (sans logo)
+        const availableTenants = (user as { availableTenants?: AvailableTenantSlim[] }).availableTenants;
         if (availableTenants) {
           token.availableTenants = availableTenants;
         }
@@ -147,7 +157,7 @@ export const authConfig: NextAuthConfig = {
         // l'isolation par site s'applique (fail-closed).
         (session.user as { tenantHasSites?: boolean }).tenantHasSites =
           (token.tenantHasSites as boolean | undefined) ?? true;
-        (session.user as { availableTenants?: AvailableTenant[] }).availableTenants = token.availableTenants as AvailableTenant[] | undefined;
+        (session.user as { availableTenants?: AvailableTenantSlim[] }).availableTenants = token.availableTenants as AvailableTenantSlim[] | undefined;
       }
       return session;
     },

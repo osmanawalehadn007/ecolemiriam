@@ -1,6 +1,6 @@
 import prismaBase from "@/lib/prisma-base";
 import type { Role } from "@prisma/client";
-import type { AvailableTenant } from "@/auth.config";
+import type { AvailableTenantSlim } from "@/auth.config";
 
 /**
  * École Miriam — Dérivation des revendications tenant/site
@@ -32,7 +32,7 @@ export interface TenantSiteClaims {
   siteIds: string[];
   /** Le tenant actif possède-t-il au moins un site ? */
   tenantHasSites: boolean;
-  availableTenants: AvailableTenant[];
+  availableTenants: AvailableTenantSlim[];
   claimsVersion: number;
 }
 
@@ -53,7 +53,7 @@ type UserWithTenants = {
     tenantId: string;
     role: Role;
     isDefault: boolean;
-    tenant: { id: string; name: string; slug: string; logoUrl: string | null };
+    tenant: { id: string; name: string; slug: string };
   }[];
 };
 
@@ -93,7 +93,7 @@ export async function deriveClaims(
           tenantId: true,
           role: true,
           isDefault: true,
-          tenant: { select: { id: true, name: true, slug: true, logoUrl: true } },
+          tenant: { select: { id: true, name: true, slug: true } },
         },
       },
     },
@@ -136,11 +136,10 @@ async function deriveClaimsFromData(
     activeTenantId = user.tenantId ?? null;
   }
 
-  const availableTenants: AvailableTenant[] = memberships.map((m) => ({
+  const availableTenants: AvailableTenantSlim[] = memberships.map((m) => ({
     tenantId: m.tenantId,
     tenantName: m.tenant.name,
     tenantSlug: m.tenant.slug,
-    tenantLogo: m.tenant.logoUrl,
     role: m.role,
     isDefault: m.isDefault,
   }));

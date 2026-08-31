@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import prismaBase, { assertDirectRoleBypassesRls } from "@/lib/prisma-base";
 import type { Role } from "@prisma/client";
-import { authConfig, type AvailableTenant } from "@/auth.config";
+import { authConfig, type AvailableTenantSlim } from "@/auth.config";
 import { deriveClaims, deriveClaimsFromUser, CLAIMS_VERSION } from "@/lib/tenant-claims";
 import { auditFire } from "@/lib/audit";
 import { verifyTOTP } from "@/lib/security/totp";
@@ -233,7 +233,7 @@ export const {
                 tenantId: true,
                 role: true,
                 isDefault: true,
-                tenant: { select: { id: true, name: true, slug: true, logoUrl: true } },
+                tenant: { select: { id: true, name: true, slug: true } },
               },
             },
           },
@@ -412,7 +412,7 @@ declare module "next-auth" {
       siteIds?: string[];
       /** Le tenant actif possède-t-il au moins un site ? */
       tenantHasSites?: boolean;
-      availableTenants?: AvailableTenant[];
+      availableTenants?: AvailableTenantSlim[];
     };
   }
 }
