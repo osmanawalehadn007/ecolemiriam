@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      promote:
+        description: "Promouvoir le slot staging en production"
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-gcp
@@ -175,15 +180,20 @@ jobs:
   # ============================================================
   # JOB 4 : Approbation manuelle — promotion en production
   # ============================================================
+  # Les règles de protection d'environnement (reviewers requis) demandent
+  # GitHub Pro sur un dépôt privé. À défaut, la porte est ici : la promotion
+  # n'a lieu que sur un lancement manuel avec l'entrée `promote` cochée. Un
+  # push sur main s'arrête donc au staging, jamais en production.
   approve:
     name: Approval Gate (Promote to Production)
     runs-on: ubuntu-latest
     needs: staging
+    if: github.event_name == 'workflow_dispatch' && inputs.promote
     environment: production
     steps:
       - name: Awaiting approval
         run: |
-          echo "✅ Approbation reçue — promotion en production..."
+          echo "✅ Promotion demandée explicitement par ${{ github.actor }}."
           echo "Le slot staging a passé tous les tests automatiques."
 
   # ============================================================
