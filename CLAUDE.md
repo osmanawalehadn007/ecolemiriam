@@ -10,7 +10,12 @@ Le point à retenir si tu ne lis rien d'autre : **un push sur `main` ne déploie
 pas en production.** Il s'arrête au slot staging. La promotion est une action
 manuelle (`gh workflow run deploy-gcp.yml -R wilsan007/EcolPro -f promote=true`).
 
-Cette séparation tient à une seule condition dans
+`main` est protégée par un ruleset : **le push direct est refusé**, tout passe
+par une pull request qui doit voir passer le contrôle `Porte de promotion
+intacte`. Cycle : `git checkout -b …`, `git push -u origin …`,
+`gh pr create --fill`, `gh pr merge --squash --delete-branch`.
+
+La séparation staging/production tient à une seule condition dans
 `.github/workflows/deploy-gcp.yml` :
 
 ```yaml
@@ -18,11 +23,10 @@ Cette séparation tient à une seule condition dans
     if: github.event_name == 'workflow_dispatch' && inputs.promote
 ```
 
-Le dépôt est privé sur un plan GitHub gratuit : ni règle de protection de
-branche, ni ruleset, ni reviewer requis n'y sont disponibles. Cette ligne est
-donc la **seule** chose qui empêche un push d'atteindre la production. Ne la
-retire pas, et ne retire pas le `needs: approve` du job `promote`.
-`.github/scripts/check-deploy-gate.sh` le vérifie en CI et au `pre-push`.
+Ne la retire pas, et ne retire pas le `needs: approve` du job `promote`.
+`.github/scripts/check-deploy-gate.sh` le vérifie au `pre-push`, dans la CI, et
+en statut requis sur les pull requests — une modification qui la supprimerait
+ne peut plus atteindre `main`.
 
 Les quatre autres règles — pas de `git pull` dans `ci-deploy-gcp.sh` côté CI,
 pas de `~` dans un chemin de credential, pas de token dans une URL de remote,

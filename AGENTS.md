@@ -8,10 +8,13 @@ fait autorité sur `docker/DEPLOYMENT-GCP.md`, `docker/DEPLOYMENT-CI.md` et
 
 L'essentiel : **un push sur `main` ne déploie pas en production**, il s'arrête
 au slot staging. La promotion est manuelle. Cette séparation repose sur une
-seule condition dans `.github/workflows/deploy-gcp.yml` (`approve.if`), le plan
-GitHub gratuit n'offrant aucune protection de branche sur un dépôt privé. Ne la
-retire pas : `.github/scripts/check-deploy-gate.sh` la vérifie en CI et au
-`pre-push`.
+seule condition dans `.github/workflows/deploy-gcp.yml` (`approve.if`). Ne la
+retire pas : `.github/scripts/check-deploy-gate.sh` la vérifie au `pre-push`,
+en CI et en statut requis sur les PR.
+
+**`main` est protégée : le push direct est refusé.** Passe par une branche et
+une pull request (`gh pr create --fill`, puis `gh pr merge --squash
+--delete-branch`).
 
 ## État de la base de données VPS (vérifié 2026-08-23)
 

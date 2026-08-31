@@ -15,11 +15,19 @@ sont disponibles (`403 Upgrade to GitHub Pro`).
 
 ## Déployer
 
-Rien de particulier — pousser suffit.
+`main` est protégée : le push direct est refusé. Tout passe par une pull
+request, y compris les commits d'un agent.
 
 ```bash
-git push origin main
+git checkout -b mon-changement
+git push -u origin mon-changement
+gh pr create --fill
+gh pr merge --squash --delete-branch
 ```
+
+La PR doit voir passer le contrôle **Porte de promotion intacte** avant de
+pouvoir être fusionnée. Aucune approbation humaine n'est exigée — la règle
+existe pour forcer le passage du garde-fou, pas pour imposer un relecteur.
 
 Le workflow enchaîne `ci-gate` → `build-and-push` → `staging`, puis **s'arrête**.
 Les jobs `approve` et `promote` apparaissent en `skipped` : c'est le
@@ -102,6 +110,22 @@ pouvait lire le PAT dans `.git/config`, et il apparaissait dans la sortie de
 `ci-deploy-gcp.sh` ni la bascule blue-green ne sont idempotents.
 `.github/scripts/ssh-retry.sh` ne réessaie que le code de sortie `255`, qui
 signale un échec de `ssh` lui-même — la commande distante n'a alors pas démarré.
+
+## En cas d'incident — désactiver la protection
+
+Une barrière sans issue de secours devient un problème le jour où la
+production est cassée à 2 h du matin. Pour reprendre le push direct :
+
+*Settings* → *Rules* → *Rulesets* → **Protection main** → *Enforcement status*
+sur **Disabled**. Ou en ligne de commande :
+
+```bash
+gh api -X PUT repos/wilsan007/EcolPro/rulesets/21158529 -f enforcement=disabled
+```
+
+Réactiver ensuite avec `-f enforcement=active`. Le ruleset n'a **aucun**
+bypass_actor : c'est délibéré, la désactivation est un geste visible et
+tracé, là où un contournement silencieux ne laisserait rien.
 
 ## Infrastructure (vérifiée le 2026-08-31)
 
