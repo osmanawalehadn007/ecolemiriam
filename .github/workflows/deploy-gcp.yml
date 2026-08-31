@@ -157,6 +157,29 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      # gcloud publie une clé SSH neuve dans le profil OS Login à chaque runner,
+      # puis se connecte aussitôt. La propagation jusqu'à la VM prend quelques
+      # secondes, et le premier SSH peut échouer en « Permission denied
+      # (publickey) » — panne aléatoire observée le 2026-08-31. On sonde donc
+      # avec une commande sans effet : réessayer un déploiement, qui n'est pas
+      # idempotent, serait bien plus risqué.
+      - name: Wait for SSH via IAP
+        run: |
+          for i in 1 2 3 4 5; do
+            if gcloud compute ssh ${{ env.GCP_INSTANCE }} \
+                 --zone=${{ env.GCP_ZONE }} \
+                 --project=${{ env.GCP_PROJECT }} \
+                 --tunnel-through-iap \
+                 --command='true'; then
+              echo "SSH prêt (tentative $i)."
+              exit 0
+            fi
+            echo "SSH pas encore prêt (tentative $i) — nouvel essai dans 15 s."
+            sleep 15
+          done
+          echo "SSH toujours indisponible après 5 tentatives."
+          exit 1
+
       # Le dépôt est synchronisé ici, et non par le script : celui-ci vit dans
       # /opt/ecolemiriam et un `git pull` lancé depuis lui réécrirait le fichier
       # que bash est en train de lire. Les commandes sont donc inline, pas dans
@@ -216,6 +239,29 @@ jobs:
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
+
+      # gcloud publie une clé SSH neuve dans le profil OS Login à chaque runner,
+      # puis se connecte aussitôt. La propagation jusqu'à la VM prend quelques
+      # secondes, et le premier SSH peut échouer en « Permission denied
+      # (publickey) » — panne aléatoire observée le 2026-08-31. On sonde donc
+      # avec une commande sans effet : réessayer un déploiement, qui n'est pas
+      # idempotent, serait bien plus risqué.
+      - name: Wait for SSH via IAP
+        run: |
+          for i in 1 2 3 4 5; do
+            if gcloud compute ssh ${{ env.GCP_INSTANCE }} \
+                 --zone=${{ env.GCP_ZONE }} \
+                 --project=${{ env.GCP_PROJECT }} \
+                 --tunnel-through-iap \
+                 --command='true'; then
+              echo "SSH prêt (tentative $i)."
+              exit 0
+            fi
+            echo "SSH pas encore prêt (tentative $i) — nouvel essai dans 15 s."
+            sleep 15
+          done
+          echo "SSH toujours indisponible après 5 tentatives."
+          exit 1
 
       # Le dépôt est synchronisé ici, et non par le script : celui-ci vit dans
       # /opt/ecolemiriam et un `git pull` lancé depuis lui réécrirait le fichier
