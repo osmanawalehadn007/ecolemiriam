@@ -32,24 +32,33 @@ PHASE="${1:-full}"
 echo "=== CI Deploy GCP — phase: $PHASE ==="
 
 # --- 1. Git pull ---
+# Le workflow CI synchronise le dépôt dans une étape distincte, AVANT d'invoquer
+# ce script, et passe CI_SKIP_GIT_SYNC=1. Sans cela le `git pull` réécrirait ce
+# fichier pendant que bash le lit au fil de l'eau : l'exécution en cours
+# continuerait sur l'ancienne logique, voire à un décalage incohérent.
+# En invocation manuelle la variable est absente et le pull a lieu comme avant.
 echo "=== 1/3 — Git pull ==="
-STASHED=false
-if git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null; then
-  echo "  Aucune modification locale à stasher."
+if [ "${CI_SKIP_GIT_SYNC:-0}" = "1" ]; then
+  echo "  Ignoré — dépôt déjà synchronisé par le workflow."
 else
-  echo "  Stash des modifications locales (tracked uniquement)..."
-  if git stash push -m "ci-deploy-gcp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>&1; then
-    STASHED=true
+  STASHED=false
+  if git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null; then
+    echo "  Aucune modification locale à stasher."
   else
-    echo "  ATTENTION: git stash a échoué — on continue sans stasher."
+    echo "  Stash des modifications locales (tracked uniquement)..."
+    if git stash push -m "ci-deploy-gcp: $(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>&1; then
+      STASHED=true
+    else
+      echo "  ATTENTION: git stash a échoué — on continue sans stasher."
+    fi
   fi
-fi
-git pull origin main 2>&1
-if [ "$STASHED" = "true" ]; then
-  if ! git stash pop 2>&1; then
-    echo "ERREUR: git stash pop a échoué (conflit). Stash conservé."
-    echo "Résoudre manuellement : cd /opt/ecolemiriam && git stash pop"
-    exit 1
+  git pull origin main 2>&1
+  if [ "$STASHED" = "true" ]; then
+    if ! git stash pop 2>&1; then
+      echo "ERREUR: git stash pop a échoué (conflit). Stash conservé."
+      echo "Résoudre manuellement : cd /opt/ecolemiriam && git stash pop"
+      exit 1
+    fi
   fi
 fi
 

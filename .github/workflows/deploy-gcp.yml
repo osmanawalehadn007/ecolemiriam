@@ -152,13 +152,25 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      # Le dépôt est synchronisé ici, et non par le script : celui-ci vit dans
+      # /opt/ecolemiriam et un `git pull` lancé depuis lui réécrirait le fichier
+      # que bash est en train de lire. Les commandes sont donc inline, pas dans
+      # un script versionné, pour qu'aucun fichier ne se modifie en s'exécutant.
+      - name: Sync code on VM
+        run: |
+          gcloud compute ssh ${{ env.GCP_INSTANCE }} \
+            --zone=${{ env.GCP_ZONE }} \
+            --project=${{ env.GCP_PROJECT }} \
+            --tunnel-through-iap \
+            --command='cd /opt/ecolemiriam && S=0; { git diff --quiet && git diff --cached --quiet; } || { git stash push -m ci-sync && S=1; }; git fetch origin main && git merge --ff-only origin/main; RC=$?; [ "$S" = 0 ] || git stash pop; exit $RC'
+
       - name: Deploy to staging slot via IAP
         run: |
           gcloud compute ssh ${{ env.GCP_INSTANCE }} \
             --zone=${{ env.GCP_ZONE }} \
             --project=${{ env.GCP_PROJECT }} \
             --tunnel-through-iap \
-            --command="/opt/ecolemiriam/docker/scripts/ci-deploy-gcp.sh staging"
+            --command="CI_SKIP_GIT_SYNC=1 /opt/ecolemiriam/docker/scripts/ci-deploy-gcp.sh staging"
 
   # ============================================================
   # JOB 4 : Approbation manuelle — promotion en production
@@ -195,13 +207,25 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      # Le dépôt est synchronisé ici, et non par le script : celui-ci vit dans
+      # /opt/ecolemiriam et un `git pull` lancé depuis lui réécrirait le fichier
+      # que bash est en train de lire. Les commandes sont donc inline, pas dans
+      # un script versionné, pour qu'aucun fichier ne se modifie en s'exécutant.
+      - name: Sync code on VM
+        run: |
+          gcloud compute ssh ${{ env.GCP_INSTANCE }} \
+            --zone=${{ env.GCP_ZONE }} \
+            --project=${{ env.GCP_PROJECT }} \
+            --tunnel-through-iap \
+            --command='cd /opt/ecolemiriam && S=0; { git diff --quiet && git diff --cached --quiet; } || { git stash push -m ci-sync && S=1; }; git fetch origin main && git merge --ff-only origin/main; RC=$?; [ "$S" = 0 ] || git stash pop; exit $RC'
+
       - name: Promote staging to production via IAP
         run: |
           gcloud compute ssh ${{ env.GCP_INSTANCE }} \
             --zone=${{ env.GCP_ZONE }} \
             --project=${{ env.GCP_PROJECT }} \
             --tunnel-through-iap \
-            --command="/opt/ecolemiriam/docker/scripts/ci-deploy-gcp.sh promote"
+            --command="CI_SKIP_GIT_SYNC=1 /opt/ecolemiriam/docker/scripts/ci-deploy-gcp.sh promote"
 
       - name: Verify production health
         run: |
