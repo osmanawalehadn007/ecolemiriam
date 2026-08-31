@@ -39,10 +39,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Node 22 minimum : jsdom 30 exige `^22.22.2 || ^24.15.0` et undici 8
+      # `>=22.19.0`, pour `worker_threads.markAsUncloneable` absent de Node 20.
+      # Sous Node 20, tous les workers vitest meurent au démarrage sur
+      # « webidl.util.markAsUncloneable is not a function » et aucun test ne
+      # s'exécute. 22 est aussi la version de l'image docker/app/Dockerfile.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
