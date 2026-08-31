@@ -25,12 +25,12 @@ const nextConfig: NextConfig = {
       // VPS uniquement : plus de netlify.app / vercel.app / pages.dev.
       // Une origine autorisée en trop est une surface CSRF ouverte.
       allowedOrigins: [
-        // L'apex doit être listé explicitement : le joker `*.ecolemiriam.com`
-        // ne couvre QUE les sous-domaines, jamais le domaine nu.
+        // L'apex est le seul domaine de production servi : `app.` et `www.`
+        // ne renvoient qu'un 301 (voir docker/caddy/Caddyfile). Les lister —
+        // a fortiori via le joker `*.ecolemiriam.com`, qui couvrait aussi
+        // `status.` — n'autorisait que des origines dont aucune requête
+        // légitime ne part, au prix d'une surface CSRF élargie.
         "ecolemiriam.com",
-        "www.ecolemiriam.com",
-        "app.ecolemiriam.com",
-        "*.ecolemiriam.com",
         ...(isProd ? [] : ["localhost:3000", "localhost:3001"]),
       ],
     },

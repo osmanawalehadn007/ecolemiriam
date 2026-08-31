@@ -53,8 +53,8 @@ cocher **Promouvoir le slot staging en production**.
 Vérifier ensuite :
 
 ```bash
-curl -sL -o /dev/null -w '%{url_effective} %{http_code}\n' https://app.ecolemiriam.com/
-curl -s https://app.ecolemiriam.com/api/health
+curl -sL -o /dev/null -w '%{url_effective} %{http_code}\n' https://ecolemiriam.com/
+curl -s https://ecolemiriam.com/api/health
 ```
 
 Attendu : redirection vers `/login` en `200`, et `{"ok":true}`.
@@ -86,6 +86,16 @@ Elles existent parce que chacune correspond à une panne réellement survenue.
 production. `.github/scripts/check-deploy-gate.sh` le vérifie dans la CI et au
 `pre-push` ; si tu dois la changer, adapte aussi ce contrôle et dis-le dans le
 message de commit.
+
+**Ne servir l'application que sur l'apex `ecolemiriam.com`.** `app.` et
+`www.` ne doivent renvoyer qu'une redirection 301 (Caddyfile, matcher
+`@hors_canonique`). Servir l'application sur deux hôtes rendait la connexion
+impossible depuis un ancien signet : Auth.js pose le cookie de session sur
+l'hôte exact — sans attribut `domain` — puis redirige vers `AUTH_URL`, donc
+vers l'apex, où ce cookie n'existe pas. L'utilisateur revenait sur `/login`
+avec le bon mot de passe et sans le moindre message d'erreur. Conserver
+l'ingress `app.ecolemiriam.com` dans `cloudflared/config.yml` : il porte la
+redirection ; le retirer rendrait les anciens signets muets.
 
 **Ne pas remettre de `git pull` dans `ci-deploy-gcp.sh`** pour le chemin CI. Ce
 script vit dans `/opt/ecolemiriam` : un `git pull` lancé depuis lui réécrit le

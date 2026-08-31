@@ -8,7 +8,7 @@
 # Ingress rules :
 #   - ecolemiriam.com        → http://caddy:8080  (canonique)
 #   - www.ecolemiriam.com    → http://caddy:8080
-#   - app.ecolemiriam.com    → http://caddy:8080  (transition)
+#   - app.ecolemiriam.com    → http://caddy:8080  (301 vers l'apex)
 #   - status.ecolemiriam.com → http://caddy:8081  (access policy requise)
 #
 # Sécurité Cloudflare (configurée via API — cloudflare-setup.sh) :
@@ -42,10 +42,16 @@ ingress:
       connectTimeout: 10s
       keepAliveTimeout: 30s
 
-  # --- Ancien domaine, conservé le temps de la transition ---
-  # Les signets et sessions en cours continuent de fonctionner. Auth.js
-  # ramènera les utilisateurs sur AUTH_URL (l'apex) au prochain callback.
-  # Supprimable une fois la bascule confirmée.
+  # --- Ancien domaine : ne sert plus qu'une redirection 301 ---
+  # Caddy renvoie tout `app.ecolemiriam.com` vers l'apex (voir Caddyfile,
+  # matcher `@hors_canonique`). Cet ingress doit être CONSERVÉ : sans lui le
+  # tunnel répond 404 et les anciens signets deviennent muets au lieu d'être
+  # redirigés.
+  #
+  # Ne pas revenir à un service direct de l'application ici. Le faire remet en
+  # place la boucle de connexion : le cookie de session est posé sur l'hôte
+  # exact, Auth.js redirige ensuite vers AUTH_URL (l'apex), et la session est
+  # perdue en chemin — connexion impossible, sans aucun message d'erreur.
   - hostname: app.ecolemiriam.com
     service: http://caddy:8080
     originRequest:

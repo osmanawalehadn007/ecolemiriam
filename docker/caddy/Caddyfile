@@ -18,7 +18,7 @@
 }
 
 # ============================================================
-# Proxy principal : app.ecolemiriam.com
+# Proxy principal : ecolemiriam.com (apex, seul domaine de production)
 # ============================================================
 :8080 {
 	# Pas de TLS ici — cloudflared se connecte en HTTP (service: http://caddy:8080).
@@ -53,6 +53,34 @@
 	# Chemin réel des assets : /_next/static (underscore), pas /.next/static.
 	@static path /_next/static/*
 	header @static Cache-Control "public, max-age=31536000, immutable"
+
+	# --- Domaine canonique : tout ramener sur l'apex ---
+	# `app.ecolemiriam.com` servait l'application à l'identique, et c'est ce qui
+	# rendait la connexion impossible depuis un ancien signet :
+	#
+	#   1. l'utilisateur ouvre https://app.ecolemiriam.com/login ;
+	#   2. il s'authentifie — Auth.js pose le cookie de session SANS attribut
+	#      `domain`, donc limité à l'hôte exact `app.ecolemiriam.com` ;
+	#   3. Auth.js redirige ensuite vers AUTH_URL, c'est-à-dire l'apex ;
+	#   4. sur l'apex, ce cookie n'existe pas : le middleware renvoie sur /login.
+	#
+	# La boucle est silencieuse — aucun message d'erreur, le mot de passe est
+	# pourtant le bon. Le commentaire de `cloudflared/config.yml` pariait sur
+	# « Auth.js ramènera les utilisateurs sur l'apex au prochain callback » :
+	# il les y ramène en effet, mais sans leur session.
+	#
+	# Le 301 doit rester servi (et l'ingress du tunnel conservé) : le retirer
+	# rendrait les anciens signets muets au lieu de les rediriger.
+	# Le matcher liste les hôtes publics explicitement plutôt que d'écrire
+	# `not host ecolemiriam.com` : Caddy est aussi interrogé en interne en
+	# `Host: localhost:8080` — par la sonde de disponibilité de
+	# `blue-green-deploy-gcp.sh`, qui attend « OK » sur /health. Un matcher
+	# par la négative aurait redirigé cette sonde vers l'apex public et fait
+	# échouer chaque déploiement.
+	@hors_canonique host app.ecolemiriam.com www.ecolemiriam.com
+	handle @hors_canonique {
+		redir https://ecolemiriam.com{uri} permanent
+	}
 
 	# --- Rate limiting ---
 	# Keyé sur CF-Connecting-IP (positionné par Cloudflare à l'edge) car
