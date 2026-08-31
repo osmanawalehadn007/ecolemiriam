@@ -1,5 +1,18 @@
 # Logiciel EcolPro — Règles du projet
 
+## Déploiement — lire avant de toucher à la CI ou à l'infra
+
+**Procédure de référence : [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md)**, qui
+fait autorité sur `docker/DEPLOYMENT-GCP.md`, `docker/DEPLOYMENT-CI.md` et
+`docker/RUNBOOK.md` — dont certaines parties sont périmées.
+
+L'essentiel : **un push sur `main` ne déploie pas en production**, il s'arrête
+au slot staging. La promotion est manuelle. Cette séparation repose sur une
+seule condition dans `.github/workflows/deploy-gcp.yml` (`approve.if`), le plan
+GitHub gratuit n'offrant aucune protection de branche sur un dépôt privé. Ne la
+retire pas : `.github/scripts/check-deploy-gate.sh` la vérifie en CI et au
+`pre-push`.
+
 ## État de la base de données VPS (vérifié 2026-08-23)
 
 **IMPORTANT:** La base de données VPS contient TOUTES les données métier. Ne JAMAIS supposer que la DB est vide sans vérifier via le rôle owner (DIRECT_URL, port 15432).

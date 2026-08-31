@@ -1,0 +1,27 @@
+name: Guard (garde-fous)
+
+# Vérifie que la porte de promotion en production n'a pas été retirée du
+# workflow de déploiement. Sur un dépôt privé au plan gratuit, aucune règle
+# de branche ni reviewer requis n'est disponible : cette porte est la seule
+# barrière, et elle vit dans un fichier que n'importe quel push peut modifier.
+# Ce job ne rend pas la barrière infranchissable, il la rend bruyante.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-gate:
+    name: Porte de promotion intacte
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Vérifier la porte de promotion
+        run: .github/scripts/check-deploy-gate.sh

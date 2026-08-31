@@ -1,5 +1,19 @@
 # École Miriam — Déploiement sur Google Cloud (Compute Engine)
 
+> **⚠️ Document de provisionnement, partiellement périmé.**
+>
+> Il décrit la création initiale de la VM et n'a jamais été réconcilié avec
+> l'infrastructure réellement déployée. Toutes ses commandes visent
+> `ecolemiriam-prod` en `europe-west1-b`, alors que la VM existante est
+> **`ecolpro-prod` en `us-central1-a`** — les appliquer telles quelles ne
+> touchera pas la bonne machine.
+>
+> Pour déployer, promouvoir ou revenir en arrière, voir
+> **[docs/DEPLOIEMENT.md](../docs/DEPLOIEMENT.md)**, qui fait autorité.
+>
+> Ce fichier est conservé pour l'historique du provisionnement et le
+> raisonnement sur le choix de région.
+
 Variante GCP de [DEPLOYMENT-VPS.md](./DEPLOYMENT-VPS.md). Seules les étapes
 **0 (créer le serveur)** et **8 (firewall)** changent : à partir de l'étape 2
 (Cloudflare), le guide VPS s'applique tel quel.

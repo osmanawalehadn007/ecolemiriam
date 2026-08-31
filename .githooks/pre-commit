@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# ============================================================
+# École Miriam — Pre-commit hook
+# ============================================================
+# Bloque un commit s'il contient des marqueurs de conflit Git
+# (<<<<<<< / ======= / >>>>>>>) dans des fichiers stagés.
+#
+# Ce hook est la PREMIÈRE ligne de défense contre le problème qui a
+# causé l'indisponibilité du 22/08/2026 : un `git stash pop` a laissé
+# des marqueurs de conflit dans le Caddyfile, qui a ensuite été déployé
+# en production, causant des erreurs 502 pendant plusieurs heures.
+# ============================================================
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+# Fichiers stagés (ajoutés/modifiés, pas supprimés)
+STAGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
+
+if [ -z "$STAGED" ]; then
+  exit 0
+fi
+
+# ── 1. Marqueurs de conflit Git ──────────────────────────────
+# On cherche les lignes qui commencent par <<<<<<< , >>>>>>> , ou =======
+# (exactement 7 caractères suivis d'un espace ou fin de ligne).
+# On utilise git diff --cached pour ne scanner que les changements stagés.
+CONFLICT_OUTPUT=$(echo "$STAGED" | while IFS= read -r file; do
+  [ -f "$file" ] || continue
+  # grep -E (POSIX étendu, portable macOS/Linux), -n pour le numéro de ligne
+  matches=$(grep -nE '^<{7} |^>{7} |^={7}$' "$file" 2>/dev/null || true)
+  if [ -n "$matches" ]; then
+    echo "  $file:"
+    echo "$matches" | while IFS= read -r line; do
+      echo "    $line"
+    done
+  fi
+done)
+
+if [ -n "$CONFLICT_OUTPUT" ]; then
+  echo -e "${RED}[PRE-COMMIT] ERREUR : marqueurs de conflit Git détectés${NC}"
+  echo ""
+  echo "Les fichiers suivants contiennent des marqueurs <<<<<<< ======= >>>>>>> :"
+  echo "$CONFLICT_OUTPUT"
+  echo ""
+  echo "Résolvez les conflits avant de commit :"
+  echo "  git status              # voir les fichiers en conflit"
+  echo "  git diff                # voir les marqueurs"
+  echo "  # Éditez chaque fichier, supprimez les marqueurs"
+  echo "  git add <fichier>       # re-stage après résolution"
+  exit 1
+fi
+
+# ── 2. Validation Caddyfile (si modifié et Caddy tourne) ─────
+CADDYFILE="docker/caddy/Caddyfile"
+if echo "$STAGED" | grep -qx "$CADDYFILE"; then
+  if command -v docker &>/dev/null && docker ps --format '{{.Names}}' 2>/dev/null | grep -q ecolemiriam-caddy; then
+    if ! docker exec ecolemiriam-caddy caddy validate --config /etc/caddy/Caddyfile 2>/dev/null; then
+      echo -e "${RED}[PRE-COMMIT] ERREUR : Caddyfile invalide (caddy validate a échoué)${NC}"
+      exit 1
+    fi
+  fi
+fi
+
+echo -e "${GREEN}[PRE-COMMIT] OK — aucun marqueur de conflit détecté${NC}"
+exit 0
