@@ -28,7 +28,11 @@ set -euo pipefail
 
 AGE_KEY_PRIVATE="${BACKUP_AGE_KEY_PRIVATE:?BACKUP_AGE_KEY_PRIVATE est requis (clé privée age)}"
 REMOTE="${BACKUP_RCLONE_REMOTE:-ecolemiriam-backup}"
-HOSTNAME=$(hostname -s)
+# Voir backup.sh : le bucket fait partie du chemin sur un remote s3, et le
+# préfixe est fixe parce que le nom d'hôte d'un runner CI change à chaque run.
+BUCKET="${BACKUP_RCLONE_BUCKET:-ecolemiriam}"
+DEST="${REMOTE}:${BUCKET}"
+PREFIX="ecolemiriam-ci"
 TMPDIR=$(mktemp -d)
 CONTAINER="ecolemiriam-restore-test-$$"
 
@@ -38,19 +42,23 @@ echo "[$(date -u +%FT%TZ)] Début du test de restauration"
 
 # 1. Trouver et télécharger le backup le plus récent
 echo "  → recherche du backup le plus récent..."
-LATEST=$(rclone lsf "${REMOTE}:/" \
-  --include "ecolemiriam-${HOSTNAME}-*.sql.gz.age" \
-  --sort-by modtime \
+# `lsf` n'a pas de drapeau de tri : on demande la date de modification en
+# préfixe (--format tp) et on trie nous-mêmes.
+LATEST=$(rclone lsf "${DEST}/" \
+  --include "${PREFIX}-*.sql.gz.age" \
+  --format "tp" \
+  --separator "|" \
+  --files-only \
   --max-depth 1 \
-  | head -1)
+  | sort -r | head -1 | cut -d"|" -f2)
 
 if [ -z "$LATEST" ]; then
-  echo "ERREUR: aucun backup trouvé sur ${REMOTE}"
+  echo "ERREUR: aucun backup trouvé sur ${DEST}"
   exit 1
 fi
 echo "  → backup: ${LATEST}"
 
-rclone copy "${REMOTE}:/${LATEST}" "$TMPDIR/"
+rclone copy "${DEST}/${LATEST}" "$TMPDIR/"
 BACKUP_FILE="${TMPDIR}/${LATEST}"
 
 # 2. Déchiffrement

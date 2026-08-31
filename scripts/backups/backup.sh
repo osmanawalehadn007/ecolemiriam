@@ -27,11 +27,19 @@ set -euo pipefail
 DIRECT_URL="${DIRECT_URL:?DIRECT_URL est requis (URL Postgres directe)}"
 AGE_KEY="${BACKUP_AGE_KEY:?BACKUP_AGE_KEY est requis (clé publique age)}"
 REMOTE="${BACKUP_RCLONE_REMOTE:-ecolemiriam-backup}"
+# Le remote rclone est de type s3 (Cloudflare R2) : le bucket fait partie du
+# chemin, il n'est pas dans la configuration du remote. Sans lui, rclone prend
+# le nom du fichier pour un bucket et échoue en « Key must not be empty ».
+BUCKET="${BACKUP_RCLONE_BUCKET:-ecolemiriam}"
+DEST="${REMOTE}:${BUCKET}"
 RETENTION="${BACKUP_RETENTION_DAYS:-30}"
 
 TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
-HOSTNAME=$(hostname -s)
-FILENAME="ecolemiriam-${HOSTNAME}-${TIMESTAMP}.sql.gz.age"
+# Préfixe fixe, et non le nom d'hôte : sur un runner CI il change à chaque
+# exécution, ce qui rendait la rétention et le test de restauration incapables
+# de retrouver les sauvegardes précédentes.
+PREFIX="ecolemiriam-ci"
+FILENAME="${PREFIX}-${TIMESTAMP}.sql.gz.age"
 TMPDIR=$(mktemp -d)
 TMPFILE="${TMPDIR}/dump.sql.gz"
 
@@ -63,14 +71,14 @@ echo "  → chiffrement age..."
 age --encrypt --recipient "$AGE_KEY" "$TMPFILE" > "${TMPFILE}.age"
 
 # 3. Upload off-site via rclone
-echo "  → upload rclone → ${REMOTE}:${FILENAME}"
-rclone copy "${TMPFILE}.age" "${REMOTE}:/" \
+echo "  → upload rclone → ${DEST}/${FILENAME}"
+rclone copy "${TMPFILE}.age" "${DEST}/" \
   --no-traverse \
   --transfers 1 \
   --retries 3
 
 # 4. Vérification : lister le fichier distant et comparer la taille
-REMOTE_SIZE=$(rclone size "${REMOTE}:/${FILENAME}" --json 2>/dev/null \
+REMOTE_SIZE=$(rclone size "${DEST}/${FILENAME}" --json 2>/dev/null \
   | grep -o '"bytes":[0-9]*' | grep -o '[0-9]*' || echo 0)
 LOCAL_SIZE=$(stat -f%z "${TMPFILE}.age" 2>/dev/null || stat -c%s "${TMPFILE}.age" 2>/dev/null)
 
@@ -82,8 +90,8 @@ echo "  → upload vérifié: $LOCAL_SIZE octets"
 
 # 5. Nettoyage off-site : supprimer les backups > RETENTION_DAYS
 echo "  → nettoyage off-site (rétention ${RETENTION} jours)..."
-rclone delete "${REMOTE}:/" \
-  --include "ecolemiriam-${HOSTNAME}-*.sql.gz.age" \
+rclone delete "${DEST}/" \
+  --include "${PREFIX}-*.sql.gz.age" \
   --min-age "${RETENTION}d" \
   --rmdirs=false
 
