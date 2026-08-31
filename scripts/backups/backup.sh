@@ -72,7 +72,10 @@ age --encrypt --recipient "$AGE_KEY" "$TMPFILE" > "${TMPFILE}.age"
 
 # 3. Upload off-site via rclone
 echo "  → upload rclone → ${DEST}/${FILENAME}"
-rclone copy "${TMPFILE}.age" "${DEST}/" \
+# `copyto` et non `copy` : `copy` conserve le nom de base de la source, soit
+# dump.sql.gz.age, ce qui déposait toujours le même objet — une seule
+# sauvegarde écrasée à chaque exécution, et jamais vue par la rétention.
+rclone copyto "${TMPFILE}.age" "${DEST}/${FILENAME}" \
   --no-traverse \
   --transfers 1 \
   --retries 3
