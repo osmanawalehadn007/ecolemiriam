@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { useTranslations } from "next-intl";
+import { openPrintWindow } from "@/lib/print-window";
 
 interface Classe {
   id: string;
@@ -83,12 +84,8 @@ export function ConvocationForm({ classes, tenant }: { classes: Classe[]; tenant
         throw new Error(data.error ?? t("convocationError"));
       }
       const data = await res.json();
-      const w = window.open("", "_blank");
-      if (w) {
-        w.document.write(data.html);
-        w.document.close();
-        w.focus();
-        setTimeout(() => w.print(), 500);
+      if (!openPrintWindow(data.html)) {
+        toast.error(t("convocationError"));
       }
       toast.success(t("convocationGenerated"));
     } catch (e: unknown) {
