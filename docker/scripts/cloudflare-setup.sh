@@ -112,9 +112,20 @@ echo ""
 # ============================================================
 log "1/8 — Vérification du token API..."
 
+# Un token appartenant au compte (Manage Account → API Tokens) n'est pas
+# visible depuis /user/tokens/verify, qui ne connaît que les tokens de profil :
+# l'appel renvoie « Invalid API Token » pour un token parfaitement valide, et le
+# script s'arrêtait ici, à l'étape 1 sur 8, sur un diagnostic faux. On tente
+# donc les deux portées et l'on n'échoue que si aucune ne reconnaît le token.
 VERIFY_RESP=$(cf_api GET "/user/tokens/verify")
 if ! cf_check_success "$VERIFY_RESP"; then
-  err "Token API invalide ou expiré"
+  if [ -n "${CF_ACCOUNT_ID:-}" ]; then
+    VERIFY_RESP=$(cf_api GET "/accounts/${CF_ACCOUNT_ID}/tokens/verify")
+  fi
+  if ! cf_check_success "$VERIFY_RESP"; then
+    err "Token API invalide ou expiré (portées utilisateur et compte testées).
+     Si le token appartient au compte, renseignez CF_ACCOUNT_ID dans .cf-token.env."
+  fi
 fi
 log "  → Token API valide ✓"
 
