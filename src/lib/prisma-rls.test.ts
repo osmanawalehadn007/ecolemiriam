@@ -205,12 +205,22 @@ describe.skipIf(!RLS_ACTIVE)("RLS — isolation inter-tenant", () => {
     expect(ids).toContain(eleveA2.id);
   });
 
-  it("ne voit pas les tenants étrangers", async () => {
-    const tenants = await runWithTenant(tenantA.id, null, () =>
-      prismaWithRls.tenant.findMany()
+  it("isole les données métier, Tenant restant délibérément exempté", async () => {
+    // `Tenant` est dans EXEMPT_MODELS à dessein : la résolution d'appartenance
+    // au login et la bascule de tenant interrogent volontairement d'autres
+    // tenants que le courant. `tenant.findMany()` renvoie donc tout — ce n'est
+    // pas une fuite, c'est la contrepartie assumée de ce choix.
+    // Ce test fige la décision : si l'exemption saute, il faudra statuer sur le
+    // login sciemment, pas le découvrir en production.
+    const { EXEMPT_MODELS } = await import("@/lib/prisma-rls");
+    expect(EXEMPT_MODELS.has("Tenant")).toBe(true);
+
+    // L'isolation reste garantie sur les modèles métier, eux non exemptés.
+    const eleves = await runWithTenant(tenantA.id, null, () =>
+      prismaWithRls.eleve.findMany({ select: { id: true, tenantId: true } })
     );
-    expect(tenants.length).toBe(1);
-    expect(tenants[0].id).toBe(tenantA.id);
+    expect(eleves.length).toBeGreaterThan(0);
+    expect(eleves.every((e) => e.tenantId === tenantA.id)).toBe(true);
   });
 
   it("getCurrentRlsContext retourne le contexte actif", async () => {

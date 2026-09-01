@@ -285,7 +285,15 @@ export async function runWithTenant<T>(
   // vides. On conserve d'abord un rôle déjà présent dans le contexte
   // englobant, sinon celui passé explicitement.
   const inherited = rlsStorage.getStore()?.role ?? null;
-  return rlsStorage.run({ tenantId, siteId, role: role ?? inherited }, fn);
+  // Le `await` doit avoir lieu À L'INTÉRIEUR du scope ALS. Une PrismaPromise
+  // est paresseuse : elle ne déclenche la requête qu'au `.then()`. Avec
+  // `rlsStorage.run(ctx, fn)`, une lambda concise — `() => prisma.eleve.findMany()`
+  // — crée la promesse dans le scope mais la laisse exécuter en dehors : le
+  // contexte tenant est alors introuvable et l'extension lève « contexte tenant
+  // manquant ». L'enveloppe async force la résolution dans le scope.
+  // Les fonctions `async` passées par le reste du code étaient déjà correctes
+  // (elles démarrent immédiatement) ; cette enveloppe couvre les deux formes.
+  return rlsStorage.run({ tenantId, siteId, role: role ?? inherited }, async () => await fn());
 }
 
 /**
