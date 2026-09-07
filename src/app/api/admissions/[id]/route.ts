@@ -120,7 +120,7 @@ export async function PATCH(
           actif: true,
           OR: [{ siteId: candidature.siteId ?? null }, { siteId: null }],
         },
-        orderBy: { siteId: "desc" }, // privilégier le tarif spécifique au site
+        orderBy: { siteId: { sort: "desc", nulls: "last" } }, // privilégier le tarif spécifique au site (NULLs en dernier sur Postgres)
       });
 
       // Garde-fou : sans tarif configuré (ou tarif à 0), la facture serait vide
@@ -165,6 +165,10 @@ export async function PATCH(
           devise,
           statut: "EN_ATTENTE",
           type: "INSCRIPTION",
+          // Rattacher la facture au mois de scolarité inclus (ex: "2026-09")
+          // pour qu'elle apparaisse dans la vue mensuelle et que genererMensualites
+          // puisse détecter le doublon (sinon mois=null → invisible + double facturation).
+          mois: moisScolarite,
           createdById: session.user.id,
         },
       });

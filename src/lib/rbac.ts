@@ -36,7 +36,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "eleves:*", "parents:*", "enseignants:*", "classes:*", "matieres:*",
     "notes:*", "evaluations:*", "bulletins:*", "absences:*", "examens:*",
     "emploi-du-temps:*", "communication:*", "messages:*", "vie-scolaire:*",
-    "admissions:*", "rh:*", "finance:*", "inventaire:*", "alumni:*",
+    "admissions:*", "rh:*", "finance:*", "finance:approve", "inventaire:*", "alumni:*",
     "orientation:*", "cours:*", "analytics:*", "rapports:*", "documents:*",
     "ai:*", "audit:read", "parametres:*", "structures:*",
     "cahier-texte:*", "export:full",
@@ -44,11 +44,12 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
 
   // Chef d'établissement — pédagogie & vie scolaire complètes, pas la finance/RH en écriture
+  // mais peut approuver les annulations de paiement (finance:approve)
   PRINCIPAL: [
     "eleves:*", "parents:*", "enseignants:*", "classes:*", "matieres:*",
     "notes:*", "evaluations:*", "bulletins:*", "absences:*", "examens:*",
     "emploi-du-temps:*", "communication:*", "messages:*", "vie-scolaire:*",
-    "admissions:*", "rh:read", "finance:read", "inventaire:*", "alumni:*",
+    "admissions:*", "rh:read", "finance:read", "finance:approve", "inventaire:*", "alumni:*",
     "orientation:*", "cours:*", "analytics:*", "rapports:*", "documents:*",
     "ai:*", "parametres:read", "structures:read",
     "cahier-texte:*",

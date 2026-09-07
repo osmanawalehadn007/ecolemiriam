@@ -110,11 +110,11 @@ prisma.tarifNiveau.findFirst({
     actif: true,
     OR: [{ siteId: candidature.siteId ?? null }, { siteId: null }],
   },
-  orderBy: { siteId: "desc" }, // privilégier le tarif spécifique au site
+  orderBy: { siteId: { sort: "desc", nulls: "last" } }, // privilégier le tarif spécifique au site
 })
 ```
 
-**Nuance** : le `OR` accepte soit un tarif spécifique au site, soit un tarif partagé (`siteId: null`). L'`orderBy: { siteId: "desc" }` fait que **le tarif spécifique au site gagne** s'il existe (les NULLs trient en dernier en desc sur Postgres — à vérifier selon le SGBD, mais c'est l'intention).
+**Nuance** : le `OR` accepte soit un tarif spécifique au site, soit un tarif partagé (`siteId: null`). L'`orderBy: { siteId: { sort: "desc", nulls: "last" } }` fait que **le tarif spécifique au site gagne** s'il existe. Sans `nulls: "last"`, Postgres trie les NULLs en premier en `DESC` — le tarif partagé écraserait le tarif spécifique (bug corrigé le 2026-09-07).
 
 **d) Garde-fou tarif** (lignes 124-136) — **BLOCAGE HARD** :
 
@@ -259,7 +259,7 @@ Côté UI (ligne 293-296), si `statut === "INSCRIT" && eleveCreeId` → toast sp
 
 2. **Résolution niveau vs nom de classe** — `TarifNiveau.niveau` ≠ `Classe.nom`. Il faut toujours passer par `Classe.niveau`. Fallback sur `classeVoulue` brut si classe introuvable (candidature publique).
 
-3. **Tarif site-spécifique vs partagé** — le `OR: [{ siteId }, { siteId: null }]` + `orderBy: { siteId: "desc" }` est crucial. Sans le `OR`, un tarif partagé serait ignoré et la facture tomberait à 0 → blocage.
+3. **Tarif site-spécifique vs partagé** — le `OR: [{ siteId }, { siteId: null }]` + `orderBy: { siteId: { sort: "desc", nulls: "last" } }` est crucial. Sans le `OR`, un tarif partagé serait ignoré et la facture tomberait à 0 → blocage. Sans `nulls: "last"`, Postgres trie les NULLs en premier en `DESC` et le tarif partagé écrase le tarif spécifique (bug corrigé le 2026-09-07).
 
 4. **Garde-fou tarif à 0** — bloque l'admission plutôt que de créer une facture inexploitable. Ne pas supprimer.
 

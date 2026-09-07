@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -53,10 +52,16 @@ interface ExistingFacture {
   montant: number;
 }
 
+// Tarif transport fixe pour tout l'établissement (tous sites confondus)
+const TARIF_TRANSPORT_FIXE = 4000;
+
 const MOIS_NOMS = [
   "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
 ];
+
+// Mois scolaires dans l'ordre de l'année scolaire (septembre → juin)
+const MOIS_SCOLAIRES_ORDRE = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6];
 
 const TYPES_MENSUELS: FactureType[] = ["MENSUALITE", "CANTINE", "TRANSPORT"];
 const TYPE_EXCLUSIVE: Record<FactureType, FactureType[]> = {
@@ -83,7 +88,8 @@ export function FactureForm({
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
   const [selectedServices, setSelectedServices] = useState<FactureType[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
+  // Multi-mois : Set de clés "YYYY-MM" (ex: "2026-09")
+  const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set());
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [form, setForm] = useState<{ eleveId: string }>({
     eleveId: eleveIdPreselected ?? "",
@@ -139,8 +145,6 @@ export function FactureForm({
     return map;
   }, [existing]);
 
-  const moisKey = useMemo(() => `${selectedYear}-${String(selectedMonth).padStart(2, "0")}`, [selectedYear, selectedMonth]);
-
   // Bloque un service s'il est déjà facturé (non annulé) — et définit son statut
   function getExistingFor(type: FactureType, mois?: string) {
     const key = TYPES_MENSUELS.includes(type) && mois ? `${type}:${mois}` : type;
@@ -160,6 +164,7 @@ export function FactureForm({
   function handleStudentChange(eleveId: string) {
     setForm({ eleveId });
     setSelectedServices([]);
+    setSelectedMonths(new Set());
     setErrors({});
     const eleve = eleves.find((e) => e.id === eleveId);
     if (eleve?.classe?.id) setSelectedClasseId(eleve.classe.id);
@@ -180,24 +185,82 @@ export function FactureForm({
     });
   }
 
+  // Année scolaire de départ (septembre de l'année sélectionnée)
+  const anneeScolaireStart = useMemo(() => {
+    // Si on est entre janvier et août, l'année scolaire a commencé l'année précédente
+    const now = new Date();
+    return now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+  }, []);
+
+  // Construire la liste des mois scolaires avec leur clé "YYYY-MM"
+  const moisScolaires = useMemo(() => {
+    return MOIS_SCOLAIRES_ORDRE.map((m) => {
+      const year = m >= 9 ? anneeScolaireStart : anneeScolaireStart + 1;
+      const key = `${year}-${String(m).padStart(2, "0")}`;
+      return { monthNum: m, year, key, label: `${MOIS_NOMS[m - 1]} ${year}` };
+    });
+  }, [anneeScolaireStart]);
+
+  // Basculer la sélection d'un mois pour la MENSUALITE
+  function toggleMonth(moisKey: string) {
+    setSelectedMonths((prev) => {
+      const next = new Set(prev);
+      if (next.has(moisKey)) {
+        next.delete(moisKey);
+      } else {
+        // Ne pas ajouter si déjà facturé (verrouillé)
+        const existingFor = existingByKey.get(`MENSUALITE:${moisKey}`);
+        if (existingFor && existingFor.statut !== "ANNULEE") return next;
+        next.add(moisKey);
+      }
+      return next;
+    });
+  }
+
   // Construction des factures à créer à partir des services sélectionnés
   const drafts = useMemo(() => {
     if (!selectedEleve || !matchedTarif) return [];
-    const moisNom = MOIS_NOMS[selectedMonth - 1];
 
     const result: { type: FactureType; libelle: string; montant: number; devise: string; mois: string | null }[] = [];
 
     for (const service of selectedServices) {
+      // Services mensuels : une facture par mois sélectionné
+      if (TYPES_MENSUELS.includes(service)) {
+        const sortedMonths = [...selectedMonths].sort();
+        for (const mk of sortedMonths) {
+          const [yr, mo] = mk.split("-").map(Number);
+          const mnNom = MOIS_NOMS[mo - 1];
+          let montant = 0;
+          let libelle = "";
+          switch (service) {
+            case "MENSUALITE":
+              montant = matchedTarif.mensualite;
+              libelle = `Scolarité ${mnNom} ${yr}`;
+              break;
+            case "CANTINE":
+              montant = matchedTarif.fraisCantine ?? 0;
+              libelle = `Cantine ${mnNom} ${yr}`;
+              break;
+            case "TRANSPORT":
+              montant = TARIF_TRANSPORT_FIXE;
+              libelle = `Transport ${mnNom} ${yr}`;
+              break;
+          }
+          const key = `${service}:${mk}`;
+          const existingFor = existingByKey.get(key) ?? null;
+          const locked = existingFor !== null && existingFor.statut !== "ANNULEE";
+          if (montant > 0 && !locked) {
+            result.push({ type: service, libelle, montant, devise: matchedTarif.devise, mois: mk });
+          }
+        }
+        continue;
+      }
+
+      // Services non mensuels
       let libelle = "";
       let montant = 0;
-      let mois: string | null = null;
 
       switch (service) {
-        case "MENSUALITE":
-          montant = matchedTarif.mensualite;
-          libelle = `Scolarité ${moisNom} ${selectedYear}`;
-          mois = moisKey;
-          break;
         case "INSCRIPTION":
           montant = matchedTarif.fraisInscription;
           libelle = `Frais d'inscription ${selectedYear}-${selectedYear + 1}`;
@@ -206,31 +269,21 @@ export function FactureForm({
           montant = matchedTarif.fraisRenouvellement;
           libelle = `Frais de réinscription ${selectedYear}-${selectedYear + 1}`;
           break;
-        case "CANTINE":
-          montant = matchedTarif.fraisCantine ?? 0;
-          libelle = `Cantine ${moisNom} ${selectedYear}`;
-          mois = moisKey;
-          break;
-        case "TRANSPORT":
-          montant = matchedTarif.fraisTransport ?? 0;
-          libelle = `Transport ${moisNom} ${selectedYear}`;
-          mois = moisKey;
-          break;
         case "LIBRE":
           continue; // Pas de draft automatique pour le type libre
       }
 
-      const key = TYPES_MENSUELS.includes(service) && mois ? `${service}:${mois}` : service;
+      const key = service;
       const existingFor = existingByKey.get(key) ?? null;
       const locked = existingFor !== null && existingFor.statut !== "ANNULEE";
 
       if (montant > 0 && !locked) {
-        result.push({ type: service, libelle, montant, devise: matchedTarif.devise, mois });
+        result.push({ type: service, libelle, montant, devise: matchedTarif.devise, mois: null });
       }
     }
 
     return result;
-  }, [selectedServices, selectedEleve, matchedTarif, selectedMonth, selectedYear, moisKey, existingByKey]);
+  }, [selectedServices, selectedEleve, matchedTarif, selectedYear, existingByKey, selectedMonths]);
 
   const totalAmount = useMemo(() => drafts.reduce((sum, d) => sum + d.montant, 0), [drafts]);
 
@@ -246,6 +299,11 @@ export function FactureForm({
 
     if (selectedServices.length === 0) {
       toast.error(t("selectAtLeastOneService"));
+      return;
+    }
+
+    if (selectedServices.includes("MENSUALITE") && selectedMonths.size === 0) {
+      toast.error(t("selectAtLeastOneMonth"));
       return;
     }
 
@@ -365,30 +423,56 @@ export function FactureForm({
             </div>
           )}
 
-          {/* Sélection mois (si au moins un service mensuel est sélectionné) */}
+          {/* Sélection des mois (boutons cliquables — un ou plusieurs) */}
           {selectedServices.some((s) => TYPES_MENSUELS.includes(s)) && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>{t("formMonth")}</Label>
-                <select
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  {MOIS_NOMS.map((nom, i) => (
-                    <option key={i} value={i + 1}>{nom}</option>
-                  ))}
-                </select>
+            <div className="space-y-2">
+              <Label>{t("formMonth")}</Label>
+              {existingLoading && (
+                <p className="text-xs text-muted-foreground">{t("loadingExistingInvoices")}...</p>
+              )}
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                {moisScolaires.map((m) => {
+                  const isSel = selectedMonths.has(m.key);
+                  const locked = isLocked("MENSUALITE", m.key);
+                  const existingFor = getExistingFor("MENSUALITE", m.key);
+                  const paid = isPaid(existingFor);
+
+                  return (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => !locked && toggleMonth(m.key)}
+                      disabled={locked || existingLoading}
+                      className={cn(
+                        "relative flex flex-col items-center gap-0.5 p-2.5 rounded-lg border text-center transition-all",
+                        isSel && !locked
+                          ? "border-primary bg-primary/10 text-primary"
+                          : locked
+                            ? "border-muted bg-muted/40 text-muted-foreground cursor-not-allowed"
+                            : "border-input bg-background hover:bg-muted/50",
+                        locked && "opacity-80"
+                      )}
+                    >
+                      <span className="text-xs font-medium">{MOIS_NOMS[m.monthNum - 1]}</span>
+                      <span className="text-[10px] text-muted-foreground">{m.year}</span>
+                      {isSel && !locked && <CheckCircle2 className="h-3 w-3 absolute top-1 right-1" />}
+                      {locked && (
+                        <span className="text-[9px] leading-tight text-muted-foreground">
+                          {paid ? t("invoiceAlreadyPaid", { numero: existingFor?.numero ?? "" }) : t("invoiceAlreadyPending", { numero: existingFor?.numero ?? "" })}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
-              <div className="space-y-1.5">
-                <Label>{t("formYear")}</Label>
-                <Input
-                  type="number"
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(parseInt(e.target.value) || new Date().getFullYear())}
-                  className="h-10"
-                />
-              </div>
+              {selectedMonths.size > 0 && matchedTarif && (
+                <p className="text-xs text-muted-foreground">
+                  {t("monthsSelected", { count: selectedMonths.size })} —{" "}
+                  <span className="font-semibold text-primary">
+                    {(selectedMonths.size * matchedTarif.mensualite).toLocaleString()} {matchedTarif.devise}
+                  </span>
+                </p>
+              )}
             </div>
           )}
 
@@ -401,8 +485,11 @@ export function FactureForm({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {serviceOptions.map((opt) => {
                 const isSelected = selectedServices.includes(opt.value);
-                const existingFor = getExistingFor(opt.value, opt.requiresMonth ? moisKey : undefined);
-                const locked = isLocked(opt.value, opt.requiresMonth ? moisKey : undefined);
+                // Pour les services mensuels, le verrouillage se fait au niveau
+                // des boutons de mois, pas au niveau du bouton de service.
+                // Pour les services non mensuels, on garde le verrouillage ici.
+                const existingFor = opt.requiresMonth ? null : getExistingFor(opt.value);
+                const locked = opt.requiresMonth ? false : isLocked(opt.value);
                 const paid = isPaid(existingFor);
 
                 return (
@@ -444,8 +531,8 @@ export function FactureForm({
           {drafts.length > 0 && (
             <div className="p-4 rounded-lg bg-muted/30 border space-y-2">
               <p className="text-xs text-muted-foreground">{t("formSummary")}</p>
-              {drafts.map((d) => (
-                <div key={d.type} className="flex items-center justify-between text-sm">
+              {drafts.map((d, i) => (
+                <div key={`${d.type}-${d.mois ?? i}`} className="flex items-center justify-between text-sm">
                   <div>
                     <span className="font-medium">{d.libelle}</span>
                     {d.mois && <Badge variant="secondary" className="text-[10px] ml-2">{d.mois}</Badge>}

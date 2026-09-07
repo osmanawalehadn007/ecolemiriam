@@ -8,6 +8,9 @@ import { checkPermission } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
 import { z } from "zod";
 
+// Tarif transport fixe pour tout l'établissement (tous sites confondus)
+const TARIF_TRANSPORT_FIXE = 4000;
+
 // ============================================================
 // TARIFS PAR NIVEAU
 // ============================================================
@@ -48,7 +51,7 @@ export async function getTarifForEleve(eleveId: string, annee?: string) {
   // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId
   const eleve = await prisma.eleve.findFirst({
     where: { id: eleveId, tenantId: session.user.tenantId },
-    select: { classe: { select: { niveau: true } } },
+    select: { classe: { select: { niveau: true, siteId: true } } },
   });
   if (!eleve?.classe?.niveau) return null;
 
@@ -59,7 +62,9 @@ export async function getTarifForEleve(eleveId: string, annee?: string) {
       niveau: { equals: eleve.classe.niveau, mode: "insensitive" },
       annee: anneeScolaire,
       actif: true,
+      OR: [{ siteId: eleve.classe.siteId ?? null }, { siteId: null }],
     },
+    orderBy: { siteId: { sort: "desc", nulls: "last" } }, // privilégier le tarif spécifique au site (NULLs en dernier sur Postgres)
   });
   return tarif;
 }
@@ -216,6 +221,8 @@ export async function genererMensualites(params: {
   });
 
   // 2. Batch : vérifier quelles factures mensuelles existent déjà pour ce mois
+  //    On vérifie aussi les factures INSCRIPTION qui incluent la mensualité de ce
+  //    mois (mois = moisKey) — sinon l'élève serait double-facturé pour le même mois.
   // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
   const existingFactures = await prisma.facture.findMany({
     where: {
@@ -226,7 +233,20 @@ export async function genererMensualites(params: {
     },
     select: { eleveId: true },
   });
-  const existingSet = new Set(existingFactures.map((f) => f.eleveId));
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
+  const existingInscriptions = await prisma.facture.findMany({
+    where: {
+      tenantId,
+      eleveId: { in: elevesAvecTarif.map((e) => e.id) },
+      type: "INSCRIPTION",
+      mois: moisKey,
+    },
+    select: { eleveId: true },
+  });
+  const existingSet = new Set([
+    ...existingFactures.map((f) => f.eleveId),
+    ...existingInscriptions.map((f) => f.eleveId),
+  ]);
 
   // 3. Construire les données à insérer (en mémoire, 0 requête)
   // eslint-disable-next-line ecolemiriam/require-site-filter -- count global pour numérotation séquentielle
@@ -261,7 +281,7 @@ export async function genererMensualites(params: {
       montant += tarif.fraisRenouvellement;
     }
     if (inclureCantine && tarif.fraisCantine) montant += tarif.fraisCantine;
-    if (inclureTransport && tarif.fraisTransport) montant += tarif.fraisTransport;
+    if (inclureTransport) montant += TARIF_TRANSPORT_FIXE;
 
     toCreate.push({
       tenantId,
@@ -373,8 +393,23 @@ export async function genererFacturesAnnuelles(params: {
     },
     select: { eleveId: true, mois: true, libelle: true },
   });
+  // Vérifier aussi les factures INSCRIPTION qui incluent une mensualité (mois = moisKey)
+  // pour éviter la double facturation du mois de scolarité inclus dans l'inscription.
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
+  const existingInscriptions = await prisma.facture.findMany({
+    where: {
+      tenantId,
+      eleveId: { in: elevesAvecTarif.map((e) => e.id) },
+      type: "INSCRIPTION",
+      mois: { in: moisKeys },
+    },
+    select: { eleveId: true, mois: true },
+  });
   // Clé de dédoublonnage : eleveId + mois
-  const existingSet = new Set(existingFactures.map((f) => `${f.eleveId}|${f.mois}`));
+  const existingSet = new Set([
+    ...existingFactures.map((f) => `${f.eleveId}|${f.mois}`),
+    ...existingInscriptions.map((f) => `${f.eleveId}|${f.mois}`),
+  ]);
 
   // eslint-disable-next-line ecolemiriam/require-site-filter -- count global pour numérotation séquentielle
   const baseCount = await prisma.facture.count({ where: { tenantId } });
@@ -421,7 +456,7 @@ export async function genererFacturesAnnuelles(params: {
         montant += tarif.fraisRenouvellement;
       }
       if (inclureCantine && tarif.fraisCantine) montant += tarif.fraisCantine;
-      if (inclureTransport && tarif.fraisTransport) montant += tarif.fraisTransport;
+      if (inclureTransport) montant += TARIF_TRANSPORT_FIXE;
 
       toCreate.push({
         tenantId,

@@ -17,10 +17,20 @@ import {
   FileText,
   Printer,
   Wallet,
+  RotateCcw,
+  ShieldCheck,
+  ShieldX,
 } from "lucide-react";
 import { niveauToLabel } from "@/lib/niveau";
 import Link from "next/link";
-import { enregistrerPaiement, annulerFacture, type PaiementFormData } from "@/lib/actions/facture";
+import {
+  enregistrerPaiement,
+  annulerFacture,
+  demanderAnnulationPaiement,
+  approuverAnnulationPaiement,
+  refuserAnnulationPaiement,
+  type PaiementFormData,
+} from "@/lib/actions/facture";
 import { getPaymentMethodsForSelect, getPaymentMethodType, getPaymentMethodColor } from "@/lib/payment-methods";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
@@ -34,6 +44,14 @@ interface Paiement {
   date: Date;
   recu?: string | null;
   enregistrePar?: { id: string; name: string } | null;
+  estContrePassation?: boolean;
+  paiementOriginalId?: string | null;
+  annulationStatut?: string | null;
+  motifAnnulation?: string | null;
+  demandeAnnulationPar?: { id: string; name: string } | null;
+  demandeAnnulationLe?: Date | null;
+  annulationApprouveePar?: { id: string; name: string } | null;
+  annulationApprouveeLe?: Date | null;
 }
 
 interface FactureDetailProps {
@@ -68,6 +86,7 @@ interface FactureDetailProps {
     paiements: Paiement[];
     createdBy?: { id: string; name: string } | null;
   };
+  userRole?: string;
 }
 
 const statutConfig: Record<string, { labelKey: string; variant: "default" | "success" | "warning" | "destructive" | "secondary" }> = {
@@ -102,7 +121,7 @@ function PaymentMethodBadge({ method, t }: { method: string; t: (k: string) => s
   );
 }
 
-export function FactureDetail({ facture }: FactureDetailProps) {
+export function FactureDetail({ facture, userRole }: FactureDetailProps) {
   const t = useTranslations("facturation");
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -115,6 +134,11 @@ export function FactureDetail({ facture }: FactureDetailProps) {
     reference: "",
   });
   const [lastPaiementId, setLastPaiementId] = useState<string | null>(null);
+  // État pour le modal d'annulation de paiement
+  const [annulationPaiementId, setAnnulationPaiementId] = useState<string | null>(null);
+  const [motifAnnulation, setMotifAnnulation] = useState("");
+
+  const canApproveAnnulation = userRole === "TENANT_ADMIN" || userRole === "SUPER_ADMIN" || userRole === "PRINCIPAL";
 
   const totalPaye = useMemo(() => facture.paiements.reduce((sum, p) => sum + p.montant, 0), [facture.paiements]);
   const restant = facture.montant - totalPaye;
@@ -169,6 +193,53 @@ export function FactureDetail({ facture }: FactureDetailProps) {
     try {
       await annulerFacture(facture.id);
       toast.success(t("invoiceCancelled"));
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("genericError"));
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function handleDemanderAnnulationPaiement(paiementId: string) {
+    if (motifAnnulation.trim().length < 10) {
+      toast.error(t("motifMinLength"));
+      return;
+    }
+    setIsPending(true);
+    try {
+      await demanderAnnulationPaiement(paiementId, motifAnnulation);
+      toast.success(t("annulationRequested"));
+      setAnnulationPaiementId(null);
+      setMotifAnnulation("");
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("genericError"));
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function handleApprouverAnnulation(paiementId: string) {
+    if (!confirm(t("confirmApprove"))) return;
+    setIsPending(true);
+    try {
+      await approuverAnnulationPaiement(paiementId);
+      toast.success(t("annulationApproved"));
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("genericError"));
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function handleRefuserAnnulation(paiementId: string) {
+    if (!confirm(t("confirmRefuse"))) return;
+    setIsPending(true);
+    try {
+      await refuserAnnulationPaiement(paiementId);
+      toast.success(t("annulationRefused"));
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("genericError"));
@@ -433,28 +504,94 @@ export function FactureDetail({ facture }: FactureDetailProps) {
                     <th className="text-left px-4 py-2 font-medium">{t("reference")}</th>
                     <th className="text-left px-4 py-2 font-medium">{t("recordedBy")}</th>
                     <th className="text-center px-4 py-2 font-medium">{t("receipt")}</th>
+                    <th className="text-center px-4 py-2 font-medium">{t("actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {facture.paiements.map((p) => (
-                    <tr key={p.id} className="border-b hover:bg-muted/30">
+                    <tr key={p.id} className={cn("border-b hover:bg-muted/30", p.estContrePassation && "bg-red-50 dark:bg-red-950/20")}>
                       <td className="px-4 py-2">{new Date(p.date).toLocaleDateString("fr-FR")}</td>
-                      <td className="px-4 py-2 text-right font-medium text-green-600">{formatMoney(p.montant, p.devise)}</td>
+                      <td className={cn("px-4 py-2 text-right font-medium", p.estContrePassation ? "text-red-600" : "text-green-600")}>
+                        {formatMoney(p.montant, p.devise)}
+                        {p.estContrePassation && (
+                          <span className="block text-[10px] text-red-500">{t("contrePassation")}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2">
                         <PaymentMethodBadge method={p.methode} t={t} />
                       </td>
                       <td className="px-4 py-2 text-muted-foreground">{p.reference ?? "—"}</td>
                       <td className="px-4 py-2 text-muted-foreground">{p.enregistrePar?.name ?? "—"}</td>
                       <td className="px-4 py-2 text-center">
-                        <a
-                          href={`/api/paiements/${p.id}/recu`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-green-600 hover:text-green-700 font-medium"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          PDF
-                        </a>
+                        {!p.estContrePassation && (
+                          <a
+                            href={`/api/paiements/${p.id}/recu`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-green-600 hover:text-green-700 font-medium"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            PDF
+                          </a>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        {/* Bouton "Demander annulation" — visible si le paiement n'est pas une contre-passation
+                            et n'a pas déjà une demande d'annulation en cours/approuvée */}
+                        {!p.estContrePassation && !p.annulationStatut && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs h-7 gap-1 text-orange-600 hover:text-orange-700"
+                            onClick={() => setAnnulationPaiementId(p.id)}
+                            disabled={isPending}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            {t("requestCancellation")}
+                          </Button>
+                        )}
+                        {/* Statut de la demande d'annulation */}
+                        {p.annulationStatut === "DEMANDEE" && (
+                          <div className="space-y-1">
+                            <Badge variant="warning" className="text-[10px]">{t("cancellationPending")}</Badge>
+                            {canApproveAnnulation && (
+                              <div className="flex gap-1 justify-center">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs h-7 gap-1 text-green-600"
+                                  onClick={() => handleApprouverAnnulation(p.id)}
+                                  disabled={isPending}
+                                >
+                                  <ShieldCheck className="h-3 w-3" />
+                                  {t("approve")}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs h-7 gap-1 text-red-600"
+                                  onClick={() => handleRefuserAnnulation(p.id)}
+                                  disabled={isPending}
+                                >
+                                  <ShieldX className="h-3 w-3" />
+                                  {t("refuse")}
+                                </Button>
+                              </div>
+                            )}
+                            <p className="text-[10px] text-muted-foreground max-w-[200px]">
+                              {t("motif")}: {p.motifAnnulation}
+                            </p>
+                          </div>
+                        )}
+                        {p.annulationStatut === "APPROUVEE" && (
+                          <Badge variant="secondary" className="text-[10px]">{t("cancellationApproved")}</Badge>
+                        )}
+                        {p.annulationStatut === "REFUSEE" && (
+                          <Badge variant="destructive" className="text-[10px]">{t("cancellationRefused")}</Badge>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -464,6 +601,57 @@ export function FactureDetail({ facture }: FactureDetailProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Modal : demande d'annulation de paiement avec motif obligatoire */}
+      {annulationPaiementId && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md border-0 shadow-2xl">
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <RotateCcw className="h-4 w-4 text-orange-600" />
+                {t("requestCancellation")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="motif">{t("cancellationReason")} *</Label>
+                <textarea
+                  id="motif"
+                  value={motifAnnulation}
+                  onChange={(e) => setMotifAnnulation(e.target.value)}
+                  rows={4}
+                  placeholder={t("cancellationReasonPlaceholder")}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                />
+                <p className="text-xs text-muted-foreground">{t("motifMinLengthHint")}</p>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setAnnulationPaiementId(null);
+                    setMotifAnnulation("");
+                  }}
+                >
+                  {t("cancel")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => handleDemanderAnnulationPaiement(annulationPaiementId)}
+                  disabled={isPending || motifAnnulation.trim().length < 10}
+                >
+                  {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                  {t("submitCancellation")}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

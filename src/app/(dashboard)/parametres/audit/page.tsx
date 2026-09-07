@@ -7,6 +7,7 @@ import {
   Shield, ShieldAlert, ShieldCheck, Search, Download,
   ChevronLeft, ChevronRight, Filter,
 } from "lucide-react";
+import { DemandesAnnulationPanel } from "@/components/facturation/DemandesAnnulationPanel";
 
 interface AuditLog {
   id: string;
@@ -76,7 +77,7 @@ export default function AuditJournalPage() {
     }
     if (status === "loading") return;
     const role = session?.user?.role;
-    if (role !== "SUPER_ADMIN" && role !== "TENANT_ADMIN") {
+    if (role !== "SUPER_ADMIN" && role !== "TENANT_ADMIN" && role !== "PRINCIPAL") {
       router.push("/dashboard");
       return;
     }
@@ -141,6 +142,9 @@ export default function AuditJournalPage() {
           Exporter CSV
         </button>
       </div>
+
+      {/* Demandes d'annulation de paiement en attente */}
+      <DemandesAnnulationPanel />
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">

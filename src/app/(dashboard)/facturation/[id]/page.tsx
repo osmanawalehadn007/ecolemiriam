@@ -28,7 +28,7 @@ export default async function FactureDetailPage({
         userAvatar={session.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <FactureDetail facture={facture} />
+        <FactureDetail facture={facture} userRole={session.user.role} />
       </div>
     </div>
   );

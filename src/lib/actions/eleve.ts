@@ -305,7 +305,7 @@ export async function createEleve(
       actif: true,
       OR: [{ siteId: resolvedSiteId }, { siteId: null }],
     },
-    orderBy: { siteId: "desc" }, // privilégier le tarif spécifique au site
+    orderBy: { siteId: { sort: "desc", nulls: "last" } }, // privilégier le tarif spécifique au site (NULLs en dernier sur Postgres)
   });
 
   const fraisInscription = tarif?.fraisInscription ?? 0;
@@ -331,6 +331,9 @@ export async function createEleve(
       devise,
       statut: "EN_ATTENTE",
       type: "INSCRIPTION",
+      // Rattacher au mois de septembre (mois de scolarité inclus dans la facture)
+      // pour la visibilité dans la vue mensuelle et le dédoublonnage de genererMensualites.
+      mois: `${anneeInscription.split("-")[0]}-09`,
     },
   });
 

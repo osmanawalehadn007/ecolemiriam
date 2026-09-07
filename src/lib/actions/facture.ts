@@ -8,6 +8,7 @@ import { checkPermission } from "@/lib/rbac";
 import { z } from "zod";
 import { endOfDay } from "date-fns";
 import { Prisma, TypeFacture } from "@prisma/client";
+import { audit, auditFire } from "@/lib/audit";
 
 const FACTURE_TYPES: [string, ...string[]] = [
   "MENSUALITE",
@@ -103,7 +104,14 @@ export async function getFactureForDetail(id: string) {
         },
       },
       // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur facture)
-      paiements: { orderBy: { date: "desc" }, include: { enregistrePar: { select: { id: true, name: true } } } },
+      paiements: {
+        orderBy: { date: "desc" },
+        include: {
+          enregistrePar: { select: { id: true, name: true } },
+          demandeAnnulationPar: { select: { id: true, name: true } },
+          annulationApprouveePar: { select: { id: true, name: true } },
+        },
+      },
       createdBy: { select: { id: true, name: true } },
     },
   });
@@ -129,12 +137,13 @@ export async function canCreateFacture(
   };
 
   // Les types mensuels doivent être uniques par mois ; inscription / renouvellement
-  // et libre sont uniques globalement pour l'élève.
+  // et libre sont uniques globalement pour l'élève (sans tenir compte du mois).
   if (TYPES_MENSUELS.has(type) && mois) {
     where.mois = mois;
-  } else {
-    where.mois = mois ?? null;
   }
+  // Pour les types non mensuels (INSCRIPTION, RENOUVELLEMENT, LIBRE), on ne filtre
+  // pas par mois : ces factures sont uniques par élève sur l'année, qu'elles aient
+  // un mois renseigné (ex: INSCRIPTION avec mois="2026-09") ou null.
 
   // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId
   const existing = await prisma.facture.findFirst({
@@ -430,6 +439,19 @@ export async function enregistrerPaiement(factureId: string, data: PaiementFormD
   revalidatePath("/facturation");
   revalidatePath(`/facturation/${factureId}`);
   revalidateTag("dashboard-data");
+
+  // Audit : tracer tout encaissement (qui, quand, combien, sur quelle facture)
+  await audit({
+    tenantId: session.user.tenantId,
+    userId: session.user.id,
+    action: "finance.enregistrer_paiement",
+    verdict: "ALLOWED",
+    resource: "paiements",
+    resourceId: paiement.id,
+    reason: `Paiement de ${values.montant} ${facture.devise} enregistré sur la facture ${facture.numero}`,
+    metadata: { factureId, factureNumero: facture.numero, montant: values.montant, devise: facture.devise, methode: values.methode, reference: values.reference ?? null },
+  });
+
   return { success: true, id: paiement.id };
 }
 
@@ -466,5 +488,287 @@ export async function annulerFacture(factureId: string) {
   revalidatePath("/facturation");
   revalidatePath(`/facturation/${factureId}`);
   revalidateTag("dashboard-data");
+
+  await audit({
+    tenantId: session.user.tenantId,
+    userId: session.user.id,
+    action: "finance.annuler_facture",
+    verdict: "ALLOWED",
+    resource: "factures",
+    resourceId: factureId,
+    reason: `Facture ${facture.numero} annulée`,
+    metadata: { factureId, numero: facture.numero, montant: facture.montant },
+  });
+
   return { success: true };
+}
+
+// ============================================================
+// CONTRE-PASSATION & WORKFLOW D'APPROBATION DES PAIEMENTS
+// ============================================================
+//
+// Un paiement ne se supprime JAMAIS. Pour corriger une erreur (mauvais
+// montant, mauvaise méthode, etc.), on crée une contre-passation :
+// un paiement négatif lié à l'original. L'historique reste complet.
+//
+// Workflow :
+//   1. Caissier → demanderAnnulationPaiement(paiementId, motif)
+//      → statut = DEMANDEE, motif obligatoire (min 10 chars)
+//   2. Responsable (finance:approve) → approuverAnnulationPaiement(paiementId)
+//      → statut = APPROUVEE, création automatique de la contre-passation
+//      → recalcule le statut de la facture
+//   3. Responsable → refuserAnnulationPaiement(paiementId)
+//      → statut = REFUSEE, aucune contre-passation
+
+const MotifAnnulationSchema = z.object({
+  motif: z.string().min(10, "Le motif d'annulation doit contenir au moins 10 caractères"),
+});
+
+/**
+ * Demander l'annulation d'un paiement (caissier/comptable).
+ * Le paiement n'est PAS annulé immédiatement : un responsable doit approuver.
+ */
+export async function demanderAnnulationPaiement(paiementId: string, motif: string) {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "finance:write");
+  if (denied) throw new Error("Accès refusé");
+
+  const parsed = MotifAnnulationSchema.safeParse({ motif });
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
+  }
+
+  // Récupérer le paiement avec sa facture pour vérifier le tenant
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par paiementId, vérification tenant via facture
+  const paiement = await prisma.paiement.findUnique({
+    where: { id: paiementId },
+    include: { facture: { select: { tenantId: true, numero: true } } },
+  });
+  if (!paiement) throw new Error("Paiement non trouvé");
+  if (paiement.facture.tenantId !== session.user.tenantId) throw new Error("Non autorisé");
+
+  // Ne pas annuler une contre-passation ni un paiement déjà annulé
+  if (paiement.estContrePassation) {
+    throw new Error("Impossible d'annuler une contre-passation");
+  }
+  if (paiement.annulationStatut === "DEMANDEE") {
+    throw new Error("Une demande d'annulation est déjà en cours pour ce paiement");
+  }
+  if (paiement.annulationStatut === "APPROUVEE") {
+    throw new Error("Ce paiement a déjà été annulé (contre-passation approuvée)");
+  }
+
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- paiementId déjà vérifié via tenant
+  await prisma.paiement.update({
+    where: { id: paiementId },
+    data: {
+      annulationStatut: "DEMANDEE",
+      motifAnnulation: parsed.data.motif,
+      demandeAnnulationParId: session.user.id,
+      demandeAnnulationLe: new Date(),
+    },
+  });
+
+  await audit({
+    tenantId: session.user.tenantId,
+    userId: session.user.id,
+    action: "finance.demander_annulation_paiement",
+    verdict: "ALLOWED",
+    resource: "paiements",
+    resourceId: paiementId,
+    reason: `Demande d'annulation du paiement de ${paiement.montant} ${paiement.devise} sur la facture ${paiement.facture.numero}`,
+    metadata: { paiementId, factureNumero: paiement.facture.numero, montant: paiement.montant, motif: parsed.data.motif },
+  });
+
+  revalidatePath("/facturation");
+  revalidatePath(`/facturation/${paiement.factureId}`);
+  revalidateTag("dashboard-data");
+
+  return { success: true };
+}
+
+/**
+ * Approuver l'annulation d'un paiement (responsable : finance:approve).
+ * Crée automatiquement la contre-passation (paiement négatif) et recalcule
+ * le statut de la facture.
+ */
+export async function approuverAnnulationPaiement(paiementId: string) {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "finance:approve");
+  if (denied) throw new Error("Accès refusé : seuls les responsables peuvent approuver les annulations");
+
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par paiementId, vérification tenant via facture
+  const paiement = await prisma.paiement.findUnique({
+    where: { id: paiementId },
+    include: { facture: { select: { tenantId: true, numero: true, id: true, montant: true, echeance: true } }, contrePassations: true },
+  });
+  if (!paiement) throw new Error("Paiement non trouvé");
+  if (paiement.facture.tenantId !== session.user.tenantId) throw new Error("Non autorisé");
+
+  if (paiement.annulationStatut !== "DEMANDEE") {
+    throw new Error("Aucune demande d'annulation en attente pour ce paiement");
+  }
+
+  // Vérifier qu'il n'y a pas déjà une contre-passation
+  if (paiement.contrePassations.length > 0) {
+    throw new Error("Ce paiement a déjà une contre-passation");
+  }
+
+  // 1. Marquer le paiement original comme annulé (approuvé)
+  await prisma.paiement.update({
+    where: { id: paiementId },
+    data: {
+      annulationStatut: "APPROUVEE",
+      annulationApprouveeParId: session.user.id,
+      annulationApprouveeLe: new Date(),
+    },
+  });
+
+  // 2. Créer la contre-passation (paiement négatif lié à l'original)
+  const contrePassation = await prisma.paiement.create({
+    data: {
+      factureId: paiement.factureId,
+      montant: -paiement.montant, // montant négatif
+      devise: paiement.devise,
+      methode: paiement.methode,
+      reference: `CONTRE-PASSATION ${paiement.reference ?? ""}`.trim(),
+      enregistreParId: session.user.id,
+      estContrePassation: true,
+      paiementOriginalId: paiementId,
+    },
+  });
+
+  // 3. Recalculer le statut de la facture
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- factureId déjà vérifié via tenant
+  const allPaiements = await prisma.paiement.findMany({
+    where: { factureId: paiement.factureId },
+    select: { montant: true },
+  });
+  const totalPaye = allPaiements.reduce((sum, p) => sum + p.montant, 0);
+  let newStatut: string = "EN_ATTENTE";
+  if (totalPaye >= paiement.facture.montant) {
+    newStatut = "PAYEE";
+  } else if (totalPaye > 0) {
+    newStatut = "EN_RETARD"; // partiellement payé
+  }
+
+  // eslint-disable-next-line ecolemiriam/require-tenant-id -- factureId vérifié via paiement.facture.tenantId ci-dessus
+  await prisma.facture.update({
+    where: { id: paiement.factureId },
+    data: { statut: newStatut as never },
+  });
+
+  await audit({
+    tenantId: session.user.tenantId,
+    userId: session.user.id,
+    action: "finance.approuver_annulation_paiement",
+    verdict: "ALLOWED",
+    resource: "paiements",
+    resourceId: paiementId,
+    reason: `Annulation approuvée : contre-passation de ${-paiement.montant} ${paiement.devise} créée pour la facture ${paiement.facture.numero}. Motif: ${paiement.motifAnnulation ?? "N/A"}`,
+    metadata: {
+      paiementId,
+      contrePassationId: contrePassation.id,
+      factureId: paiement.factureId,
+      factureNumero: paiement.facture.numero,
+      montantOriginal: paiement.montant,
+      montantContrePassation: -paiement.montant,
+      motif: paiement.motifAnnulation,
+      nouveauStatutFacture: newStatut,
+    },
+  });
+
+  revalidatePath("/facturation");
+  revalidatePath(`/facturation/${paiement.factureId}`);
+  revalidateTag("dashboard-data");
+
+  return { success: true, contrePassationId: contrePassation.id };
+}
+
+/**
+ * Refuser l'annulation d'un paiement (responsable : finance:approve).
+ * Aucune contre-passation n'est créée. Le paiement reste en l'état.
+ */
+export async function refuserAnnulationPaiement(paiementId: string) {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "finance:approve");
+  if (denied) throw new Error("Accès refusé : seuls les responsables peuvent refuser les annulations");
+
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par paiementId, vérification tenant via facture
+  const paiement = await prisma.paiement.findUnique({
+    where: { id: paiementId },
+    include: { facture: { select: { tenantId: true, numero: true } } },
+  });
+  if (!paiement) throw new Error("Paiement non trouvé");
+  if (paiement.facture.tenantId !== session.user.tenantId) throw new Error("Non autorisé");
+
+  if (paiement.annulationStatut !== "DEMANDEE") {
+    throw new Error("Aucune demande d'annulation en attente pour ce paiement");
+  }
+
+  await prisma.paiement.update({
+    where: { id: paiementId },
+    data: {
+      annulationStatut: "REFUSEE",
+      annulationRefuseeParId: session.user.id,
+      annulationRefuseeLe: new Date(),
+    },
+  });
+
+  await audit({
+    tenantId: session.user.tenantId,
+    userId: session.user.id,
+    action: "finance.refuser_annulation_paiement",
+    verdict: "ALLOWED",
+    resource: "paiements",
+    resourceId: paiementId,
+    reason: `Demande d'annulation refusée pour le paiement de ${paiement.montant} ${paiement.devise} sur la facture ${paiement.facture.numero}`,
+    metadata: { paiementId, factureNumero: paiement.facture.numero, montant: paiement.montant, motif: paiement.motifAnnulation },
+  });
+
+  revalidatePath("/facturation");
+  revalidatePath(`/facturation/${paiement.factureId}`);
+  revalidateTag("dashboard-data");
+
+  return { success: true };
+}
+
+/**
+ * Récupérer les demandes d'annulation en attente (pour le responsable).
+ */
+export async function getDemandesAnnulationEnAttente() {
+  const session = await auth();
+  if (!session?.user?.tenantId) return [];
+
+  const denied = checkPermission(session.user.role, "finance:approve");
+  if (denied) return [];
+
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- filtrage par tenantId via relation facture
+  const paiements = await prisma.paiement.findMany({
+    where: {
+      annulationStatut: "DEMANDEE",
+      facture: { tenantId: session.user.tenantId },
+    },
+    include: {
+      facture: {
+        select: {
+          id: true,
+          numero: true,
+          libelle: true,
+          montant: true,
+          eleve: { select: { id: true, nom: true, prenom: true, matricule: true } },
+        },
+      },
+      demandeAnnulationPar: { select: { id: true, name: true } },
+    },
+    orderBy: { demandeAnnulationLe: "desc" },
+  });
+
+  return paiements;
 }

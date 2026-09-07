@@ -391,6 +391,9 @@ model User {
   paiementsEnregistres Paiement[] @relation("PaiementEnregistrePar")
   paiementsDeposes Paiement[] @relation("PaiementDeposePar")
   paiementsDirectorRecu Paiement[] @relation("PaiementDirectorRecuPar")
+  paiementsAnnulationDemandee Paiement[] @relation("PaiementDemandeAnnulationPar")
+  paiementsAnnulationApprouvee Paiement[] @relation("PaiementAnnulationApprouveePar")
+  paiementsAnnulationRefusee Paiement[] @relation("PaiementAnnulationRefuseePar")
   depensesCrees    Depense[] @relation("DepenseCreePar")
   depensesAutorisees Depense[] @relation("DepenseAutorisePar")
   depensesPayees   Depense[] @relation("DepensePayePar")
@@ -1329,9 +1332,33 @@ model Paiement {
   directorRecuParId String?
   directorRecuPar   User? @relation("PaiementDirectorRecuPar", fields: [directorRecuParId], references: [id], onDelete: SetNull)
 
+  // ── Contre-passation & workflow d'approbation ──
+  // Un paiement ne se supprime JAMAIS : on crée une contre-passation
+  // (paiement négatif lié à l'original). L'annulation d'un paiement
+  // requiert l'approbation d'un responsable (finance:approve).
+  estContrePassation  Boolean  @default(false)
+  paiementOriginalId  String?
+  paiementOriginal    Paiement? @relation("PaiementContrePassation", fields: [paiementOriginalId], references: [id], onDelete: SetNull)
+  contrePassations    Paiement[] @relation("PaiementContrePassation")
+
+  // Workflow d'annulation (sur le paiement ORIGINAL)
+  annulationStatut       String? // DEMANDEE | APPROUVEE | REFUSEE
+  motifAnnulation        String?
+  demandeAnnulationParId String?
+  demandeAnnulationPar   User? @relation("PaiementDemandeAnnulationPar", fields: [demandeAnnulationParId], references: [id], onDelete: SetNull)
+  demandeAnnulationLe    DateTime?
+  annulationApprouveeParId String?
+  annulationApprouveePar   User? @relation("PaiementAnnulationApprouveePar", fields: [annulationApprouveeParId], references: [id], onDelete: SetNull)
+  annulationApprouveeLe    DateTime?
+  annulationRefuseeParId String?
+  annulationRefuseePar   User? @relation("PaiementAnnulationRefuseePar", fields: [annulationRefuseeParId], references: [id], onDelete: SetNull)
+  annulationRefuseeLe    DateTime?
+
   @@index([factureId])
   @@index([depotParId])
   @@index([directorRecuParId])
+  @@index([paiementOriginalId])
+  @@index([annulationStatut])
   @@map("paiements")
 }
 
