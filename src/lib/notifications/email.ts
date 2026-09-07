@@ -4,7 +4,7 @@
  *
  * Variables d'environnement :
  *   RESEND_API_KEY=re_...
- *   EMAIL_FROM="École Miriam <noreply@ecolemiriam.app>"
+ *   EMAIL_FROM="École Miriam <noreply@ecolemiriam.com>"
  *   RESEND_WEBHOOK_SECRET=whsec_... (pour vérifier les webhooks)
  *
  * Si la clé est absente, l'envoi est simulé (utile en dev / sandbox).
@@ -20,7 +20,7 @@ export interface EmailResult {
   emailIds?: Record<string, string>;
 }
 
-const FROM = process.env.EMAIL_FROM ?? "École Miriam <noreply@ecolemiriam.app>";
+const FROM = process.env.EMAIL_FROM ?? "École Miriam <noreply@ecolemiriam.com>";
 const BATCH = 50; // limite Resend par appel
 
 /**
@@ -70,14 +70,20 @@ export async function sendEmail(
         console.error("[Email] Erreur lot Resend:", error);
         return { success: false, sent, error: error.message };
       }
-      // Capturer les IDs Resend pour corrélation webhook
-      if (data && Array.isArray(data)) {
-        data.forEach((item: { id?: string }, idx: number) => {
-          if (item.id && batch[idx]) {
-            emailIds[batch[idx]] = item.id;
-          }
-        });
-      }
+      // Capturer les IDs Resend pour corrélation webhook.
+      // L'API batch retourne { data: [{ id: "..." }] } — un objet contenant
+      // un tableau, pas un tableau direct. Les deux formes sont gérées pour
+      // robustesse (selon la version du SDK / API).
+      const items: { id?: string }[] = Array.isArray(data)
+        ? data
+        : data && Array.isArray(data.data)
+          ? data.data
+          : [];
+      items.forEach((item: { id?: string }, idx: number) => {
+        if (item.id && batch[idx]) {
+          emailIds[batch[idx]] = item.id;
+        }
+      });
       sent += batch.length;
     }
     return { success: true, sent, emailIds };
