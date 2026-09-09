@@ -44,7 +44,21 @@ export async function sendEmail(
   if (recipients.length === 0) return { success: true, sent: 0 };
 
   const apiKey = process.env.RESEND_API_KEY;
+  const isProd = process.env.NODE_ENV === "production";
+
+  // ── Diagnostic : logger ce que le runtime voit réellement ────────────
+  // On logge le préfixe (6 chars) seulement — jamais la clé complète.
+  const keyPrefix = apiKey ? apiKey.slice(0, 6) : "ABSENTE";
+  const keyLength = apiKey ? apiKey.length : 0;
+  const fromValue = process.env.EMAIL_FROM ?? FROM;
+  console.log(`[Email] sendEmail appelé — destinataires: ${recipients.length}, sujet: "${subject}", FROM: "${fromValue}", RESEND_API_KEY: ${keyPrefix}…(${keyLength} chars), NODE_ENV: ${process.env.NODE_ENV ?? "undefined"}`);
+
   if (!apiKey || apiKey.includes("xxxx")) {
+    if (isProd) {
+      // En production, une clé manquante est une erreur — ne pas simuler.
+      console.error(`[Email] RESEND_API_KEY manquante ou placeholder en production — ABANDON (clé=${keyPrefix}, length=${keyLength})`);
+      return { success: false, sent: 0, error: "RESEND_API_KEY manquante en production" };
+    }
     console.warn(`[Email] RESEND_API_KEY manquante — simulation (${recipients.length} destinataires)`);
     return { success: true, sent: recipients.length };
   }
@@ -65,11 +79,13 @@ export async function sendEmail(
         ...(text ? { text } : {}),
         ...(tags ? { tags: Object.entries(tags).map(([name, value]) => ({ name, value })) } : {}),
       }));
+      console.log(`[Email] Appel resend.batch.send — ${batch.length} destinataire(s)`);
       const { data, error } = await resend.batch.send(payload);
       if (error) {
-        console.error("[Email] Erreur lot Resend:", error);
+        console.error("[Email] Erreur lot Resend:", JSON.stringify(error));
         return { success: false, sent, error: error.message };
       }
+      console.log(`[Email] Réponse Resend — type de data: ${typeof data}, Array.isArray: ${Array.isArray(data)}, clés: ${data ? Object.keys(data) : "null"}`);
       // Capturer les IDs Resend pour corrélation webhook.
       // L'API batch retourne { data: [{ id: "..." }] } — un objet contenant
       // un tableau, pas un tableau direct. Les deux formes sont gérées pour
@@ -79,17 +95,20 @@ export async function sendEmail(
         : data && Array.isArray(data.data)
           ? data.data
           : [];
+      const captured = items.length;
       items.forEach((item: { id?: string }, idx: number) => {
         if (item.id && batch[idx]) {
           emailIds[batch[idx]] = item.id;
         }
       });
+      console.log(`[Email] IDs capturés: ${captured}, emailIds: ${Object.keys(emailIds).length}`);
       sent += batch.length;
     }
+    console.log(`[Email] Envoi terminé — sent: ${sent}, emailIds: ${JSON.stringify(emailIds)}`);
     return { success: true, sent, emailIds };
   } catch (err) {
-    console.error("[Email] Erreur envoi:", err);
-    return { success: false, sent, error: "Erreur réseau" };
+    console.error("[Email] Erreur envoi:", err instanceof Error ? `${err.name}: ${err.message}` : String(err));
+    return { success: false, sent, error: err instanceof Error ? err.message : "Erreur réseau" };
   }
 }
 

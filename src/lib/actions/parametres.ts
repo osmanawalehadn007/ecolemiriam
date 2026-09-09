@@ -15,7 +15,7 @@ import {
 } from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { anneeFilterForModel, requireAnneeForCreate } from "@/lib/annee-scope";
-import { niveauRequiresProfPrincipal, isNiveauPrimaire } from "@/lib/utils-classe";
+import { isNiveauPrimaire } from "@/lib/utils-classe";
 import { ELEVE_NON_ARCHIVE } from "@/lib/eleve-filters";
 import { checkPermission } from "@/lib/rbac";
 import { generateSecurePassword } from "@/lib/security/password";
@@ -485,11 +485,6 @@ export async function createClasse(data: ClasseFormData) {
   }
 
   const v = parsed.data;
-
-  // Validation: prof principal obligatoire pour collège/lycée
-  if (niveauRequiresProfPrincipal(v.niveau) && !v.profPrincipalId) {
-    throw new Error("Un professeur principal est obligatoire pour les classes de collège et lycée");
-  }
 
   // Vérifier que le prof principal existe et appartient au tenant
   if (v.profPrincipalId) {

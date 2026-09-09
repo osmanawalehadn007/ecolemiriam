@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, Trash2, AlertTriangle, ArrowRightCircle, MinusCircle, ArrowLeftRight } from "lucide-react";
 import { createClasse, deleteClasse, transferClasse, getEnseignantsForClasse, type ClasseFormData } from "@/lib/actions/parametres";
-import { niveauRequiresProfPrincipal } from "@/lib/utils-classe";
 import { niveauToLabel } from "@/lib/niveau";
 import { useTranslations } from "next-intl";
 import { StructureManager } from "./StructureManager";
@@ -250,25 +249,19 @@ export function ClassesTab({
               <div className="space-y-1.5 md:col-span-2">
                 <Label htmlFor="profPrincipal">
                   {t("colProfPrincipal")}
-                  {form.niveau && niveauRequiresProfPrincipal(form.niveau) && (
-                    <span className="text-destructive ml-1">*</span>
-                  )}
                 </Label>
                 <select
                   id="profPrincipal"
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   value={form.profPrincipalId ?? ""}
                   onChange={(e) => setForm({ ...form, profPrincipalId: e.target.value || undefined })}
-                  required={!!form.niveau && niveauRequiresProfPrincipal(form.niveau)}
                 >
-                  <option value="">— Sélectionner —</option>
+                  <option value="">— Sélectionner (optionnel) —</option>
                   {enseignants.map((ens) => (
                     <option key={ens.id} value={ens.id}>{ens.user.name}</option>
                   ))}
                 </select>
-                {form.niveau && niveauRequiresProfPrincipal(form.niveau) && (
-                  <p className="text-xs text-muted-foreground">Le professeur principal est obligatoire pour le collège et le lycée.</p>
-                )}
+                <p className="text-xs text-muted-foreground">Le professeur principal peut être assigné plus tard.</p>
               </div>
               <div className="md:col-span-2 flex gap-2">
                 <Button type="submit" size="sm" className="gap-2" disabled={isPending}>
