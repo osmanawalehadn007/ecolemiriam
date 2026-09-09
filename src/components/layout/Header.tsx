@@ -260,7 +260,10 @@ export function Header({ title, subtitle, site, siteColor, userName = "Admin", u
 
           {showUserMenu && (
             <div className="absolute right-0 mt-1 w-48 bg-popover border rounded-lg shadow-lg py-1 z-50">
-              <button className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent transition-colors">
+              <button
+                onClick={() => { setShowUserMenu(false); router.push("/profil"); }}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent transition-colors"
+              >
                 <User className="h-4 w-4" />
                 {tCommon("myProfile")}
               </button>
