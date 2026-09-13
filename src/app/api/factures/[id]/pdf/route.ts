@@ -127,7 +127,23 @@ export async function GET(
   .stamp { font-size: 11px; color: #d1d5db; text-align: right; }
   .print-btn { display: block; margin: 16px auto; padding: 10px 24px; background: #1e40af; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
   .print-btn:hover { background: #1e3a8a; }
-  @media print { .print-btn { display: none; } body { padding: 0; background: white; } .invoice { box-shadow: none; } }
+  @page { size: A4; margin: 10mm; }
+  @media print {
+    .print-btn { display: none; }
+    body { padding: 0; background: white; }
+    .invoice { box-shadow: none; max-width: 100%; border-radius: 0; }
+    .header { padding: 14px 20px; }
+    .school-info { padding: 10px 20px; }
+    .body { padding: 14px 20px; }
+    .amount-box { padding: 12px; margin: 12px 0; }
+    .amount-box .amount { font-size: 24px; }
+    .summary-grid { margin: 12px 0; gap: 8px; }
+    .summary-card { padding: 10px; }
+    .footer { padding: 12px 20px; }
+    .signature-line { margin-top: 24px; }
+    table { margin: 10px 0; }
+    th, td { padding: 6px 10px; }
+  }
 </style>
 </head>
 <body>
@@ -179,11 +195,6 @@ export async function GET(
       <div class="row"><span class="label">Libellé</span><span class="value">${facture.libelle}</span></div>
       ${facture.echeance ? `<div class="row"><span class="label">Échéance</span><span class="value">${new Date(facture.echeance).toLocaleDateString("fr-FR")}</span></div>` : ""}
       ${facture.createdBy ? `<div class="row"><span class="label">Émise par</span><span class="value">${facture.createdBy.name}</span></div>` : ""}
-
-      <div class="amount-box">
-        <div class="label">Montant facturé</div>
-        <div class="amount">${formatMoney(facture.montant, facture.devise)}</div>
-      </div>
 
       <div class="summary-grid">
         <div class="summary-card summary-invoiced">

@@ -50,22 +50,22 @@ function generateAttestationHTML(data: ReturnType<typeof getAttestationData> ext
 <meta charset="UTF-8">
 <title>${d.titre} — ${d.eleveNom} ${d.elevePrenom}</title>
 <style>
-  @page { size: A4; margin: 15mm; }
-  body { font-family: 'Times New Roman', serif; color: #1a1a1a; margin: 0; padding: 20px; }
-  .header { display: flex; flex-direction: column; align-items: center; margin-bottom: 30px; border-bottom: 2px solid #1e40af; padding-bottom: 10px; }
+  @page { size: A4; margin: 12mm; }
+  body { font-family: 'Times New Roman', serif; color: #1a1a1a; margin: 0; padding: 0; }
+  .header { display: flex; flex-direction: column; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #1e40af; padding-bottom: 8px; }
   .logo { max-width: 100%; max-height: 40mm; object-fit: contain; }
   .ecole-info { text-align: center; font-size: 11px; line-height: 1.4; margin-top: 6px; }
   .ecole-info .name { font-size: 16px; font-weight: bold; }
-  .title { text-align: center; font-size: 22px; font-weight: bold; text-transform: uppercase; margin: 20px 0; letter-spacing: 1px; }
-  .body { text-align: justify; font-size: 14px; line-height: 1.8; margin: 30px auto; max-width: 170mm; }
+  .title { text-align: center; font-size: 22px; font-weight: bold; text-transform: uppercase; margin: 12px 0; letter-spacing: 1px; }
+  .body { text-align: justify; font-size: 14px; line-height: 1.8; margin: 15px auto; max-width: 170mm; }
   .body strong { font-weight: bold; }
-  .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 60px; }
+  .footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 30px; }
   .date-lieu { font-size: 12px; }
   .signature { text-align: center; font-size: 12px; }
   .signature img { max-height: 60px; }
   .signature .name { border-top: 1px solid #333; padding-top: 4px; margin-top: 8px; font-weight: bold; }
   .cachet { position: absolute; right: 60px; bottom: 80px; opacity: 0.8; max-height: 100px; }
-  .eleve-info { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 12px 20px; margin: 20px auto; max-width: 170mm; font-size: 13px; }
+  .eleve-info { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 20px; margin: 12px auto; max-width: 170mm; font-size: 13px; }
   .eleve-info table { width: 100%; }
   .eleve-info td { padding: 4px 8px; }
   .eleve-info .label { font-weight: bold; color: #555; width: 120px; }

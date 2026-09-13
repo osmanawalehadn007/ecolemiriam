@@ -481,10 +481,34 @@ export async function getBulletinAnnuelData(
     rangAnnuel,
     effectifClasse: classeEleves.length,
 
-    appreciation: null,
-    decision: null,
+    appreciation: genererAppreciationAnnuelle(moyenneAnnuelle),
+    decision: genererDecisionAnnuelle(moyenneAnnuelle),
 
     profPrincipalNom: eleve.classe.profPrincipal?.user.name,
     generatedAt: new Date(),
   };
+}
+
+// ============================================================
+// Helpers pour la décision annuelle (pré-remplissage)
+// ============================================================
+
+function genererDecisionAnnuelle(moyenne: number | null): string | null {
+  if (moyenne === null) return null;
+  if (moyenne >= 16) return "FELICITATIONS";
+  if (moyenne >= 14) return "ENCOURAGEMENTS";
+  if (moyenne >= 10) return "PASSAGE";
+  if (moyenne >= 8) return "AVERTISSEMENT";
+  return "REDOUBLEMENT";
+}
+
+function genererAppreciationAnnuelle(moyenne: number | null): string | null {
+  if (moyenne === null) return null;
+  if (moyenne >= 18) return "Excellente année scolaire. Résultats remarquables, continuez ainsi.";
+  if (moyenne >= 16) return "Très bons résultats annuels. Élève sérieux et appliqué.";
+  if (moyenne >= 14) return "Bons résultats annuels. Peut encore progresser avec plus d'efforts.";
+  if (moyenne >= 12) return "Résultats annuels satisfaisants. Des efforts supplémentaires sont attendus.";
+  if (moyenne >= 10) return "Résultats annuels moyens. Un travail plus régulier s'impose.";
+  if (moyenne >= 8) return "Résultats annuels insuffisants. Des difficultés persistantes nécessitent un suivi.";
+  return "Résultats annuels très insuffisants. Un soutien scolaire est fortement recommandé.";
 }
