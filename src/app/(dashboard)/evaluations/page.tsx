@@ -25,11 +25,12 @@ export const metadata = {
   title: "Liste des examens | École Miriam",
 };
 
-export default async function EvaluationsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ matiereId?: string }>;
-}) {
+export default async function EvaluationsPage(
+  props: {
+    searchParams: Promise<{ matiereId?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const [session, t, sp] = await Promise.all([
     auth(),
     getTranslations("evaluations"),

@@ -136,7 +136,7 @@ export async function PUT(
       });
     }
 
-    revalidateTag("dashboard-data");
+    revalidateTag("dashboard-data", "max");
 
     return NextResponse.json({ success: true, count: notesToCreate.length });
   } catch (error) {

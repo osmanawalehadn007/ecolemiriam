@@ -92,11 +92,11 @@ export async function POST(req: NextRequest) {
       })),
     });
 
-    revalidateTag("eleves-stats");
+    revalidateTag("eleves-stats", "max");
     // Les effectifs par classe affichés dans Paramètres → Pédagogie.
     revalidatePath("/parametres");
     revalidatePath("/eleves");
-    revalidateTag("dashboard-data");
+    revalidateTag("dashboard-data", "max");
 
     return NextResponse.json({
       annulees: aArchiver.length,

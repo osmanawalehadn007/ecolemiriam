@@ -62,7 +62,7 @@ export async function getAnneeCouranteLibelle(tenantId: string): Promise<string 
  */
 export async function invalidateAnneeCourante(tenantId: string): Promise<void> {
   await cacheDel(cacheKey(tenantId, "annee-courante"));
-  revalidateTag("annee-courante");
+  revalidateTag("annee-courante", "max");
 }
 
 /**

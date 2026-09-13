@@ -44,12 +44,12 @@ function isPublic(pathname: string): boolean {
 
 const SELF_AUTH_API = ["/api/auth", "/api/cron", "/api/webhooks"];
 
-export default auth(async function middleware(req: NextRequest) {
+export default auth(async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // ── Nonce CSP par requête ───────────────────────────────────────────────
-  // Généré ici (edge runtime, crypto.randomUUID disponible), puis propagé
-  // à l'app via le header `x-nonce` : Next.js 15 le lit et l'injecte
+  // Généré ici (proxy runtime Node.js, crypto.randomUUID disponible), puis
+  // propagé à l'app via le header `x-nonce` : Next.js 16 le lit et l'injecte
   // automatiquement dans tous ses <script> inline (hydration, RSC payload).
   // La CSP construite dans applySecurityHeaders remplace 'unsafe-inline'
   // dans script-src par 'nonce-<valeur>'.

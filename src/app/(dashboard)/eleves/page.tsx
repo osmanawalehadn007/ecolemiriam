@@ -282,11 +282,12 @@ async function getElevesData(
   return { eleves, total, stats, classeNoms, effectifs };
 }
 
-export default async function ElevesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string; classeId?: string; statut?: string; limit?: string }>;
-}) {
+export default async function ElevesPage(
+  props: {
+    searchParams: Promise<{ q?: string; classeId?: string; statut?: string; limit?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const [session, t, tCommon, sp] = await Promise.all([
     auth(),
     getTranslations("eleves"),

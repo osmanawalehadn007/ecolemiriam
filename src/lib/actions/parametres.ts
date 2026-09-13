@@ -522,9 +522,9 @@ export async function createClasse(data: ClasseFormData) {
 
   revalidatePath("/parametres");
   revalidatePath("/eleves");
-  revalidateTag("classes-list");
-  revalidateTag("dashboard-data");
-  revalidateTag("eleves-stats");
+  revalidateTag("classes-list", "max");
+  revalidateTag("dashboard-data", "max");
+  revalidateTag("eleves-stats", "max");
   return { success: true };
 }
 
@@ -589,9 +589,9 @@ export async function deleteClasse(
 
   revalidatePath("/parametres");
   revalidatePath("/eleves");
-  revalidateTag("classes-list");
-  revalidateTag("dashboard-data");
-  revalidateTag("eleves-stats");
+  revalidateTag("classes-list", "max");
+  revalidateTag("dashboard-data", "max");
+  revalidateTag("eleves-stats", "max");
   return { success: true };
 }
 
@@ -631,9 +631,9 @@ export async function transferClasse(classeId: string, targetSiteId: string) {
 
   revalidatePath("/parametres");
   revalidatePath("/eleves");
-  revalidateTag("classes-list");
-  revalidateTag("dashboard-data");
-  revalidateTag("eleves-stats");
+  revalidateTag("classes-list", "max");
+  revalidateTag("dashboard-data", "max");
+  revalidateTag("eleves-stats", "max");
   return { success: true };
 }
 

@@ -10,11 +10,12 @@ import { SiteTabs } from "@/components/sites/SiteTabs";
 
 export const metadata = { title: "Cours en ligne — LMS | École Miriam" };
 
-export default async function CoursPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ siteId?: string }>;
-}) {
+export default async function CoursPage(
+  props: {
+    searchParams: Promise<{ siteId?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "cours:read");

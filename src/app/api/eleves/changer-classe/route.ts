@@ -59,12 +59,12 @@ export async function POST(req: NextRequest) {
     data: { classeId: nouvelleClasseId },
   });
 
-  revalidateTag("eleves-stats");
+  revalidateTag("eleves-stats", "max");
   // Les effectifs par classe affichés dans Paramètres → Pédagogie.
   revalidatePath("/parametres");
   revalidatePath("/eleves");
-  revalidateTag("dashboard-data");
-  revalidateTag("classes-list");
+  revalidateTag("dashboard-data", "max");
+  revalidateTag("classes-list", "max");
 
   return NextResponse.json({ count: result.count });
 }

@@ -12,11 +12,12 @@ import type { Role } from "@prisma/client";
 
 export const metadata = { title: "Mes classes — École Miriam" };
 
-export default async function MesClassesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ siteId?: string }>;
-}) {
+export default async function MesClassesPage(
+  props: {
+    searchParams: Promise<{ siteId?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const [session, sp] = await Promise.all([auth(), searchParams]);
   if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "classes:read");

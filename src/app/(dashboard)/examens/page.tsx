@@ -92,11 +92,12 @@ const getExamensData = unstable_cache(
   { revalidate: 30, tags: ["examens-data"] }
 );
 
-export default async function ExamensPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ siteId?: string }>;
-}) {
+export default async function ExamensPage(
+  props: {
+    searchParams: Promise<{ siteId?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "examens:read");

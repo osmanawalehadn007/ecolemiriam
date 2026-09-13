@@ -8,12 +8,13 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // Next.js 16 : `eslint.ignoreDuringBuilds` supprimé, `next lint` supprimé.
+  // Le linting se fait via `eslint src/` (ESLint 9 flat config) en CI.
   // Désactiver le cache webpack en dev pour éviter la corruption récurrente
   // du fichier .pack.gz qui provoque des erreurs 500 sur /api/auth/csrf
   // après plusieurs compilations à la volée.
+  // Next.js 16 utilise Turbopack par défaut — cette config webpack ne s'applique
+  // qu'avec `next dev --webpack` / `next build --webpack` (opt-out Turbopack).
   ...(isProd ? {} : {
     webpack: (config: any) => {
       config.cache = false;

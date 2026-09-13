@@ -385,8 +385,8 @@ export async function promouvoirEleves(): Promise<ResultatPromotion> {
 
   revalidatePath("/eleves");
   revalidatePath("/reinscription");
-  revalidateTag("eleves-stats");
-  revalidateTag("dashboard-data");
+  revalidateTag("eleves-stats", "max");
+  revalidateTag("dashboard-data", "max");
 
   return { promus: promusCount, diplomes: diplomesCount, sansChangement, details };
 }
@@ -518,7 +518,7 @@ export async function genererFraisRenouvellement(annee: string) {
   });
 
   revalidatePath("/facturation");
-  revalidateTag("dashboard-data");
+  revalidateTag("dashboard-data", "max");
 
   return { generated: toCreate.length, skipped: eleves.length - toCreate.length };
 }
@@ -658,8 +658,8 @@ export async function procederReinscriptionComplete(params: {
   revalidatePath("/eleves");
   revalidatePath("/facturation");
   revalidatePath("/parametres");
-  revalidateTag("dashboard-data");
-  revalidateTag("eleves-stats");
+  revalidateTag("dashboard-data", "max");
+  revalidateTag("eleves-stats", "max");
 
   return { anneeActive, promotion, fraisRenouvellement, mensualites, erreurs };
 }

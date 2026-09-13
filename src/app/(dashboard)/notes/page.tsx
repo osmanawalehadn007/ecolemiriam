@@ -138,11 +138,12 @@ const getNotesDirectData = unstable_cache(
   { revalidate: 30, tags: ["notes-direct-data"] }
 );
 
-export default async function NotesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ classeId?: string; matiereId?: string; evaluationId?: string; siteId?: string }>;
-}) {
+export default async function NotesPage(
+  props: {
+    searchParams: Promise<{ classeId?: string; matiereId?: string; evaluationId?: string; siteId?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "notes:read");

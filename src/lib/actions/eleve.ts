@@ -341,8 +341,8 @@ export async function createEleve(
   revalidatePath("/admissions");
   revalidatePath("/facturation");
   revalidatePath("/parametres");
-  revalidateTag("eleves-stats");
-  revalidateTag("dashboard-data");
+  revalidateTag("eleves-stats", "max");
+  revalidateTag("dashboard-data", "max");
   return {
     success: true,
     requiresPayment: true,
@@ -511,8 +511,8 @@ export async function updateEleve(
   // sans cette invalidation, cet écran garde les chiffres d.avant.
   revalidatePath("/parametres");
   revalidatePath(`/eleves/${id}`);
-  revalidateTag("eleves-stats");
-  revalidateTag("dashboard-data");
+  revalidateTag("eleves-stats", "max");
+  revalidateTag("dashboard-data", "max");
   return { success: true, id };
 }
 
@@ -578,8 +578,8 @@ export async function deleteEleve(id: string, reason?: string) {
   // sans cette invalidation, cet écran garde les chiffres d.avant.
   revalidatePath("/parametres");
   revalidatePath(`/eleves/${id}`);
-  revalidateTag("eleves-stats");
-  revalidateTag("dashboard-data");
+  revalidateTag("eleves-stats", "max");
+  revalidateTag("dashboard-data", "max");
   return { success: true as boolean, id };
 }
 
@@ -646,7 +646,7 @@ export async function restoreEleve(id: string) {
   // sans cette invalidation, cet écran garde les chiffres d.avant.
   revalidatePath("/parametres");
   revalidatePath(`/eleves/${id}`);
-  revalidateTag("eleves-stats");
-  revalidateTag("dashboard-data");
+  revalidateTag("eleves-stats", "max");
+  revalidateTag("dashboard-data", "max");
   return { success: true as boolean, id };
 }

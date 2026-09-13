@@ -309,7 +309,7 @@ export async function genererMensualites(params: {
   const skipped = eleves.length - toCreate.length;
 
   revalidatePath("/facturation");
-  revalidateTag("dashboard-data");
+  revalidateTag("dashboard-data", "max");
   return { success: true, generated: toCreate.length, skipped };
 }
 
@@ -499,7 +499,7 @@ export async function genererFacturesAnnuelles(params: {
   });
 
   revalidatePath("/facturation");
-  revalidateTag("dashboard-data");
+  revalidateTag("dashboard-data", "max");
   return {
     success: true,
     generated: toCreate.length,
@@ -630,7 +630,7 @@ export async function genererFraisInscription(params: {
   const skipped = eleveIds.length - toCreate.length;
 
   revalidatePath("/facturation");
-  revalidateTag("dashboard-data");
+  revalidateTag("dashboard-data", "max");
   return { success: true, generated: toCreate.length, skipped };
 }
 
@@ -713,7 +713,7 @@ export async function envoyerRelance(factureId: string, canal: string) {
 
   revalidatePath("/facturation");
   revalidatePath(`/facturation/${factureId}`);
-  revalidateTag("dashboard-data");
+  revalidateTag("dashboard-data", "max");
   return { success: true, niveau, message };
 }
 
@@ -771,8 +771,8 @@ export async function exclureEleve(params: {
 
   revalidatePath("/facturation");
   revalidatePath("/eleves");
-  revalidateTag("dashboard-data");
-  revalidateTag("eleves-stats");
+  revalidateTag("dashboard-data", "max");
+  revalidateTag("eleves-stats", "max");
   return { success: true };
 }
 
@@ -805,8 +805,8 @@ export async function leverExclusion(exclusionId: string) {
 
   revalidatePath("/facturation");
   revalidatePath("/eleves");
-  revalidateTag("dashboard-data");
-  revalidateTag("eleves-stats");
+  revalidateTag("dashboard-data", "max");
+  revalidateTag("eleves-stats", "max");
   return { success: true };
 }
 

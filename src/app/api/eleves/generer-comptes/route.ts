@@ -85,8 +85,8 @@ export async function POST(req: NextRequest) {
     created.push(user.id);
   }
 
-  revalidateTag("eleves-stats");
-  revalidateTag("dashboard-data");
+  revalidateTag("eleves-stats", "max");
+  revalidateTag("dashboard-data", "max");
 
   return NextResponse.json({ created: created.length, accounts });
 }

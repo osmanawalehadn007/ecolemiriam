@@ -10,11 +10,12 @@ import { getSiteColorMap } from "@/lib/site-colors";
 
 export const metadata = { title: "Ressources pédagogiques — École Miriam" };
 
-export default async function RessourcesPedagogiquesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ siteId?: string }>;
-}) {
+export default async function RessourcesPedagogiquesPage(
+  props: {
+    searchParams: Promise<{ siteId?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const [session, t, tCommon, sp] = await Promise.all([
     auth(),
     getTranslations("cours"),

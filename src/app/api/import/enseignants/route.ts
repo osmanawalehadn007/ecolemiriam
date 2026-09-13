@@ -316,7 +316,7 @@ export async function POST(req: NextRequest) {
     });
 
     revalidatePath("/parametres");
-    revalidateTag("users-list");
+    revalidateTag("users-list", "max");
 
     return NextResponse.json({
       success: true,

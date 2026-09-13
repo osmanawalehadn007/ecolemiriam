@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
     );
 
     revalidatePath("/emploi-du-temps");
-    revalidateTag("emploi-du-temps-data");
+    revalidateTag("emploi-du-temps-data", "max");
     return NextResponse.json({ success: true, classeNom: classe.nom, ...result });
   } catch (error) {
     console.error("[API/emploi-du-temps/bulk-apply]", error);

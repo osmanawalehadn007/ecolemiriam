@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
           data: { statut: newStatut as never },
         });
 
-        revalidateTag("dashboard-data");
+        revalidateTag("dashboard-data", "max");
 
         console.log(`[Stripe] Paiement enregistré pour facture ${facture.numero}: ${amount}`);
         break;

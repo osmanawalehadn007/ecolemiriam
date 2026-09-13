@@ -77,7 +77,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       include: { sessions: true },
     });
 
-    revalidateTag("dashboard-data");
+    revalidateTag("dashboard-data", "max");
 
     return NextResponse.json(updated);
   } catch (error) {
@@ -110,7 +110,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     await prisma.examen.delete({ where: { id } });
 
-    revalidateTag("dashboard-data");
+    revalidateTag("dashboard-data", "max");
 
     return NextResponse.json({ success: true });
   } catch (error) {

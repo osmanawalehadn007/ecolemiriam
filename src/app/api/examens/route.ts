@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
       include: { sessions: true },
     });
 
-    revalidateTag("dashboard-data");
+    revalidateTag("dashboard-data", "max");
 
     return NextResponse.json(examen, { status: 201 });
   } catch (error) {

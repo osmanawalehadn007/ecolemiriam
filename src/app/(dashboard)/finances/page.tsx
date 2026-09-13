@@ -217,11 +217,12 @@ const getFinanceDataCached = unstable_cache(
   { revalidate: 30, tags: ["finances-data"] }
 );
 
-export default async function FinancesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ siteId?: string; periode?: string; month?: string; type?: string }>;
-}) {
+export default async function FinancesPage(
+  props: {
+    searchParams: Promise<{ siteId?: string; periode?: string; month?: string; type?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/select-tenant");
   guardPage(session, "finance:read");

@@ -233,7 +233,7 @@ export async function createFacture(data: FactureFormData) {
   });
 
   revalidatePath("/facturation");
-  revalidateTag("dashboard-data");
+  revalidateTag("dashboard-data", "max");
   return { success: true, id: facture.id };
 }
 
@@ -332,7 +332,7 @@ export async function createFacturesCombinees(data: FacturesCombineesData) {
   });
 
   revalidatePath("/facturation");
-  revalidateTag("dashboard-data");
+  revalidateTag("dashboard-data", "max");
   return { success: true, created, blocked };
 }
 
@@ -438,7 +438,7 @@ export async function enregistrerPaiement(factureId: string, data: PaiementFormD
 
   revalidatePath("/facturation");
   revalidatePath(`/facturation/${factureId}`);
-  revalidateTag("dashboard-data");
+  revalidateTag("dashboard-data", "max");
 
   // Audit : tracer tout encaissement (qui, quand, combien, sur quelle facture)
   await audit({
@@ -487,7 +487,7 @@ export async function annulerFacture(factureId: string) {
 
   revalidatePath("/facturation");
   revalidatePath(`/facturation/${factureId}`);
-  revalidateTag("dashboard-data");
+  revalidateTag("dashboard-data", "max");
 
   await audit({
     tenantId: session.user.tenantId,
@@ -584,7 +584,7 @@ export async function demanderAnnulationPaiement(paiementId: string, motif: stri
 
   revalidatePath("/facturation");
   revalidatePath(`/facturation/${paiement.factureId}`);
-  revalidateTag("dashboard-data");
+  revalidateTag("dashboard-data", "max");
 
   return { success: true };
 }
@@ -684,7 +684,7 @@ export async function approuverAnnulationPaiement(paiementId: string) {
 
   revalidatePath("/facturation");
   revalidatePath(`/facturation/${paiement.factureId}`);
-  revalidateTag("dashboard-data");
+  revalidateTag("dashboard-data", "max");
 
   return { success: true, contrePassationId: contrePassation.id };
 }
@@ -734,7 +734,7 @@ export async function refuserAnnulationPaiement(paiementId: string) {
 
   revalidatePath("/facturation");
   revalidatePath(`/facturation/${paiement.factureId}`);
-  revalidateTag("dashboard-data");
+  revalidateTag("dashboard-data", "max");
 
   return { success: true };
 }
