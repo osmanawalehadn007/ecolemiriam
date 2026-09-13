@@ -58,7 +58,7 @@ export async function POST(req: Request) {
     }
 
     // Anti-énumération : on ne révèle pas si l'email existe.
-    // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- pré-login : lookup par email
+     
     const user = await prismaBase.user.findFirst({
       where: { email: { equals: email, mode: "insensitive" } },
       select: {

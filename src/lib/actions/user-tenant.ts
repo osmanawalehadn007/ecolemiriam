@@ -63,7 +63,7 @@ export async function addUserToTenant(params: {
   }
 
   // Chercher l'utilisateur par email (insensible à la casse)
-  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- recherche globale par email : l'utilisateur peut appartenir à plusieurs tenants
+   
   const existingUser = await prismaBase.user.findFirst({
     where: { email: { equals: params.email, mode: "insensitive" } },
     select: { id: true, name: true, password: true },

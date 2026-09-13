@@ -273,7 +273,7 @@ export async function verifyEmailToken(
   }
 
   // Marquer l'email comme vérifié
-  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- vérification email : lookup par email, pas de session
+   
   const user = await prismaBase.user.findFirst({
     where: { email: { equals: record.identifier, mode: "insensitive" } },
     select: { id: true, isActive: true },
@@ -288,7 +288,7 @@ export async function verifyEmailToken(
     return { success: false, error: "Ce compte est désactivé. Contactez votre administrateur." };
   }
 
-  // eslint-disable-next-line ecolemiriam/require-tenant-id -- self-update après vérification : user.id provient du lookup ci-dessus
+   
   await prismaBase.user.update({
     where: { id: user.id },
     data: { emailVerified: new Date() },
@@ -307,7 +307,7 @@ export async function verifyEmailToken(
  * Retourne true si emailVerified est non null.
  */
 export async function isEmailVerified(userEmail: string): Promise<boolean> {
-  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- vérification pré-login : lookup par email
+   
   const user = await prismaBase.user.findFirst({
     where: { email: { equals: userEmail, mode: "insensitive" } },
     select: { emailVerified: true },

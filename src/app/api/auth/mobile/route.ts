@@ -46,7 +46,7 @@ export async function POST(req: Request) {
 
     const { email, password, tenantSlug } = parsed.data;
 
-    // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- endpoint d'authentification mobile : lookup par email/password, pas de session utilisateur disponible
+     
     // Recherche insensible à la casse (voir auth.ts pour le même correctif).
     const user = await prismaBase.user.findFirst({
       where: { email: { equals: email, mode: "insensitive" } },
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Cet compte n'appartient pas à cet établissement" }, { status: 403 });
     }
 
-    // eslint-disable-next-line ecolemiriam/require-tenant-id -- self-update après authentification réussie : user.id provient du findUnique ci-dessus, pas d'entrée utilisateur
+     
     await prismaBase.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },

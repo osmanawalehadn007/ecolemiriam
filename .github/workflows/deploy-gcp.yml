@@ -39,15 +39,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Node 22 minimum : jsdom 30 exige `^22.22.2 || ^24.15.0` et undici 8
+      # Node 24 LTS (krypton) : jsdom 30 exige `^22.22.2 || ^24.15.0` et undici 8
       # `>=22.19.0`, pour `worker_threads.markAsUncloneable` absent de Node 20.
       # Sous Node 20, tous les workers vitest meurent au démarrage sur
       # « webidl.util.markAsUncloneable is not a function » et aucun test ne
-      # s'exécute. 22 est aussi la version de l'image docker/app/Dockerfile.
+      # s'exécute. 24 est aussi la version de l'image docker/app/Dockerfile.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -81,6 +81,30 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
           RLS_ACTIVE: ${{ secrets.RLS_ACTIVE }}
+
+      # ── Audit de sécurité des dépendances (npm audit) ──────────────────
+      # Bloque le CI si une vulnérabilité de niveau high ou critical est
+      # détectée dans les dépendances. Les vulnérabilités moderate et low
+      # sont affichées mais ne bloquent pas (continue-on-error: false sur
+      # --audit-level=high uniquement).
+      - name: Dependency audit (high+)
+        run: npm audit --audit-level=high
+        continue-on-error: false
+
+      # ── SAST : Semgrep scan ─────────────────────────────────────────────
+      # Analyse statique du code pour détecter les vulnérabilités OWASP
+      # Top 10 (injection, XSS, path traversal, secrets hardcodés, etc.).
+      # Utilise l'autoconfig de Semgrep (règles par défaut + p/owasp).
+      - name: Semgrep SAST scan
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/owasp-top-ten
+            p/typescript
+            p/react
+          generateSarif: "1"
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
   # ============================================================
   # JOB 2 : Build de l'image Docker + push vers GHCR

@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Charger les sites
-    // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- sites du tenant
+     
     const sites = await prisma.site.findMany({
       where: { tenantId },
       select: { id: true, nom: true },

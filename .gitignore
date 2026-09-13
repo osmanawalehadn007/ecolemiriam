@@ -113,3 +113,4 @@ docker/postgres/rclone-binary
 docker/postgres/tls/
 docker/caddy/upstream-test.conf
 .env.production.bak*
+.npm-cache/

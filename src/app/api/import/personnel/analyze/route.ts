@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     if (!file) return NextResponse.json({ error: "Aucun fichier fourni" }, { status: 400 });
 
     // Charger les sites du tenant
-    // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- sites du tenant
+     
     const sites = await prisma.site.findMany({
       where: { tenantId },
       select: { id: true, nom: true },

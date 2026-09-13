@@ -62,7 +62,7 @@ function baseEleveWhere(
  * agrégats sur une colonne indexée (`tenantId`) — le coût est négligeable
  * devant le risque d'afficher deux vérités différentes.
  */
-// eslint-disable-next-line ecolemiriam/require-site-filter -- `where` est construit par baseEleveWhere, qui applique déjà siteFilter
+ 
 async function getElevesStats(where: Prisma.EleveWhereInput) {
   // OPTIMISATION: 1 seule requête findMany au lieu de 3 groupBy séparés.
   // On charge uniquement les 3 champs nécessaires (statut, sexe, regime)
@@ -129,7 +129,7 @@ const getClassesList = unstable_cache(
     // N-4 : unstable_cache détache le contexte requête → auth() échoue →
     // RLS non positionnée. runWithTenant injecte le contexte via ALS.
     return runWithTenant(tenantId, siteId, async () => {
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- where includes ...siteFilter spread, not detectable inside unstable_cache
+     
     const classes = await prisma.classe.findMany({
       where: mergeFilters(
         { tenantId },
@@ -195,17 +195,17 @@ async function getElevesData(
     siteId,
     async (tx: Prisma.TransactionClient) => {
       const [eleves, statsRows, parClasse] = await Promise.all([
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- where is built from { tenantId, ...siteFilter } in getElevesData
+         
         tx.eleve.findMany({
           where,
           take: takeLimit,
           include: {
-            // eslint-disable-next-line ecolemiriam/require-site-filter -- classe is a 1:1 relation, site filter applied at parent query level
+             
             classe: { select: { id: true, nom: true, niveau: true, site: { select: { id: true, nom: true } } } },
             // Le lien élève↔parent n'a pas de site propre : il est borné par
             // l'élève, déjà filtré par le `where` racine. Un parent peut par
             // ailleurs avoir des enfants sur plusieurs sites.
-            // eslint-disable-next-line ecolemiriam/require-site-filter
+             
             parents: {
               include: { parent: { select: { nom: true, prenom: true, phone: true } } },
               where: { isGardien: true },
@@ -218,13 +218,13 @@ async function getElevesData(
           orderBy: [{ prenom: "asc" }, { nom: "asc" }],
         }),
         // Stats: 1 seule requête findMany au lieu de 3 groupBy
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- where reçu en paramètre, déjà filtré par site
+         
         tx.eleve.findMany({
           where: base,
           select: { statut: true, sexe: true, regime: true },
         }),
         // Effectifs par classe + total en 1 requête
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- where reçu en paramètre, déjà filtré par site
+         
         tx.eleve.groupBy({
           by: ["classeId"],
           where,

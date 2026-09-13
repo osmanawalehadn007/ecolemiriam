@@ -560,7 +560,7 @@ export async function demanderAnnulationPaiement(paiementId: string, motif: stri
     throw new Error("Ce paiement a déjà été annulé (contre-passation approuvée)");
   }
 
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- paiementId déjà vérifié via tenant
+   
   await prisma.paiement.update({
     where: { id: paiementId },
     data: {

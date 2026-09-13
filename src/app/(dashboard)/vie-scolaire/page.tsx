@@ -44,7 +44,7 @@ const getVieScolaireData = unstable_cache(
       );
 
       const [incidents, eleves, classes] = await Promise.all([
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès
+         
         prisma.incident.findMany({
           where: {
             tenantId, ...incFilter,
@@ -62,7 +62,7 @@ const getVieScolaireData = unstable_cache(
           orderBy: { date: "desc" },
           take: 100,
         }),
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès
+         
         prisma.eleve.findMany({
           where: {
             tenantId, statut: "ACTIF", ...eleveFilter,
@@ -75,7 +75,7 @@ const getVieScolaireData = unstable_cache(
           select: { id: true, nom: true, prenom: true, matricule: true, classe: { select: { nom: true } } },
           orderBy: [{ nom: "asc" }, { prenom: "asc" }],
         }),
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès
+         
         prisma.classe.findMany({
           where: mergeFilters(
             { tenantId, ...teacherClasseFilter },

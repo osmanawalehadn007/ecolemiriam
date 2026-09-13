@@ -138,6 +138,10 @@ export const authConfig: NextAuthConfig = {
         token.siteIds = (user as { siteIds?: string[] }).siteIds ?? [];
         token.tenantHasSites = (user as { tenantHasSites?: boolean }).tenantHasSites ?? true;
         token.claimsVersion = (user as { claimsVersion?: number }).claimsVersion;
+        // 2FA obligatoire pour SUPER_ADMIN : flag posé à la connexion si
+        // la 2FA n'est pas activée. Le middleware redirige vers la page
+        // de configuration tant que le flag est présent.
+        token.mfaSetupRequired = (user as { mfaSetupRequired?: boolean }).mfaSetupRequired ?? false;
         // Stocker la liste des tenants accessibles pour le switcher (sans logo)
         const availableTenants = (user as { availableTenants?: AvailableTenantSlim[] }).availableTenants;
         if (availableTenants) {
@@ -158,6 +162,8 @@ export const authConfig: NextAuthConfig = {
         (session.user as { tenantHasSites?: boolean }).tenantHasSites =
           (token.tenantHasSites as boolean | undefined) ?? true;
         (session.user as { availableTenants?: AvailableTenantSlim[] }).availableTenants = token.availableTenants as AvailableTenantSlim[] | undefined;
+        (session.user as { mfaSetupRequired?: boolean }).mfaSetupRequired =
+          (token.mfaSetupRequired as boolean | undefined) ?? false;
       }
       return session;
     },

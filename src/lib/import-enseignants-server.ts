@@ -52,7 +52,7 @@ export async function preparerPlan(
       where: mergeFilters({ tenantId: acteur.tenantId }, siteFilterForModel("matiere", acteur)),
       select: { id: true, nom: true, code: true },
     }),
-    // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- sites du tenant, filtrés par scope
+     
     prisma.site.findMany({
       where: { tenantId: acteur.tenantId },
       select: { id: true, nom: true },

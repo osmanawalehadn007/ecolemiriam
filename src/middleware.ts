@@ -6,6 +6,7 @@ import { checkCSRF } from "@/lib/security/csrf";
 import { globalRateLimit, getRealIP } from "@/lib/security/global-rate-limit";
 import { applySecurityHeaders } from "@/lib/security/headers";
 import { checkBotBlock, recordPublicRequest, isBotProtectedPath } from "@/lib/security/bot-detection";
+import { securityLog } from "@/lib/security/security-log";
 
 const { auth } = NextAuth(authConfig);
 
@@ -46,9 +47,20 @@ const SELF_AUTH_API = ["/api/auth", "/api/cron", "/api/webhooks"];
 export default auth(async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // ── Nonce CSP par requête ───────────────────────────────────────────────
+  // Généré ici (edge runtime, crypto.randomUUID disponible), puis propagé
+  // à l'app via le header `x-nonce` : Next.js 15 le lit et l'injecte
+  // automatiquement dans tous ses <script> inline (hydration, RSC payload).
+  // La CSP construite dans applySecurityHeaders remplace 'unsafe-inline'
+  // dans script-src par 'nonce-<valeur>'.
+  const cspNonce = crypto.randomUUID();
+
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", cspNonce);
+
   // ── Headers de sécurité durcis sur TOUTES les réponses ──────────────────
-  const response = NextResponse.next();
-  applySecurityHeaders(response, pathname);
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  applySecurityHeaders(response, pathname, cspNonce);
 
   // ── Détection de patterns bot sur les formulaires publics ───────────────
   //
@@ -63,8 +75,9 @@ export default auth(async function middleware(req: NextRequest) {
   // directement 429, ce qui rend toute boucle structurellement impossible.
   const ip = getRealIP(req);
   if (isBotProtectedPath(pathname)) {
-    const botCheck = checkBotBlock(ip);
+    const botCheck = await checkBotBlock(ip);
     if (botCheck.blocked) {
+      securityLog({ type: "bot_block", ip, pathname, metadata: { remainingMs: botCheck.remainingMs } });
       const retryAfter = String(Math.ceil(botCheck.remainingMs / 1000));
       if (pathname.startsWith("/api/")) {
         return NextResponse.json(
@@ -90,7 +103,8 @@ export default auth(async function middleware(req: NextRequest) {
     }
     // Seules les tentatives réelles (POST/PUT/PATCH/DELETE) consomment le
     // quota — un affichage de page ou un prefetch RSC ne compte plus.
-    recordPublicRequest(ip, pathname, req.method);
+    // Fire-and-forget : l'enregistrement ne doit pas bloquer la réponse.
+    void recordPublicRequest(ip, pathname, req.method);
   }
 
   if (isPublic(pathname)) {
@@ -99,8 +113,9 @@ export default auth(async function middleware(req: NextRequest) {
 
   // ── Rate limiting global sur les routes API ─────────────────────────────
   if (pathname.startsWith("/api/")) {
-    const rl = globalRateLimit(req);
+    const rl = await globalRateLimit(req);
     if (!rl.allowed) {
+      securityLog({ type: "rate_limit_block", ip, pathname, metadata: { limit: rl.limit } });
       return NextResponse.json(
         { error: "Trop de requêtes. Réessayez dans un instant." },
         {
@@ -118,6 +133,7 @@ export default auth(async function middleware(req: NextRequest) {
     // ── CSRF sur les méthodes mutatives ──────────────────────────────────
     const csrfError = checkCSRF(req as unknown as Request);
     if (csrfError) {
+      securityLog({ type: "csrf_reject", ip, pathname, metadata: { reason: csrfError } });
       return NextResponse.json(
         { error: "Requête non autorisée (CSRF)" },
         { status: 403 }
@@ -134,11 +150,27 @@ export default auth(async function middleware(req: NextRequest) {
     return response;
   }
 
-  const session = (req as unknown as { auth: { user?: { id: string } } }).auth;
+  const session = (req as unknown as { auth: { user?: { id: string; mfaSetupRequired?: boolean } } }).auth;
   if (!session?.user) {
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // ── 2FA obligatoire pour SUPER_ADMIN ────────────────────────────────────
+  // Si le flag `mfaSetupRequired` est présent (SUPER_ADMIN sans 2FA),
+  // rediriger vers /parametres/securite. Les routes d'API 2FA et la page
+  // de paramètres sont les seules autorisées tant que le flag est présent.
+  if (session.user.mfaSetupRequired) {
+    const allowedDuringSetup = pathname === "/parametres/securite" ||
+      pathname.startsWith("/api/auth/2fa/") ||
+      pathname.startsWith("/api/auth/signout");
+    if (!allowedDuringSetup) {
+      securityLog({ type: "mfa_setup_required_redirect", userId: session.user.id, pathname });
+      const setupUrl = new URL("/parametres/securite", req.url);
+      setupUrl.searchParams.set("mfaRequired", "1");
+      return NextResponse.redirect(setupUrl);
+    }
   }
 
   return response;

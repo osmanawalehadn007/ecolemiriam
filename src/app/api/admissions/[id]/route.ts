@@ -111,7 +111,7 @@ export async function PATCH(
       // le tarif spécifique au site mais en acceptant le tarif partagé
       // (siteId null) — sans quoi un tarif commun à tous les sites serait ignoré
       // et la facture tomberait à 0.
-      // eslint-disable-next-line ecolemiriam/require-site-filter -- recherche tarif par niveau, filtre site tolérant (site OU partagé)
+       
       const tarif = await prisma.tarifNiveau.findFirst({
         where: {
           tenantId: session.user.tenantId,
@@ -227,7 +227,7 @@ export async function PATCH(
     matricule = `ECL-${anneeInscription ?? new Date().getFullYear()}-${String(count + 1).padStart(4, "0")}`;
 
     // Vérifier que le matricule n'existe pas déjà
-    // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- findUnique sur contrainte unique tenantId_matricule
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- findUnique sur contrainte unique tenantId_matricule
     const existingMatricule = await prisma.eleve.findUnique({
       where: { tenantId_matricule: { tenantId, matricule } },
     });

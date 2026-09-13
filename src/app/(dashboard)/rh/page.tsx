@@ -23,7 +23,7 @@ const getEnseignantsRH = unstable_cache(
 
     return runWithTenant(tenantId, siteId, async () => {
       const [enseignants, absencesPersonnel, congesPersonnel, classes, matieres] = await Promise.all([
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
+         
         prisma.enseignant.findMany({
           where: { tenantId, ...ensFilter },
           include: {
@@ -63,7 +63,7 @@ const getEnseignantsRH = unstable_cache(
           },
           orderBy: { user: { name: "asc" } },
         }),
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
+         
         prisma.absencePersonnel.findMany({
           where: { tenantId, ...absFilter },
           include: {
@@ -73,7 +73,7 @@ const getEnseignantsRH = unstable_cache(
           orderBy: { date: "desc" },
           take: 50,
         }),
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
+         
         prisma.congePersonnel.findMany({
           where: { tenantId, ...congeFilter },
           include: {
@@ -85,7 +85,7 @@ const getEnseignantsRH = unstable_cache(
           take: 50,
         }),
         // Classes pour le dialog d'affectation
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
+         
         prisma.classe.findMany({
           where: mergeFilters(
             { tenantId },

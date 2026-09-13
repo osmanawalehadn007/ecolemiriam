@@ -4,7 +4,7 @@
  * Body: { secret: string, totp: string }
  */
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, unstable_update } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { verifyTOTP } from "@/lib/security/totp";
 import { z } from "zod";
@@ -52,6 +52,12 @@ export async function POST(req: Request) {
     action: "2fa:enable",
     verdict: "ALLOWED",
   });
+
+  // Rafraîchir le token JWT pour effacer le flag `mfaSetupRequired`
+  // (SUPER_ADMIN qui vient d'activer la 2FA). Sans cet update, le
+  // middleware continuerait de rediriger vers /parametres/securite
+  // jusqu'à la prochaine connexion.
+  await unstable_update({ user: { mfaSetupRequired: false } });
 
   return NextResponse.json({ success: true });
 }

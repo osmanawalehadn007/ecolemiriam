@@ -35,7 +35,7 @@ export async function getTeacherScope(
   return cached(
     cacheKey(tenantId, "teacher-scope", userId),
     () => runWithRlsBatch(tenantId, null, async (tx) => {
-      // eslint-disable-next-line ecolemiriam/require-site-filter -- teacher lookup by userId+tenantId, site scoping is caller's responsibility
+       
       const enseignant = await tx.enseignant.findFirst({
         where: { userId, tenantId },
         select: { id: true },
@@ -45,7 +45,7 @@ export async function getTeacherScope(
         return { classeIds: [], matiereIds: [], isRestricted: true };
       }
 
-      /* eslint-disable ecolemiriam/require-site-filter -- teacher scope resolution, site scoping is caller's responsibility */
+       
       const [emploiEntries, principalClasses, affectations, matieres] = await Promise.all([
         tx.emploiTemps.findMany({
           where: { enseignantId: enseignant.id, tenantId },
@@ -67,7 +67,7 @@ export async function getTeacherScope(
           select: { matiereId: true },
         }),
       ]);
-      /* eslint-enable ecolemiriam/require-site-filter */
+       
 
       const classeIds = Array.from(
         new Set([

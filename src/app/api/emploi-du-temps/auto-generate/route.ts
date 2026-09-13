@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
       prisma.emploiTemps.findMany({ where: { tenantId, ...emploiFilter, annee } }),
       // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
       prisma.disponibiliteEnseignant.findMany({ where: { tenantId } }),
-      // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
+       
       prisma.indisponibiliteEnseignant.findMany({ where: { tenantId } }),
     ]);
 

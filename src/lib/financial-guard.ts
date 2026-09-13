@@ -112,7 +112,7 @@ export async function checkEleveAccess(
   // 1. Vérification de filiation (PARENT / STUDENT uniquement)
   if (user && (user.role === "PARENT" || user.role === "STUDENT")) {
     if (user.role === "STUDENT") {
-      // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- portée déjà close : id + tenantId + userId de l'appelant
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- portée déjà close : id + tenantId + userId de l'appelant
       const own = await prisma.eleve.findFirst({
         where: { id: eleveId, tenantId, userId: user.userId },
         select: { id: true },
@@ -125,7 +125,7 @@ export async function checkEleveAccess(
       // tenant passe par la relation `eleve` — le contrôle est conservé, pas
       // supprimé, mais les règles de lint ne savent pas le reconnaître à
       // travers une relation.
-      // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- portée : eleveId + eleve.tenantId + parent.userId
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- portée : eleveId + eleve.tenantId + parent.userId
       const link = await prisma.eleveParent.findFirst({
         where: { eleveId, eleve: { tenantId }, parent: { userId: user.userId } },
         select: { eleveId: true },
@@ -135,7 +135,7 @@ export async function checkEleveAccess(
   }
 
   // 2. Vérification d'exclusion financière
-  // eslint-disable-next-line ecolemiriam/require-tenant-id -- eleveId + tenantId fournis par le caller
+   
   const exclusion = await prisma.exclusionEleve.findFirst({
     where: { eleveId, tenantId, dateFin: null },
     select: { id: true, motif: true, dateDebut: true },

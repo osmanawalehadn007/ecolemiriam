@@ -75,7 +75,7 @@ export async function POST(req: Request) {
     // le contexte du tenant COURANT, pas le nouveau → rejet. prismaBase
     // contourne RLS ; l'accès au nouveau tenant a déjà été vérifié ci-dessus
     // via userTenant.findFirst.
-    // eslint-disable-next-line ecolemiriam/require-tenant-id -- self-lookup de l'utilisateur connecté, userId provient de la session
+     
     await prismaBase.user.update({
       where: { id: userId },
       data: { tenantId, role: userTenant.role, siteId: null },

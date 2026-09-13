@@ -165,7 +165,7 @@ module.exports = {
           // place le contrôle d'appartenance qui doit les précéder.
           if (isUniqueSelector) {
             if (whereProp && whereHasTenantId(whereProp.value)) return;
-            const fn = enclosingFunction(context.getAncestors());
+            const fn = enclosingFunction(context.sourceCode.getAncestors(node));
             if (fn && hasOwnershipCheck(fn, model)) return;
             context.report({
               node,

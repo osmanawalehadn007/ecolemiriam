@@ -12,6 +12,7 @@ import { verifyTOTP } from "@/lib/security/totp";
 import { registerAuthFetcher } from "@/lib/prisma-rls";
 import { checkLoginLockout, recordLoginFailure, recordLoginSuccess } from "@/lib/security/login-attempts";
 import { verifyTurnstileToken } from "@/lib/security/turnstile";
+import { securityLog } from "@/lib/security/security-log";
 
 /**
  * Extrait l'IP du client depuis la requête NextAuth.
@@ -116,6 +117,16 @@ export const {
         token.tenantHasSites = claims.tenantHasSites;
         token.availableTenants = claims.availableTenants;
         token.claimsVersion = claims.claimsVersion;
+
+        // Mise à jour du flag mfaSetupRequired via unstable_update().
+        // Quand un SUPER_ADMIN active la 2FA, la route /api/auth/2fa/enable
+        // appelle unstable_update({ user: { mfaSetupRequired: false } }) pour
+        // effacer le flag sans exiger une reconnexion.
+        const mfaUpdate = (session as { mfaSetupRequired?: boolean } | undefined)?.mfaSetupRequired ??
+          (session as { user?: { mfaSetupRequired?: boolean } } | undefined)?.user?.mfaSetupRequired;
+        if (mfaUpdate !== undefined) {
+          token.mfaSetupRequired = mfaUpdate;
+        }
       }
 
       return token;
@@ -139,8 +150,13 @@ export const {
         // Bloque les tentatives de brute-force : après 5/10/15/20 échecs,
         // l'IP est verrouillée pour 1min/5min/15min/1h.
         const ip = getAuthorizeIP(request);
-        const lockout = checkLoginLockout(ip);
+        const lockout = await checkLoginLockout(ip);
         if (lockout.locked) {
+          securityLog({
+            type: "login_lockout",
+            ip,
+            metadata: { email, remainingMs: lockout.remainingMs, failures: lockout.failures },
+          });
           auditFire({
             action: "auth:login",
             verdict: "DENIED",
@@ -175,7 +191,12 @@ export const {
             request as unknown as Request
           );
           if (!turnstileResult.success) {
-            recordLoginFailure(ip);
+            void recordLoginFailure(ip);
+            securityLog({
+              type: "turnstile_fail",
+              ip,
+              metadata: { email, errorCodes: turnstileResult.errorCodes },
+            });
             auditFire({
               action: "auth:login",
               verdict: "DENIED",
@@ -205,7 +226,7 @@ export const {
         // connexion du processus à cause de l'établissement de connexion).
         assertDirectRoleBypassesRls().catch(() => {});
 
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- login: no session exists yet, user must be looked up across all sites
+         
         // Recherche insensible à la casse : l'email est stocké avec une
         // casse arbitraire (ex. "Mohamed…") mais l'utilisateur peut taper
         // "mohamed…" — PostgreSQL + Prisma findUnique est sensible à la casse.
@@ -245,7 +266,7 @@ export const {
           // et "mot de passe incorrect". Sans cela, la différence de temps
           // permet à un attaquant de distinguer les emails valides.
           await bcrypt.compare(password, "$2a$12$dummyHashToPreventTimingAttackXXXXXXXXXXXXXXXXXXXX");
-          recordLoginFailure(ip);
+          void recordLoginFailure(ip);
           auditFire({
             action: "auth:login",
             verdict: "DENIED",
@@ -259,7 +280,7 @@ export const {
 
         const passwordMatch = await bcrypt.compare(password, user.password);
         if (!passwordMatch) {
-          recordLoginFailure(ip);
+          void recordLoginFailure(ip);
           auditFire({
             userId: user.id,
             action: "auth:login",
@@ -311,7 +332,13 @@ export const {
           }
 
           if (!verifyTOTP(totp, user.mfaSecret)) {
-            recordLoginFailure(ip);
+            void recordLoginFailure(ip);
+            securityLog({
+              type: "mfa_code_invalid",
+              ip,
+              userId: user.id,
+              metadata: { email },
+            });
             auditFire({
               userId: user.id,
               action: "auth:login",
@@ -351,7 +378,26 @@ export const {
         }
 
         // ── Succès : réinitialiser le compteur d'échecs de l'IP ──────────
-        recordLoginSuccess(ip);
+        void recordLoginSuccess(ip);
+
+        // ── 2FA obligatoire pour SUPER_ADMIN ──────────────────────────────
+        // Un SUPER_ADMIN sans 2FA activée peut se connecter (pour pouvoir
+        // la configurer), mais un flag `mfaSetupRequired` est posé sur le
+        // token. Le middleware redirige alors vers /parametres/securite
+        // jusqu'à ce que la 2FA soit activée. Tant que le flag est présent,
+        // l'accès à toute autre page est bloqué.
+        const mfaSetupRequired =
+          claims.role === "SUPER_ADMIN" && !user.mfaEnabled;
+
+        if (mfaSetupRequired) {
+          auditFire({
+            userId: user.id,
+            action: "auth:login",
+            verdict: "ALLOWED",
+            reason: "SUPER_ADMIN connecté sans 2FA — configuration requise",
+            metadata: { email },
+          });
+        }
 
         return {
           id: user.id,
@@ -365,6 +411,7 @@ export const {
           tenantHasSites: claims.tenantHasSites,
           availableTenants: claims.availableTenants,
           claimsVersion: claims.claimsVersion,
+          mfaSetupRequired,
         };
       },
     }),
@@ -413,6 +460,8 @@ declare module "next-auth" {
       /** Le tenant actif possède-t-il au moins un site ? */
       tenantHasSites?: boolean;
       availableTenants?: AvailableTenantSlim[];
+      /** SUPER_ADMIN sans 2FA : doit configurer la 2FA avant tout autre accès. */
+      mfaSetupRequired?: boolean;
     };
   }
 }

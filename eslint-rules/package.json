@@ -4,6 +4,6 @@
   "description": "ESLint plugin for EcolPro tenant isolation rules",
   "main": "index.js",
   "peerDependencies": {
-    "eslint": ">=8"
+    "eslint": ">=8 || >=9"
   }
 }

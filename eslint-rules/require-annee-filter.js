@@ -245,9 +245,7 @@ module.exports = {
           if (ANNEE_EXEMPT_MODELS.has(model)) return;
           if (!ANNEE_SCOPED_MODELS.has(model)) return;
 
-          const scope = context.sourceCode
-            ? context.sourceCode.getScope(node)
-            : context.getScope();
+          const scope = context.sourceCode.getScope(node);
 
           const arg = node.arguments[0];
           if (!arg || arg.type !== "ObjectExpression") {

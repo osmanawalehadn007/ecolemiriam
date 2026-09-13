@@ -183,7 +183,7 @@ const getFinanceDataCached = unstable_cache(
           take: 100,
         }),
         getRemisesCaisse(activeSite === "all" ? null : activeSite),
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
+         
         prisma.facture.findMany({
           where: { tenantId, ...siteFilter, createdAt: { gte: start, lte: end } },
           include: {

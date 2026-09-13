@@ -87,7 +87,7 @@ export default async function EvaluationsPage({
     session.user.siteId ?? null,
     async (tx: Prisma.TransactionClient) => {
       return Promise.all([
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- evalFilter is built from siteFilterForModel above
+         
         tx.evaluation.findMany({
           where: {
             tenantId,
@@ -103,17 +103,17 @@ export default async function EvaluationsPage({
           },
           orderBy: { date: "desc" }
         }),
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- classeWhere is built above with site filter or scope
+         
         tx.classe.findMany({
           where: classeWhere,
           select: { id: true, nom: true },
         }),
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- matiereFilter is built from siteFilterForModel above
+         
         tx.matiere.findMany({
           where: { tenantId, ...matiereFilter, ...teacherMatiereFilter },
           select: { id: true, nom: true },
         }),
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- periode is tenant-scoped, no siteId
+         
         tx.periode.findMany({ where: { annee: { tenantId } }, select: { id: true, nom: true } }),
       ]);
     }

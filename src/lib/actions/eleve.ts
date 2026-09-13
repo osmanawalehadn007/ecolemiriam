@@ -296,7 +296,7 @@ export async function createEleve(
   // ── Générer la facture d'inscription (frais inscription + mensualité septembre) ──
   //    Même logique que le workflow d'admission : on cherche le TarifNiveau
   //    pour le niveau/site/année, et on crée une facture liée à la candidature.
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- recherche tarif par niveau, pas par site obligatoire
+   
   const tarif = await prisma.tarifNiveau.findFirst({
     where: {
       tenantId,
@@ -438,7 +438,7 @@ export async function updateEleve(
     if (classe?.siteId) resolvedSiteId = classe.siteId;
   }
 
-  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- existing vérifié avec tenantId + siteFilter ci-dessus
+   
   await prisma.eleve.update({
     where: { id },
     data: {
@@ -467,7 +467,7 @@ export async function updateEleve(
   const tuteurLink = existing.parents[0];
   if (values.parentNom && values.parentPrenom && values.parentPhone) {
     if (tuteurLink) {
-      // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- tuteurLink.parentId vérifié via existing (tenantId + siteFilter)
+      // eslint-disable-next-line ecolemiriam/require-tenant-id -- tuteurLink.parentId vérifié via existing (tenantId + siteFilter)
       await prisma.parent.update({
         where: { id: tuteurLink.parentId },
         data: {

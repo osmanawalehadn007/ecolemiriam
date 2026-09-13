@@ -165,6 +165,11 @@ const rlsExtension = Prisma.defineExtension((client) => {
         // Maintenant : on throw pour rendre le bug visible et empêcher
         // l'application de présenter un état incohérent.
         if (!ctx || !ctx.tenantId) {
+          // Logger l'absence de contexte RLS — c'est un bug potentiel
+          // (fuite de données ou données vides silencieuses).
+          console.warn(
+            `[SECURITY] rls_no_context model=${model} op=${operation}`
+          );
           throw new Error(
             "prisma-rls: contexte tenant manquant — " +
             "appelez runWithTenant() ou auth() dans le contexte requête. " +

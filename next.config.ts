@@ -58,25 +58,16 @@ const nextConfig: NextConfig = {
             },
           ]
         : []),
+      // CSP : désormais générée dynamiquement par requête dans le middleware
+      // (src/lib/security/headers.ts → buildCSP) avec un nonce remplaçant
+      // 'unsafe-inline' dans script-src. La CSP statique ci-dessous ne couvre
+      // que les chemins exclusés du middleware (assets statiques) et n'a pas
+      // de nonce — elle garde 'unsafe-inline' pour ne pas casser les chunks
+      // Next.js servis directement.
       {
         key: "Content-Security-Policy",
         value: [
           "default-src 'self'",
-          // 'unsafe-eval' est requis en développement par Next.js (React
-          // Refresh / HMR évalue du code à la volée). En production, il est
-          // retiré pour empêcher l'exécution de code arbitraire.
-          // 'unsafe-inline' conservé temporairement (Next.js en a besoin pour
-          // les styles inline et certains scripts d'hydration). Migration
-          // vers des nonces CSP prévue.
-          // `https://challenges.cloudflare.com` est indispensable : c'est
-          // l'origine du widget Turnstile affiché sur /login, /register et
-          // /forgot-password. Sans elle, le script était bloqué par la CSP,
-          // le widget ne produisait jamais de token, et `authorize()` rejetait
-          // TOUTES les connexions avec « Email ou mot de passe incorrect »
-          // alors que le mot de passe était bon. Turnstile a besoin des trois
-          // directives ci-dessous : script-src (api.js), frame-src (le
-          // challenge est rendu dans une iframe) et connect-src (l'appel de
-          // validation vers Cloudflare).
           isProd
             ? "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com"
             : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com",
@@ -88,9 +79,6 @@ const nextConfig: NextConfig = {
           "base-uri 'self'",
           "form-action 'self'",
           "object-src 'none'",
-          // `'none'` empêchait l'iframe du challenge Turnstile de se charger.
-          // On n'autorise que cette origine — `frame-ancestors 'none'`
-          // ci-dessus continue d'interdire qu'on nous embarque, lui.
           "frame-src 'self' https://challenges.cloudflare.com",
           "worker-src 'self' blob:",
           "manifest-src 'self'",

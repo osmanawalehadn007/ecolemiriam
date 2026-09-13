@@ -2,7 +2,14 @@
  * École Miriam — Rate Limiting Global (middleware edge-compatible)
  * ============================================================
  * Applique un rate limit sur toutes les routes API depuis le middleware.
- * Utilise un Map en mémoire (suffisant pour un seul serveur VPS).
+ *
+ * IMPORTANT : Ce fichier est importé par le middleware qui s'exécute dans
+ * le EDGE RUNTIME. Il ne peut PAS importer `ioredis` (Node.js uniquement).
+ * Le rate limiting du middleware reste donc en mémoire (par processus).
+ *
+ * Le rate limiting distribué (Redis) est appliqué au niveau server-side
+ * dans `login-attempts.ts` (brute-force protection) qui est importé par
+ * `auth.ts` (Node.js runtime).
  *
  * Limites par IP :
  *  - Routes d'authentification : géré par Caddy (60 req/min) + routes
@@ -70,19 +77,25 @@ export interface GlobalRateLimitResult {
 /**
  * Vérifie le rate limit global pour une requête API.
  * À appeler depuis le middleware sur toutes les routes /api/.
+ *
+ * Edge runtime : compteur en mémoire (par processus). Le rate limiting
+ * distribué Redis est appliqué au niveau de `login-attempts.ts` pour
+ * les tentatives de login (brute-force), qui est le chemin le plus
+ * critique et s'exécute en Node.js runtime.
  */
-export function globalRateLimit(req: NextRequest): GlobalRateLimitResult {
+export async function globalRateLimit(req: NextRequest): Promise<GlobalRateLimitResult> {
   const pathname = req.nextUrl.pathname;
   const ip = getRealIP(req);
   const limit = getLimit(pathname);
-  const key = `global:${ip}:${pathname.split("/").slice(0, 3).join("/")}`;
+  const pathKey = pathname.split("/").slice(0, 3).join("/");
   const now = Date.now();
 
-  let bucket = buckets.get(key);
+  const memKey = `global:${ip}:${pathKey}`;
+  let bucket = buckets.get(memKey);
 
   if (!bucket || now - bucket.windowStart > WINDOW_MS) {
     bucket = { count: 0, windowStart: now };
-    buckets.set(key, bucket);
+    buckets.set(memKey, bucket);
   }
 
   bucket.count++;

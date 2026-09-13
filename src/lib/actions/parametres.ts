@@ -176,7 +176,7 @@ export async function createUser(data: UserFormData) {
   // le contrôle d'unicité doit donc être inter-tenants et inter-sites, sinon on
   // laisserait créer un doublon qui échouerait ensuite en base. Seule
   // l'existence est utilisée, aucune donnée de l'autre tenant n'est exposée.
-  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter
+   
   const existing = await prismaBase.user.findFirst({ where: { email: { equals: v.email, mode: "insensitive" } } });
   if (existing) throw new Error("Un utilisateur avec cet email existe déjà");
 

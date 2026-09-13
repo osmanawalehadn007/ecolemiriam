@@ -98,7 +98,7 @@ export async function registerTenant(data: RegisterFormData) {
 
   const values = parsed.data;
 
-  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- inscription publique, pas de session/tenant : vérification d'unicité email globale
+   
   const existingUser = await prismaBase.user.findFirst({
     where: { email: { equals: values.adminEmail, mode: "insensitive" } },
   });

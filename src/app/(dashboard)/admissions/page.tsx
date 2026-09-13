@@ -54,7 +54,7 @@ const getAdmissionsData = unstable_cache(
         //     plus que du collège en 2026-2027.
         // On NE dédoublonne PAS par nom : deux sites peuvent avoir une classe
         // homonyme, et c'est l'ID (lié au site) qui doit être choisi — pas le nom.
-        // eslint-disable-next-line ecolemiriam/require-site-filter -- where inclut tenantId + classeSiteFilter
+         
         prisma.classe.findMany({
           where: { tenantId, annee, ...classeSiteFilter },
           select: { id: true, nom: true, niveau: true, siteId: true, site: { select: { nom: true } } },

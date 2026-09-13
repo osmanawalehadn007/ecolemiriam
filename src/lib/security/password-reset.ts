@@ -207,7 +207,7 @@ export async function resetPasswordWithToken(
 
   const email = record.identifier.slice(RESET_PREFIX.length);
 
-  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- reset password : lookup par email
+   
   const user = await prismaBase.user.findFirst({
     where: { email: { equals: email, mode: "insensitive" } },
     select: { id: true, isActive: true },
@@ -224,7 +224,7 @@ export async function resetPasswordWithToken(
 
   const hashed = await bcrypt.hash(newPassword, 12);
 
-  // eslint-disable-next-line ecolemiriam/require-tenant-id -- self-update après reset : user.id provient du lookup
+   
   await prismaBase.user.update({
     where: { id: user.id },
     data: { password: hashed },
@@ -305,7 +305,7 @@ export async function setPasswordWithToken(
 
   const email = record.identifier.slice(SET_PASSWORD_PREFIX.length);
 
-  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- set-password : lookup par email
+   
   const user = await prismaBase.user.findFirst({
     where: { email: { equals: email, mode: "insensitive" } },
     select: { id: true, isActive: true, emailVerified: true },
@@ -326,7 +326,7 @@ export async function setPasswordWithToken(
 
   const hashed = await bcrypt.hash(newPassword, 12);
 
-  // eslint-disable-next-line ecolemiriam/require-tenant-id -- self-update : user.id provient du lookup
+   
   await prismaBase.user.update({
     where: { id: user.id },
     data: { password: hashed },

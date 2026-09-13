@@ -23,7 +23,7 @@
 # ============================================================
 
 # --- Étape 1 : dépendances ---
-FROM node:22-alpine3.21 AS deps
+FROM node:24-alpine3.24 AS deps
 
 RUN apk add --no-cache openssl libc6-compat
 
@@ -40,7 +40,7 @@ RUN --mount=type=cache,target=/root/.npm \
     npm ci --legacy-peer-deps
 
 # --- Étape 2 : build ---
-FROM node:22-alpine3.21 AS builder
+FROM node:24-alpine3.24 AS builder
 
 RUN apk add --no-cache openssl libc6-compat
 
@@ -67,7 +67,7 @@ RUN --mount=type=cache,target=/app/.next/cache \
     npm run build
 
 # --- Étape 3 : image finale (minimale, non-root, read-only) ---
-FROM node:22-alpine3.21 AS runner
+FROM node:24-alpine3.24 AS runner
 
 # Sécurité : utilisateur non-root dédié
 RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001 -G nodejs

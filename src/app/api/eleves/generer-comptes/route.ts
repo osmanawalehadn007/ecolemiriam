@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
 
     const password = customPassword || generateRandomPassword();
 
-    // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- vérification d'unicité globale par email avant création de compte élève
+     
     const existing = await prismaBase.user.findFirst({ where: { email: { equals: username, mode: "insensitive" } } });
     if (existing) continue;
 

@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
     // de rattacher une classe d'un site non autorisé.
     let classeVoulue = data.classeVoulue?.trim() || "";
     if (data.classeId && session?.user?.tenantId) {
-      // eslint-disable-next-line ecolemiriam/require-site-filter -- where inclut tenantId + filtre de périmètre de site
+       
       const classe = await prisma.classe.findFirst({
         where: {
           id: data.classeId,

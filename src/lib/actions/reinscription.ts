@@ -68,7 +68,7 @@ export async function preparerApercuReinscription(): Promise<ApercuReinscription
 
   // 2. Tous les élèves actifs avec leur classe
   const siteFilter = siteFilterForModel("eleve", session.user);
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- where includes ...siteFilter spread
+   
   const eleves = await prisma.eleve.findMany({
     where: { tenantId, statut: "ACTIF", deletedAt: null, ...siteFilter },
     include: { classe: { select: { id: true, nom: true, niveau: true, site: { select: { nom: true } } } } },
@@ -79,7 +79,7 @@ export async function preparerApercuReinscription(): Promise<ApercuReinscription
   //    les classes des années révolues et annonçait des places inexistantes.
   const classeSiteFilter = siteFilterForModel("classe", session.user);
   const anneeReference = anneeCourante?.libelle ?? null;
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- where includes ...classeSiteFilter spread
+   
   const classes = await prisma.classe.findMany({
     where: mergeFilters(
       { tenantId },
@@ -238,7 +238,7 @@ export async function promouvoirEleves(): Promise<ResultatPromotion> {
   const siteFilter = siteFilterForModel("eleve", session.user);
 
   // 1. Charger tous les élèves actifs + classes
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- where includes ...siteFilter spread
+   
   const eleves = await prisma.eleve.findMany({
     where: { tenantId, statut: "ACTIF", deletedAt: null, ...siteFilter },
     include: { classe: { select: { id: true, nom: true, niveau: true, siteId: true } } },
@@ -251,7 +251,7 @@ export async function promouvoirEleves(): Promise<ResultatPromotion> {
   //    des inscriptions 2026-2027 à des structures 2025-2026.
   const classeSiteFilter = siteFilterForModel("classe", session.user);
   const anneeCible = await getAnneeCouranteLibelle(tenantId);
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- where includes ...classeSiteFilter spread
+   
   const allClasses = await prisma.classe.findMany({
     where: mergeFilters(
       { tenantId },
@@ -405,7 +405,7 @@ export async function genererFraisRenouvellement(annee: string) {
   const siteFilter = siteFilterForModel("eleve", session.user);
 
   // 1. Tous les élèves actifs
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- where includes ...siteFilter spread
+   
   const eleves = await prisma.eleve.findMany({
     where: { tenantId, statut: "ACTIF", deletedAt: null, ...siteFilter },
     include: { classe: { select: { niveau: true } } },
@@ -495,7 +495,7 @@ export async function genererFraisRenouvellement(annee: string) {
   }
 
   if (toCreate.length > 0) {
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- bulk insert, tenantId dans chaque ligne
+     
     await prisma.facture.createMany({ data: toCreate });
   }
 

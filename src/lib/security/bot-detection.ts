@@ -21,6 +21,11 @@
  *   3. Le blocage est PORTÉ (`scope`) : il ne vaut que pour les formulaires
  *      publics, jamais pour le reste de l'application. Une IP bloquée peut
  *      toujours utiliser une session déjà ouverte.
+ *
+ * IMPORTANT : Ce fichier est importé par le middleware (edge runtime).
+ * Il ne peut PAS importer `ioredis`. Le compteur reste en mémoire (par
+ * processus). Le rate limiting distribué Redis est appliqué au niveau de
+ * `login-attempts.ts` (brute-force protection, Node.js runtime).
  */
 
 interface BotTracker {
@@ -67,7 +72,11 @@ export function isBotProtectedPath(pathname: string): boolean {
   return PUBLIC_SENSITIVE_PATTERNS.some((p) => pathname.startsWith(p));
 }
 
-export function checkBotBlock(ip: string): { blocked: boolean; remainingMs: number } {
+/**
+ * Vérifie si une IP est actuellement bloquée par la détection anti-bot.
+ * Compteur en mémoire (par processus, edge runtime).
+ */
+export async function checkBotBlock(ip: string): Promise<{ blocked: boolean; remainingMs: number }> {
   const tracker = trackers.get(ip);
   if (!tracker || tracker.blockedUntil < Date.now()) {
     return { blocked: false, remainingMs: 0 };
@@ -81,11 +90,11 @@ export function checkBotBlock(ip: string): { blocked: boolean; remainingMs: numb
  * @param method méthode HTTP — seules les méthodes mutatives sont comptées.
  *   Un GET (affichage de page, navigation RSC, prefetch) ne consomme rien.
  */
-export function recordPublicRequest(
+export async function recordPublicRequest(
   ip: string,
   pathname: string,
   method: string
-): { blocked: boolean; remainingMs: number } {
+): Promise<{ blocked: boolean; remainingMs: number }> {
   if (!isBotProtectedPath(pathname)) {
     return { blocked: false, remainingMs: 0 };
   }
@@ -97,6 +106,7 @@ export function recordPublicRequest(
   }
 
   const now = Date.now();
+
   let tracker = trackers.get(ip);
   if (!tracker) {
     tracker = { count: 0, windowStart: now, blockedUntil: 0, blockCount: 0 };
@@ -144,6 +154,6 @@ export function getBotStats(): { totalTracked: number; currentlyBlocked: number 
 }
 
 /** Lève manuellement le blocage d'une IP (support / exploitation). */
-export function clearBotBlock(ip: string): void {
+export async function clearBotBlock(ip: string): Promise<void> {
   trackers.delete(ip);
 }

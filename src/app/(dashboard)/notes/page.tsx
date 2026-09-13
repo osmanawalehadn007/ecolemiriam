@@ -210,13 +210,13 @@ export default async function NotesPage({
         tenantId,
         session.user.siteId ?? null,
         async (tx: Prisma.TransactionClient) => Promise.all([
-          // eslint-disable-next-line ecolemiriam/require-site-filter -- evalFilter is built from siteFilterForModel above
+           
           tx.evaluation.findMany({
             where: { tenantId, ...evalFilter, classeId, matiereId },
             select: { id: true, titre: true, type: true },
             orderBy: { date: "desc" },
           }),
-          // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via scope
+           
           tx.evaluation.findUnique({
             where: { id: evaluationId, tenantId },
             include: {

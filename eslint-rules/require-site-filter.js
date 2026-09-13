@@ -364,9 +364,7 @@ module.exports = {
 
           // Portée du site d'appel : sert à remonter aux variables de filtre
           // (`const notifFilter = siteFilterForModel(...)`).
-          const scope = context.sourceCode
-            ? context.sourceCode.getScope(node)
-            : context.getScope();
+          const scope = context.sourceCode.getScope(node);
 
           const arg = node.arguments[0];
           if (!arg || arg.type !== "ObjectExpression") {

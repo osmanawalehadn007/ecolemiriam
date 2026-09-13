@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
     const data = parsed.data;
 
     // Récupérer la séance pour hériter classeId, matiereId, siteId
-    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- lookup par id : la séance porte son année via sa classe
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : la séance porte son année via sa classe
     const seance = await prisma.cahierTexte.findFirst({
       where: { id: data.seanceId, tenantId: session.user.tenantId },
       select: { classeId: true, matiereId: true, siteId: true },

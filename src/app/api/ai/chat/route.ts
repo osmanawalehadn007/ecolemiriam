@@ -251,7 +251,7 @@ Pour toute question sur l'emploi du temps, les classes, les enseignants ou les s
       // eslint-disable-next-line ecolemiriam/require-site-filter
       enfants: {
         include: {
-          // eslint-disable-next-line ecolemiriam/require-site-filter -- eleve scoping via parent.userId (personal scope)
+           
           eleve: {
             select: {
               nom: true,

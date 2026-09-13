@@ -302,7 +302,7 @@ export async function genererMensualites(params: {
 
   // 4. Bulk insert (1 seule requête)
   if (toCreate.length > 0) {
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- bulk insert, tenantId dans chaque ligne
+     
     await prisma.facture.createMany({ data: toCreate });
   }
 
@@ -482,7 +482,7 @@ export async function genererFacturesAnnuelles(params: {
 
   // Bulk insert
   if (toCreate.length > 0) {
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- bulk insert, tenantId dans chaque ligne
+     
     await prisma.facture.createMany({ data: toCreate });
   }
 
@@ -623,7 +623,7 @@ export async function genererFraisInscription(params: {
 
   // 5. Bulk insert (1 requête)
   if (toCreate.length > 0) {
-    // eslint-disable-next-line ecolemiriam/require-site-filter -- bulk insert, tenantId dans chaque ligne
+     
     await prisma.facture.createMany({ data: toCreate });
   }
 

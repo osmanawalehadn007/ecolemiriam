@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- pré-login : lookup par email pour vérifier 2FA/statut email, pas de session disponible
+   
   const user = await prismaBase.user.findFirst({
     where: { email: { equals: email, mode: "insensitive" } },
     select: { password: true, isActive: true, mfaEnabled: true, emailVerified: true, role: true },
@@ -99,8 +99,18 @@ export async function POST(req: Request) {
   // SUPER_ADMIN est toujours considéré comme vérifié (exemption).
   const isEmailVerified = !!user.emailVerified || user.role === "SUPER_ADMIN";
 
+  // SUPER_ADMIN sans 2FA : indiquer au frontend que la configuration 2FA
+  // est requise. Le login sera autorisé (pour permettre la configuration),
+  // mais le middleware redirigera vers /parametres/securite.
+  const mfaSetupRequired = user.role === "SUPER_ADMIN" && !user.mfaEnabled;
+
   return NextResponse.json(
-    { requires2FA: user.mfaEnabled, emailVerified: isEmailVerified, accountDisabled: false },
+    {
+      requires2FA: user.mfaEnabled,
+      emailVerified: isEmailVerified,
+      accountDisabled: false,
+      mfaSetupRequired,
+    },
     { status: 200 }
   );
 }
