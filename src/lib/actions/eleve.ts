@@ -191,8 +191,8 @@ export async function createEleve(
   if (!anneeInscription) throw new Error("Aucune année scolaire active pour ce tenant");
 
   const identite = {
-    nom: values.nom,
-    prenom: values.prenom,
+    nom: values.nom.trim().toUpperCase(),
+    prenom: values.prenom.trim().toUpperCase(),
     dateNaissance: new Date(values.dateNaissance),
   };
 
@@ -273,8 +273,8 @@ export async function createEleve(
     data: {
       tenantId,
       siteId: resolvedSiteId,
-      nom: values.nom,
-      prenom: values.prenom,
+      nom: values.nom.trim().toUpperCase(),
+      prenom: values.prenom.trim().toUpperCase(),
       dateNaissance: new Date(values.dateNaissance),
       lieuNaissance: values.lieuNaissance || null,
       sexe: values.sexe,
@@ -282,8 +282,8 @@ export async function createEleve(
       photoUrl: values.photoUrl || null,
       classeVoulue: classeNiveau ?? classeNom ?? "Non précisée",
       annee: anneeInscription,
-      parentNom: values.parentNom || "",
-      parentPrenom: values.parentPrenom || "",
+      parentNom: values.parentNom?.trim().toUpperCase() || "",
+      parentPrenom: values.parentPrenom?.trim().toUpperCase() || "",
       parentEmail: values.parentEmail || null,
       parentPhone: values.parentPhone || "",
       parentLien: (values.parentLien as "PERE" | "MERE" | "TUTEUR" | "AUTRE") || "PERE",
@@ -385,8 +385,8 @@ export async function updateEleve(
   // quoi elle resterait figée sur l'ancienne valeur et ne protégerait plus
   // rien. Les mêmes points de contrôle qu'à la création s'appliquent.
   const identite = {
-    nom: values.nom,
-    prenom: values.prenom,
+    nom: values.nom.trim().toUpperCase(),
+    prenom: values.prenom.trim().toUpperCase(),
     dateNaissance: new Date(values.dateNaissance),
   };
 
@@ -442,8 +442,8 @@ export async function updateEleve(
   await prisma.eleve.update({
     where: { id },
     data: {
-      nom: values.nom,
-      prenom: values.prenom,
+      nom: values.nom.trim().toUpperCase(),
+      prenom: values.prenom.trim().toUpperCase(),
       dateNaissance: new Date(values.dateNaissance),
       identiteKey,
       lieuNaissance: values.lieuNaissance || null,

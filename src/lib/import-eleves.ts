@@ -137,6 +137,12 @@ export async function parseElevesWorkbook(buffer: ArrayBuffer): Promise<ParseRes
       }
     }
 
+    // Convention d'affichage : noms et prénoms en MAJUSCULES, comme pour
+    // toutes les fiches existantes. Un fichier en minuscules ou casse
+    // mixte ne doit pas produire un affichage incohérent.
+    nom = nom.trim().toUpperCase();
+    prenom = prenom.trim().toUpperCase();
+
     rows.push({
       ligne: i,
       nom,
