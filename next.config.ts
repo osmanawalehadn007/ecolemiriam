@@ -8,6 +8,12 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  // Autorise 127.0.0.1 en dev pour le browser preview (Devin Desktop) qui
+  // proxifie via 127.0.0.1 au lieu de localhost. Sans cela, Next.js bloque
+  // les requêtes cross-origin HMR et Auth.js rejette le CSRF token.
+  ...(isProd ? {} : {
+    allowedDevOrigins: ["127.0.0.1", "localhost"],
+  }),
   // Next.js 16 : `eslint.ignoreDuringBuilds` supprimé, `next lint` supprimé.
   // Le linting se fait via `eslint src/` (ESLint 9 flat config) en CI.
   // Désactiver le cache webpack en dev pour éviter la corruption récurrente
@@ -32,7 +38,7 @@ const nextConfig: NextConfig = {
         // `status.` — n'autorisait que des origines dont aucune requête
         // légitime ne part, au prix d'une surface CSRF élargie.
         "ecolemiriam.com",
-        ...(isProd ? [] : ["localhost:3000", "localhost:3001"]),
+        ...(isProd ? [] : ["localhost:3000", "localhost:3001", "127.0.0.1:3000", "127.0.0.1:59371"]),
       ],
     },
   },

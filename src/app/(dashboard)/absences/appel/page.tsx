@@ -58,8 +58,36 @@ async function getClasses(
         },
         orderBy: [{ nom: "asc" }, { prenom: "asc" }],
       },
+      structure: { select: { id: true, nom: true, type: true } },
     },
-    orderBy: { nom: "asc" },
+    orderBy: [{ structure: { type: "asc" } }, { nom: "asc" }],
+  });
+}
+
+async function getEmplois(
+  tenantId: string,
+  claims: SessionSiteClaims,
+  classeIds: string[],
+  scope?: { classeIds: string[]; isRestricted: boolean }
+) {
+  if (classeIds.length === 0) return [];
+  const isScoped = scope?.isRestricted && scope.classeIds.length > 0;
+  const scopeDenyAll = scope?.isRestricted && scope.classeIds.length === 0;
+  if (scopeDenyAll) return [];
+
+  const anneeFilter = anneeFilterForModel(
+    "emploiTemps",
+    await getAnneeCouranteLibelle(tenantId),
+  );
+
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- teacher scope: classeIds is the security boundary
+  return prisma.emploiTemps.findMany({
+    where: mergeFilters(
+      { tenantId, classeId: { in: classeIds } },
+      isScoped ? {} : siteFilterForModel("emploiTemps", claims),
+      anneeFilter,
+    ),
+    select: { classeId: true, jour: true, heureDebut: true, heureFin: true },
   });
 }
 
@@ -74,6 +102,12 @@ export default async function AppelPage() {
     : undefined;
 
   const classes = await getClasses(session.user.tenantId, session.user, scope);
+  const emplois = await getEmplois(
+    session.user.tenantId,
+    session.user,
+    classes.map((c) => c.id),
+    scope,
+  );
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -84,7 +118,7 @@ export default async function AppelPage() {
         userAvatar={session.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <AppelInterface classes={classes} tenantId={session.user.tenantId} />
+        <AppelInterface classes={classes} emplois={emplois} tenantId={session.user.tenantId} />
       </div>
     </div>
   );

@@ -498,7 +498,17 @@
     "appelError": "Erreur lors de l'enregistrement de l'appel",
     "appelPresent": "Présent",
     "appelLate": "Retard",
-    "appelAbsentTitle": "Absent"
+    "appelAbsentTitle": "Absent",
+    "appelCategories": "Catégories",
+    "appelNoClasses": "Aucune classe",
+    "appelClassCount": "{count} classe(s)",
+    "noCategory": "Hors catégorie",
+    "appelSelectCategory": "Sélectionnez une catégorie puis une classe",
+    "appelDay": "Jour",
+    "appelCreneau": "Créneau",
+    "appelNoCreneau": "Aucun créneau sélectionné",
+    "appelNoCreneauDay": "Aucun cours ce jour",
+    "appelArrivalTime": "Heure d'arrivée"
   },
   "bulletinsManager": {
     "period": "Période",
