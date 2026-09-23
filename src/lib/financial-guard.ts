@@ -29,6 +29,11 @@ export interface SituationFinanciere {
  * Calcule le solde, les retards, les relances et l'exclusion en cours.
  */
 export async function getSituationFinanciere(eleveId: string, tenantId: string): Promise<SituationFinanciere> {
+  // Bibliothèque de domaine, appelée avec un `eleveId` DÉJÀ validé par
+  // l'appelant (page élève : `siteFilterForModel("eleve")` + `notFound()`).
+  // Le site n'est pas le discriminant ici — un parent peut avoir des enfants
+  // sur plusieurs sites (cf. rôles « relation-scoped » de `site-scope.ts`).
+  // eslint-disable-next-line ecolpro/require-site-filter
   const factures = await prisma.facture.findMany({
     where: { eleveId, tenantId, statut: { not: "ANNULEE" } },
     include: {
@@ -128,6 +133,10 @@ export async function checkUserFinancialBlock(userId: string, tenantId: string):
   excludedEleveIds?: string[];
 }> {
   // Cas 1: l'utilisateur est un élève
+  // Lecture ciblée par `userId` (le compte connecté) : une seule ligne possible.
+  // Le périmètre est déjà celui du compte authentifié, le site n'est pas le
+  // discriminant pour ces rôles.
+  // eslint-disable-next-line ecolpro/require-site-filter
   const eleve = await prisma.eleve.findFirst({
     where: { userId, tenantId },
     select: { id: true, statut: true },
@@ -136,7 +145,7 @@ export async function checkUserFinancialBlock(userId: string, tenantId: string):
   if (eleve) {
     if (eleve.statut === "EXCLU") {
       const exclusion = await prisma.exclusionEleve.findFirst({
-        where: { eleveId: eleve.id, dateFin: null },
+        where: { eleveId: eleve.id, tenantId, dateFin: null },
         select: { motif: true, dateDebut: true },
       });
       return {
@@ -155,6 +164,9 @@ export async function checkUserFinancialBlock(userId: string, tenantId: string):
   }
 
   // Cas 2: l'utilisateur est un parent
+  // Enfants du parent CONNECTÉ (lien personnel) : le site n'est pas le
+  // discriminant, un parent peut avoir des enfants sur plusieurs sites.
+  // eslint-disable-next-line ecolpro/require-site-filter
   const enfants = await prisma.eleveParent.findMany({
     where: { parent: { userId, tenantId } },
     select: { eleveId: true },
@@ -164,7 +176,7 @@ export async function checkUserFinancialBlock(userId: string, tenantId: string):
 
   const eleveIds = enfants.map((e) => e.eleveId);
   const exclusions = await prisma.exclusionEleve.findMany({
-    where: { eleveId: { in: eleveIds }, dateFin: null },
+    where: { eleveId: { in: eleveIds }, tenantId, dateFin: null },
     select: { eleveId: true, motif: true, dateDebut: true },
   });
 

@@ -61,6 +61,11 @@ export async function addUserToTenant(params: {
   }
 
   // Chercher l'utilisateur par email
+  // Rattachement d'un compte EXISTANT à un établissement : la recherche par
+// email doit être globale (le compte peut déjà exister ailleurs, c'est le but
+// de l'opération). L'autorisation d'administrer le tenant cible est vérifiée
+// juste au-dessus.
+  // eslint-disable-next-line ecolpro/require-site-filter, ecolpro/require-tenant-id
   const existingUser = await prisma.user.findUnique({
     where: { email: params.email },
     select: { id: true, name: true, password: true },
@@ -205,6 +210,10 @@ export async function getUserTenants(userId: string) {
     throw new Error("Permissions insuffisantes");
   }
 
+  // Liste des établissements d'un utilisateur : elle est TRANSVERSE par nature
+  // (c'est le sélecteur de tenant). Le contrôle d'accès ci-dessus garantit qu'on
+  // ne lit que ses propres rattachements, sauf pour un SUPER_ADMIN.
+  // eslint-disable-next-line ecolpro/require-tenant-id
   return prisma.userTenant.findMany({
     where: { userId, isActive: true },
     include: {

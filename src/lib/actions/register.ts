@@ -36,6 +36,11 @@ export async function registerTenant(data: RegisterFormData) {
 
   const values = parsed.data;
 
+  // Inscription publique : aucune session n'existe à ce stade. La recherche par
+  // email est GLOBALEMENT unique par conception — `User.email` sert
+  // d'identifiant de connexion, l'unicité doit donc valoir au-delà de
+  // l'établissement.
+  // eslint-disable-next-line ecolpro/require-site-filter, ecolpro/require-tenant-id
   const existingUser = await prisma.user.findUnique({
     where: { email: values.adminEmail },
   });

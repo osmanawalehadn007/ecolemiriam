@@ -3,6 +3,8 @@
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
+import { PAYMENT_METHOD_IDS } from "@/lib/payment-methods";
+import { siteFilterForModel, personalScopeFilter } from "@/lib/site-scope";
 import { z } from "zod";
 
 const FactureSchema = z.object({
@@ -17,7 +19,9 @@ export type FactureFormData = z.infer<typeof FactureSchema>;
 
 const PaiementSchema = z.object({
   montant: z.number().min(0.01, "Le montant doit être positif"),
-  methode: z.string().min(1, "La méthode est requise"),
+  methode: z.enum(PAYMENT_METHOD_IDS as [string, ...string[]], {
+    message: "Le moyen de paiement est invalide",
+  }),
   reference: z.string().optional(),
 });
 
@@ -28,13 +32,23 @@ export async function getFacturesForTenant(filters?: { statut?: string; eleveId?
   if (!session?.user?.tenantId) return [];
 
   return prisma.facture.findMany({
+    // `Facture` porte une colonne `siteId` : sans ce filtre, la facturation
+    // d'un autre site du même établissement restait consultable.
+    // `personalScopeFilter` borne en plus PARENT/STUDENT à leurs propres
+    // enfants (neutre pour le personnel) : défense en profondeur si cette
+    // action est un jour appelée hors de l'écran gardé `/facturation`.
     where: {
       tenantId: session.user.tenantId,
+      ...siteFilterForModel("facture", session.user),
+      ...personalScopeFilter(session.user),
       ...(filters?.statut && filters.statut !== "ALL" ? { statut: filters.statut as never } : {}),
       ...(filters?.eleveId ? { eleveId: filters.eleveId } : {}),
     },
     include: {
       eleve: { select: { id: true, nom: true, prenom: true, matricule: true, classeId: true, classe: { select: { nom: true } } } },
+      // Enfants de la facture déjà bornée par le `where` ci-dessus ; `Paiement`
+      // n'a de site que par sa facture.
+      // eslint-disable-next-line ecolpro/require-site-filter
       paiements: { include: { enregistrePar: { select: { id: true, name: true } } } },
       createdBy: { select: { id: true, name: true } },
     },
@@ -47,7 +61,13 @@ export async function getFactureForDetail(id: string) {
   if (!session?.user?.tenantId) return null;
 
   const facture = await prisma.facture.findFirst({
-    where: { id, tenantId: session.user.tenantId },
+    where: {
+      id,
+      tenantId: session.user.tenantId,
+      ...siteFilterForModel("facture", session.user),
+      // PARENT/STUDENT : uniquement la facture de leurs propres enfants.
+      ...personalScopeFilter(session.user),
+    },
     include: {
       eleve: {
         select: {
@@ -59,6 +79,7 @@ export async function getFactureForDetail(id: string) {
           parents: { include: { parent: true }, where: { isGardien: true }, take: 1 },
         },
       },
+      // eslint-disable-next-line ecolpro/require-site-filter
       paiements: { orderBy: { date: "desc" }, include: { enregistrePar: { select: { id: true, name: true } } } },
       createdBy: { select: { id: true, name: true } },
     },
@@ -78,16 +99,22 @@ export async function createFacture(data: FactureFormData) {
   }
 
   const values = parsed.data;
+  // La numérotation `FAC-<année>-<n>` doit rester unique à l'échelle de
+  // l'établissement : le compteur est donc volontairement tenant-wide. Seul un
+  // NOMBRE est lu, aucune donnée d'un autre site n'est exposée.
+  // eslint-disable-next-line ecolpro/require-site-filter
   const count = await prisma.facture.count({ where: { tenantId } });
   const numero = `FAC-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
 
-  // Récupérer le siteId de l'élève pour assigner la facture au bon site
-  // eslint-disable-next-line ecolpro/require-site-filter, ecolpro/require-tenant-id -- lookup to get siteId for creation
-  const eleve = await prisma.eleve.findUnique({
-    where: { id: values.eleveId },
+  // `eleveId` vient du formulaire : l'élève doit appartenir au MÊME tenant et au
+  // périmètre de sites. Sans ce contrôle, on pouvait créer une facture pour un
+  // élève d'un autre établissement (la clé étrangère `Eleve` est globale).
+  const eleve = await prisma.eleve.findFirst({
+    where: { id: values.eleveId, tenantId, ...siteFilterForModel("eleve", session.user) },
     select: { siteId: true },
   });
-  const factureSiteId = eleve?.siteId ?? null;
+  if (!eleve) throw new Error("Élève introuvable ou hors de votre périmètre");
+  const factureSiteId = eleve.siteId ?? null;
 
   const facture = await prisma.facture.create({
     data: {
@@ -109,9 +136,46 @@ export async function createFacture(data: FactureFormData) {
   return { success: true, id: facture.id };
 }
 
+export async function getFactureByNumero(numero: string) {
+  const session = await auth();
+  if (!session?.user?.tenantId) return null;
+
+  if (!numero || numero.trim().length === 0) return null;
+
+  return prisma.facture.findFirst({
+    where: {
+      numero: numero.trim(),
+      tenantId: session.user.tenantId,
+      ...siteFilterForModel("facture", session.user),
+    },
+    select: {
+      id: true,
+      numero: true,
+      libelle: true,
+      montant: true,
+      devise: true,
+      statut: true,
+      echeance: true,
+      eleve: {
+        select: {
+          id: true,
+          nom: true,
+          prenom: true,
+          matricule: true,
+          classe: { select: { nom: true } },
+        },
+      },
+    },
+  });
+}
+
 export async function enregistrerPaiement(factureId: string, data: PaiementFormData) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  if (!factureId || factureId.trim().length === 0) {
+    throw new Error("Numéro de facture requis : aucun paiement ne peut être enregistré sans facture");
+  }
 
   const parsed = PaiementSchema.safeParse(data);
   if (!parsed.success) {
@@ -119,24 +183,47 @@ export async function enregistrerPaiement(factureId: string, data: PaiementFormD
   }
 
   const values = parsed.data;
+  // Écriture : `factureId` vient de l'appelant — la facture doit appartenir au
+  // site de l'utilisateur, sinon on pouvait encaisser sur la facture d'un autre
+  // site du même établissement.
   const facture = await prisma.facture.findFirst({
-    where: { id: factureId, tenantId: session.user.tenantId },
+    where: {
+      id: factureId,
+      tenantId: session.user.tenantId,
+      ...siteFilterForModel("facture", session.user),
+    },
     include: { paiements: true },
   });
   if (!facture) throw new Error("Facture non trouvée");
+
+  if (facture.statut === "ANNULEE") {
+    throw new Error("Impossible d'encaisser sur une facture annulée");
+  }
+
+  const totalDejaPaye = facture.paiements.reduce((sum, p) => sum + p.montant, 0);
+  const restant = facture.montant - totalDejaPaye;
+
+  if (restant <= 0) {
+    throw new Error("Cette facture est déjà soldée");
+  }
+
+  if (values.montant > restant) {
+    throw new Error(`Le montant ne peut pas dépasser le solde restant (${restant} ${facture.devise})`);
+  }
 
   const paiement = await prisma.paiement.create({
     data: {
       factureId,
       montant: values.montant,
+      devise: facture.devise,
       methode: values.methode,
       reference: values.reference || null,
       enregistreParId: session.user.id,
     },
   });
 
-  const totalPaye = facture.paiements.reduce((sum, p) => sum + p.montant, 0) + values.montant;
-  let newStatut = facture.statut;
+  const totalPaye = totalDejaPaye + values.montant;
+  let newStatut: typeof facture.statut = facture.statut;
 
   if (totalPaye >= facture.montant) {
     newStatut = "PAYEE";
@@ -160,9 +247,25 @@ export async function annulerFacture(factureId: string) {
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
 
   const facture = await prisma.facture.findFirst({
-    where: { id: factureId, tenantId: session.user.tenantId },
+    where: {
+      id: factureId,
+      tenantId: session.user.tenantId,
+      ...siteFilterForModel("facture", session.user),
+    },
   });
   if (!facture) throw new Error("Facture non trouvée");
+
+  if (facture.statut === "PAYEE") {
+    throw new Error("Impossible d'annuler une facture déjà payée");
+  }
+
+  // eslint-disable-next-line ecolpro/require-site-filter -- comptage par factureId déjà vérifié tenant et via la relation facture
+  const nbPaiements = await prisma.paiement.count({
+    where: { factureId },
+  });
+  if (nbPaiements > 0) {
+    throw new Error("Impossible d'annuler une facture ayant déjà des paiements");
+  }
 
   await prisma.facture.update({
     where: { id: factureId },

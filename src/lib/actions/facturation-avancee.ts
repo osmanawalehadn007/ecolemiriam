@@ -3,6 +3,8 @@
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
+import { sendPaymentWhatsApp } from "@/lib/notifications/whatsapp";
+import { siteFilterForModel } from "@/lib/site-scope";
 import { z } from "zod";
 
 // ============================================================
@@ -73,8 +75,16 @@ export async function deleteTarif(tarifId: string) {
     throw new Error("Permissions insuffisantes");
   }
 
+  // Suppression par identifiant : on vérifie d'abord que le tarif appartient au
+  // tenant et au périmètre de sites (un tarif peut être propre à un site).
+  const tarif = await prisma.tarifNiveau.findFirst({
+    where: { id: tarifId, tenantId: session.user.tenantId, ...siteFilterForModel("tarifNiveau", session.user) },
+    select: { id: true },
+  });
+  if (!tarif) throw new Error("Tarif introuvable ou hors de votre périmètre");
+
   await prisma.tarifNiveau.delete({
-    where: { id: tarifId },
+    where: { id: tarif.id },
   });
 
   revalidatePath("/parametres");
@@ -103,9 +113,11 @@ export async function genererMensualites(params: {
   const moisNoms = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
   const moisNom = moisNoms[mois - 1] ?? `Mois ${mois}`;
 
-  // Récupérer tous les élèves actifs avec leur classe (pour le niveau)
+  // Uniquement les élèves du périmètre : sans ce filtre, un administrateur d'un
+  // site générait des mensualités pour TOUS les sites de l'établissement.
+  // `siteId` est relevé pour rattacher chaque facture créée à son site.
   const eleves = await prisma.eleve.findMany({
-    where: { tenantId, statut: "ACTIF" },
+    where: { tenantId, statut: "ACTIF", ...siteFilterForModel("eleve", session.user) },
     include: { classe: { select: { niveau: true, nom: true } } },
   });
 
@@ -138,6 +150,7 @@ export async function genererMensualites(params: {
         tenantId,
         eleveId: eleve.id,
         libelle,
+        ...siteFilterForModel("facture", session.user),
       },
       select: { id: true },
     });
@@ -154,12 +167,18 @@ export async function genererMensualites(params: {
     // Échéance = fin du mois
     const echeance = new Date(parseInt(annee.split("-")[0]), mois, 0);
 
+    // Numérotation tenant-wide : `FAC-<année>-<n>` doit rester unique pour tout
+    // l'établissement. Seul un NOMBRE est lu ici.
+    // eslint-disable-next-line ecolpro/require-site-filter
     const factureCount = await prisma.facture.count({ where: { tenantId } });
     const numero = `FAC-${annee.split("-")[0]}-${String(factureCount + 1).padStart(5, "0")}`;
 
     await prisma.facture.create({
       data: {
         tenantId,
+        // La facture hérite du site de l'élève : sans cela elle serait créée
+        // « non assignée » et invisible dans toutes les vues filtrées par site.
+        siteId: eleve.siteId,
         eleveId: eleve.id,
         numero,
         libelle,
@@ -208,8 +227,10 @@ export async function genererFraisInscription(params: {
   let skipped = 0;
 
   for (const eleveId of eleveIds) {
+    // `eleveIds` vient de l'appelant : sans filtre de site, on pouvait facturer
+    // des élèves d'un autre site du même établissement.
     const eleve = await prisma.eleve.findFirst({
-      where: { id: eleveId, tenantId },
+      where: { id: eleveId, tenantId, ...siteFilterForModel("eleve", session.user) },
       include: { classe: { select: { niveau: true } } },
     });
     if (!eleve) { skipped++; continue; }
@@ -224,18 +245,23 @@ export async function genererFraisInscription(params: {
 
     // Vérifier si déjà facturé
     const existing = await prisma.facture.findFirst({
-      where: { tenantId, eleveId, libelle },
+      where: { tenantId, eleveId, libelle, ...siteFilterForModel("facture", session.user) },
       select: { id: true },
     });
     if (existing) { skipped++; continue; }
 
     const montant = type === "INSCRIPTION" ? tarif.fraisInscription : tarif.fraisRenouvellement;
+    // Numérotation tenant-wide (unicité du numéro pour tout l'établissement) :
+    // seul un NOMBRE est lu, aucune donnée d'un autre site n'est exposée.
+    // eslint-disable-next-line ecolpro/require-site-filter
     const factureCount = await prisma.facture.count({ where: { tenantId } });
     const numero = `FAC-${annee.split("-")[0]}-${String(factureCount + 1).padStart(5, "0")}`;
 
     await prisma.facture.create({
       data: {
         tenantId,
+        // Rattachée au site de l'élève (sinon invisible dans les vues filtrées).
+        siteId: eleve.siteId,
         eleveId,
         numero,
         libelle,
@@ -266,9 +292,24 @@ export async function envoyerRelance(factureId: string, canal: string) {
   }
 
   const facture = await prisma.facture.findFirst({
-    where: { id: factureId, tenantId: session.user.tenantId },
+    where: {
+      id: factureId,
+      tenantId: session.user.tenantId,
+      ...siteFilterForModel("facture", session.user),
+    },
     include: {
-      eleve: { select: { nom: true, prenom: true, matricule: true } },
+      eleve: {
+        select: {
+          nom: true,
+          prenom: true,
+          matricule: true,
+          parents: {
+            where: { isGardien: true },
+            take: 1,
+            include: { parent: { select: { phone: true, prenom: true, nom: true } } },
+          },
+        },
+      },
       paiements: true,
       relances: { orderBy: { niveau: "desc" }, take: 1 },
     },
@@ -300,6 +341,25 @@ export async function envoyerRelance(factureId: string, canal: string) {
       envoyeeParId: session.user.id,
     },
   });
+
+  // Envoi réel pour les canaux supportés
+  if (canal === "whatsapp") {
+    const tuteur = facture.eleve.parents[0]?.parent;
+    if (tuteur?.phone) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: session.user.tenantId },
+        select: { name: true },
+      });
+      await sendPaymentWhatsApp(
+        tuteur.phone,
+        `${facture.eleve.prenom} ${facture.eleve.nom}`,
+        restant,
+        facture.devise,
+        facture.numero,
+        tenant?.name ?? "EcolPro"
+      );
+    }
+  }
 
   revalidatePath("/facturation");
   revalidatePath(`/facturation/${factureId}`);
@@ -334,9 +394,23 @@ export async function exclureEleve(params: {
 
   const { eleveId, motif, details } = params;
 
+  // `eleveId` vient de l'appelant : contrôle d'appartenance au périmètre AVANT
+  // toute écriture (la ligne précédente ne l'exécutait pas et permettait
+  // d'exclure un élève d'un autre site).
+  const eleveCible = await prisma.eleve.findFirst({
+    where: { id: eleveId, tenantId: session.user.tenantId, ...siteFilterForModel("eleve", session.user) },
+    select: { id: true },
+  });
+  if (!eleveCible) throw new Error("Élève introuvable ou hors de votre périmètre");
+
   // Vérifier qu'il n'y a pas déjà une exclusion en cours
   const existing = await prisma.exclusionEleve.findFirst({
-    where: { eleveId, tenantId: session.user.tenantId, dateFin: null },
+    where: {
+      eleveId,
+      tenantId: session.user.tenantId,
+      dateFin: null,
+      ...siteFilterForModel("exclusionEleve", session.user),
+    },
   });
   if (existing) throw new Error("Cet élève est déjà exclu");
 
@@ -353,7 +427,7 @@ export async function exclureEleve(params: {
 
   // Marquer l'élève comme exclu
   await prisma.eleve.update({
-    where: { id: eleveId },
+    where: { id: eleveCible.id },
     data: { statut: "EXCLU" },
   });
 
@@ -372,7 +446,12 @@ export async function leverExclusion(exclusionId: string) {
   }
 
   const exclusion = await prisma.exclusionEleve.findFirst({
-    where: { id: exclusionId, tenantId: session.user.tenantId, dateFin: null },
+    where: {
+      id: exclusionId,
+      tenantId: session.user.tenantId,
+      dateFin: null,
+      ...siteFilterForModel("exclusionEleve", session.user),
+    },
   });
   if (!exclusion) throw new Error("Exclusion non trouvée ou déjà levée");
 
@@ -385,11 +464,22 @@ export async function leverExclusion(exclusionId: string) {
     },
   });
 
-  // Réactiver l'élève
-  await prisma.eleve.update({
-    where: { id: exclusion.eleveId },
-    data: { statut: "ACTIF" },
+  // Réactiver l'élève — l'exclusion validée porte l'élève, on revérifie
+  // néanmoins son appartenance au périmètre avant d'écrire.
+  const eleveCible = await prisma.eleve.findFirst({
+    where: {
+      id: exclusion.eleveId,
+      tenantId: session.user.tenantId,
+      ...siteFilterForModel("eleve", session.user),
+    },
+    select: { id: true },
   });
+  if (eleveCible) {
+    await prisma.eleve.update({
+      where: { id: eleveCible.id },
+      data: { statut: "ACTIF" },
+    });
+  }
 
   revalidatePath("/facturation");
   revalidatePath("/eleves");
@@ -402,7 +492,11 @@ export async function getExclusionsForTenant() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
   return prisma.exclusionEleve.findMany({
-    where: { tenantId: session.user.tenantId, dateFin: null },
+    where: {
+      tenantId: session.user.tenantId,
+      dateFin: null,
+      ...siteFilterForModel("exclusionEleve", session.user),
+    },
     include: {
       eleve: { select: { nom: true, prenom: true, matricule: true, classe: { select: { nom: true } } } },
       decideePar: { select: { name: true } },
@@ -425,6 +519,7 @@ export async function detecterFacturesEnRetard() {
       tenantId: session.user.tenantId,
       statut: { in: ["EN_ATTENTE", "EN_RETARD"] },
       echeance: { lt: now },
+      ...siteFilterForModel("facture", session.user),
     },
     include: {
       eleve: { select: { nom: true, prenom: true, matricule: true, classe: { select: { nom: true } } } },

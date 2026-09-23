@@ -38,12 +38,17 @@ export async function getAttestationData(
   eleveId: string,
   tenantId: string,
   honorifique: string,
-  titre: string
+  titre: string,
+  siteFilter: Record<string, unknown> = {}
 ): Promise<AttestationData | null> {
   const { default: prisma } = await import("@/lib/prisma");
 
+  // `eleveId` vient de l'appelant : `siteFilter` borne la recherche au périmètre
+  // de l'utilisateur. Sans lui, une attestation de scolarité — document
+  // officiel nominatif — pouvait être émise pour un élève d'un autre site du
+  // même établissement.
   const eleve = await prisma.eleve.findFirst({
-    where: { id: eleveId, tenantId },
+    where: { id: eleveId, tenantId, ...siteFilter },
     include: { classe: true },
   });
 
