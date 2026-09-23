@@ -165,8 +165,11 @@ export async function dispatchNotification(
       break;
     }
     case "PUSH": {
+      // `DeviceToken` porte `tenantId` : on borne la lecture (et la purge
+      // ci-dessous) au tenant courant, sinon les jetons d'un autre
+      // établissement pourraient être lus ou désactivés.
       const devices = await prisma.deviceToken.findMany({
-        where: { userId: { in: userIds }, isActive: true },
+        where: { userId: { in: userIds }, tenantId, isActive: true },
         select: { token: true },
       });
       const tokens = devices.map((d) => d.token);
@@ -181,7 +184,7 @@ export async function dispatchNotification(
       // Purge des tokens invalides
       if (r.invalidTokens.length > 0) {
         await prisma.deviceToken.updateMany({
-          where: { token: { in: r.invalidTokens } },
+          where: { token: { in: r.invalidTokens }, tenantId },
           data: { isActive: false },
         });
       }
