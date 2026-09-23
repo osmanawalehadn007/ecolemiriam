@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
-import { eleveScopeFilter, siteFilterForModel, siteFilterForRelation } from "@/lib/site-scope";
+import { eleveScopeFilter, siteFilterForModel, siteFilterForRelation, mergeFilters } from "@/lib/site-scope";
+import {
+  teacherClasseFilter,
+  teacherEleveFilter,
+  teacherEleveRelationFilter,
+  teacherEvaluationFilter,
+  teacherNoteFilter,
+} from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
   const user = await verifyMobileScope(req);
@@ -19,22 +26,46 @@ export async function GET(req: NextRequest) {
 
   const classeFilter = siteFilterForModel("classe", user);
   const eleveFilter = siteFilterForModel("eleve", user);
+
+  // Périmètre ENSEIGNANT sur les six agrégats : sans lui, les compteurs du
+  // tableau de bord révélaient les volumes du SITE entier et les listes
+  // « récentes » nommaient les élèves des collègues.
+  const [
+    teacherEleveScope,
+    teacherClasseScope,
+    teacherNoteScope,
+    teacherEleveRelScope,
+    teacherEvaluationScope,
+  ] = await Promise.all([
+    teacherEleveFilter(user),
+    teacherClasseFilter(user),
+    teacherNoteFilter(user),
+    teacherEleveRelationFilter(user, "eleve"),
+    teacherEvaluationFilter(user),
+  ]);
+
   const [totalEleves, totalClasses, totalNotes] = await Promise.all([
-    prisma.eleve.count({ where: { tenantId, statut: "ACTIF", ...eleveFilter } }),
-    prisma.classe.count({ where: { tenantId, ...classeFilter } }),
-    prisma.note.count({ where: { tenantId, ...eleveRelFilter } }),
+    prisma.eleve.count({
+      where: mergeFilters({ tenantId, statut: "ACTIF" }, eleveFilter, teacherEleveScope),
+    }),
+    prisma.classe.count({
+      where: mergeFilters({ tenantId }, classeFilter, teacherClasseScope),
+    }),
+    prisma.note.count({
+      where: mergeFilters({ tenantId }, eleveRelFilter, teacherNoteScope),
+    }),
   ]);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   const totalAbsencesToday = await prisma.absence.count({
-    where: { tenantId, date: { gte: today }, ...eleveRelFilter },
+    where: mergeFilters({ tenantId, date: { gte: today } }, eleveRelFilter, teacherEleveRelScope),
   });
 
   const [absencesRecentes, notesRecentes, prochainsExamens] = await Promise.all([
     prisma.absence.findMany({
-      where: { tenantId, ...eleveRelFilter },
+      where: mergeFilters({ tenantId }, eleveRelFilter, teacherEleveRelScope),
       select: {
         id: true,
         date: true,
@@ -47,7 +78,7 @@ export async function GET(req: NextRequest) {
       take: 5,
     }),
     prisma.note.findMany({
-      where: { tenantId, ...eleveRelFilter },
+      where: mergeFilters({ tenantId }, eleveRelFilter, teacherNoteScope),
       select: {
         id: true,
         valeur: true,
@@ -61,7 +92,11 @@ export async function GET(req: NextRequest) {
       take: 5,
     }),
     prisma.evaluation.findMany({
-      where: { tenantId, statut: "PLANIFIE", ...classeRelFilter },
+      where: mergeFilters(
+        { tenantId, statut: "PLANIFIE" },
+        classeRelFilter,
+        teacherEvaluationScope
+      ),
       select: {
         id: true,
         titre: true,

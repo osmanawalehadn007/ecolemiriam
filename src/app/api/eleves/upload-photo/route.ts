@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
+import { checkPermission } from "@/lib/rbac";
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,6 +9,9 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.tenantId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
+    // Mise à jour de la photo d'un élève : action d'écriture sur la fiche.
+    const denied = checkPermission(session.user.role, "eleves:write");
+    if (denied) return denied;
 
     // Rate limit: 10 uploads per minute per user
     const ip = getClientIP(req);

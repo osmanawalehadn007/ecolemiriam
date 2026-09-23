@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getAttestationData } from "@/lib/attestation-generator";
+import { eleveScopeFilter } from "@/lib/site-scope";
+import { checkPermission } from "@/lib/rbac";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 
@@ -9,6 +11,9 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
+  // Document officiel : réservé aux rôles qui administrent les élèves.
+  const denied = checkPermission(session.user.role, "eleves:read");
+  if (denied) return denied;
 
   const body = await req.json();
   const { eleveId, honorifique, titre } = body as {
@@ -21,7 +26,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "eleveId requis" }, { status: 400 });
   }
 
-  const data = await getAttestationData(eleveId, session.user.tenantId, honorifique, titre);
+  const data = await getAttestationData(
+    eleveId,
+    session.user.tenantId,
+    honorifique,
+    titre,
+    eleveScopeFilter(session.user, "eleve")
+  );
   if (!data) {
     return NextResponse.json({ error: "Élève introuvable" }, { status: 404 });
   }

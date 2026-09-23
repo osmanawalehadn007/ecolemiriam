@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
+import { checkPermission } from "@/lib/rbac";
 
 export async function PUT(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
+
+  // Ouvrir/clôturer une période de notes pilote le calendrier de saisie : c'est
+  // un acte de direction (`notes:manage`), pas un acte d'enseignant.
+  const denied = checkPermission(session.user.role, "notes:manage");
+  if (denied) return denied;
 
   const body = await req.json();
   const { periodeId, statut, dateLimiteSaisie } = body;
@@ -19,12 +26,8 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "statut invalide" }, { status: 400 });
   }
 
-  const data: Record<string, unknown> = { statut };
-  if (statut === "CLOTUREE") {
-    data.cloturedAt = new Date();
-  } else {
-    data.cloturedAt = null;
-  }
+  const data: Prisma.PeriodeUpdateInput = { statut };
+  data.cloturedAt = statut === "CLOTUREE" ? new Date() : null;
   if (dateLimiteSaisie) {
     data.dateLimiteSaisie = new Date(dateLimiteSaisie);
   }

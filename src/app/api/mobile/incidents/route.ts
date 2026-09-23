@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
 import { eleveScopeFilter, mergeFilters } from "@/lib/site-filter";
+import { teacherEleveRelationFilter } from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
   const user = await verifyMobileScope(req);
@@ -15,8 +16,11 @@ export async function GET(req: NextRequest) {
   const limit = parseInt(searchParams.get("limit") ?? "50");
 
   // Les incidents de vie scolaire sont des données sensibles : filtrage par site
-  // via l'élève, et périmètre personnel pour les comptes parent/élève.
+  // via l'élève, et périmètre personnel pour les comptes parent/élève. Pour un
+  // enseignant, on ajoute ses classes — un incident disciplinaire ne se lit pas
+  // hors de son périmètre, même dans le même site.
   const scopeFilter = eleveScopeFilter(user, "eleve");
+  const teacherFilter = await teacherEleveRelationFilter(user, "eleve");
 
   const incidents = await prisma.incident.findMany({
     where: mergeFilters(
@@ -24,7 +28,8 @@ export async function GET(req: NextRequest) {
         tenantId: user.tenantId,
         ...(eleveId ? { eleveId } : {}),
       },
-      scopeFilter
+      scopeFilter,
+      teacherFilter
     ),
     select: {
       id: true,

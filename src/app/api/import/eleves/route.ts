@@ -3,9 +3,9 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { getSchoolGroup } from "@/lib/school-groups";
 import type { StructureType, Sexe } from "@prisma/client";
-import { siteFilterForModel, requireSiteIdForCreate, mergeFilters } from "@/lib/site-scope";
+import { siteFilterForModel, requireSiteIdForCreate, mergeFilters, resolveSiteScope } from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
-import { revalidateTag } from "next/cache";
+import { revalidateTag, revalidatePath } from "next/cache";
 import { preparerPlan, dernierMatricule } from "@/lib/import-eleves-server";
 import { matriculeGenerator, parseDate, type Action, type LignePlan } from "@/lib/import-eleves";
 import { identityKey } from "@/lib/eleve-identity";
@@ -54,7 +54,32 @@ export async function POST(req: NextRequest) {
     if (!file) return NextResponse.json({ error: "Aucun fichier fourni" }, { status: 400 });
 
     const formSiteId = formData.get("siteId") as string | null;
-    const targetSiteId = formSiteId || (session.user.siteId ?? null);
+
+    // `siteId` vient du FORMULAIRE : sans contrôle, un administrateur du site A
+    // pouvait importer des élèves dans le site B — voire, la clé étrangère
+    // `Site` étant globale, dans un site d'un autre établissement. On vérifie
+    // donc l'appartenance au tenant ET au périmètre de sites de la session.
+    const scope = resolveSiteScope(session.user);
+    if (scope.kind === "NONE") {
+      return NextResponse.json({ error: "Aucun site ne vous est attribué" }, { status: 403 });
+    }
+    let targetSiteId = session.user.siteId ?? null;
+    if (formSiteId) {
+      if (scope.kind === "SITES" && !scope.siteIds.includes(formSiteId)) {
+        return NextResponse.json(
+          { error: "Ce site ne fait pas partie de votre périmètre" },
+          { status: 403 }
+        );
+      }
+      const siteAutorise = await prisma.site.findFirst({
+        where: { id: formSiteId, tenantId: session.user.tenantId },
+        select: { id: true },
+      });
+      if (!siteAutorise) {
+        return NextResponse.json({ error: "Site introuvable" }, { status: 404 });
+      }
+      targetSiteId = formSiteId;
+    }
 
     // L'import doit avoir été prévisualisé : on refuse une écriture directe.
     const hashAttendu = formData.get("hash") as string | null;
@@ -75,7 +100,7 @@ export async function POST(req: NextRequest) {
     };
 
     const buffer = await file.arrayBuffer();
-    const { plan, rows } = await preparerPlan(acteur, buffer);
+    const { plan, rows } = await preparerPlan(acteur, buffer, targetSiteId);
     // Les lignes lues portent les colonnes secondaires (sexe, lieu de
     // naissance, nationalité, régime) que le plan ne transporte pas.
     const srcDe = new Map(rows.map((r) => [r.ligne, r]));
@@ -189,8 +214,15 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Classes ─────────────────────────────────────────────────
+    // Classes du site cible uniquement (jamais une classe homonyme d'un autre
+    // site). Le filtre de site de la session est TOUJOURS appliqué : le site
+    // cible ne peut être qu'un site autorisé (vérifié ci-dessus).
+    const classeScopeFilter = siteFilterForModel("classe", session.user);
+    const classeFilter = targetSiteId
+      ? mergeFilters(classeScopeFilter, { AND: [{ siteId: targetSiteId }] })
+      : classeScopeFilter;
     const existingClasses = await prisma.classe.findMany({
-      where: mergeFilters({ tenantId }, siteFilterForModel("classe", session.user)),
+      where: mergeFilters({ tenantId }, classeFilter),
       select: { id: true, nom: true, siteId: true },
     });
     const classByName = new Map(existingClasses.map((c) => [c.nom, { id: c.id, siteId: c.siteId }]));
@@ -263,7 +295,7 @@ export async function POST(req: NextRequest) {
 
         return {
           tenantId,
-          siteId: targetSiteId || classe.siteId,
+          siteId: classe.siteId,
           matricule: l.matricule || prochainMatricule(),
           nom: l.nom,
           prenom: l.prenom,
@@ -308,6 +340,8 @@ export async function POST(req: NextRequest) {
           // d.identité, remise à NULL au moment de l.archivage.
           ...(l.existant!.archive ? { deletedAt: null, statut: "ACTIF" as const } : {}),
           ...(date ? { identiteKey: identityKey({ nom: l.nom, prenom: l.prenom, dateNaissance: date }) } : {}),
+          // L'élève hérite du site de sa classe, unique source de vérité
+          ...(classe ? { siteId: classe.siteId } : {}),
         },
       });
       updated++;
@@ -334,6 +368,9 @@ export async function POST(req: NextRequest) {
     });
 
     revalidateTag("eleves-stats");
+    // Les effectifs par classe affichés dans Paramètres → Pédagogie.
+    revalidatePath("/parametres");
+    revalidatePath("/eleves");
     revalidateTag("dashboard-data");
     revalidateTag("classes-list");
 

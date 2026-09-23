@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
 import { eleveScopeFilter, mergeFilters } from "@/lib/site-filter";
+import { teacherEleveRelationFilter } from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
   const user = await verifyMobileScope(req);
@@ -18,6 +19,12 @@ export async function GET(req: NextRequest) {
   // plus périmètre personnel pour les comptes parent/élève.
   const scopeFilter = eleveScopeFilter(user, "eleve");
 
+  // Périmètre ENSEIGNANT, cumulé au filtre de site : `Absence` n'a pas de
+  // `classeId`, le bornage passe par la relation `eleve`. Sans lui, un
+  // enseignant lisait les absences de tout le site — avec les noms des élèves
+  // de ses collègues.
+  const teacherFilter = await teacherEleveRelationFilter(user, "eleve");
+
   const absences = await prisma.absence.findMany({
     where: mergeFilters(
       {
@@ -25,7 +32,8 @@ export async function GET(req: NextRequest) {
         ...(eleveId ? { eleveId } : {}),
         ...(date ? { date: { gte: new Date(date) } } : {}),
       },
-      scopeFilter
+      scopeFilter,
+      teacherFilter
     ),
     select: {
       id: true,

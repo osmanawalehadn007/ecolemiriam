@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForRelation } from "@/lib/site-filter";
+import { siteFilterForRelation, mergeFilters } from "@/lib/site-filter";
+import { teacherEleveRelationFilter } from "@/lib/teacher-classes";
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -19,8 +20,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const siteFilter = siteFilterForRelation(session.user, "eleve");
 
+    // `id` vient de l'URL : le filtre de site borne le SITE, le périmètre
+    // enseignant borne les CLASSES. Sans lui, un enseignant modifiait
+    // l'appréciation, la décision ou le rang du bulletin d'une autre classe.
     const existing = await prisma.bulletin.findFirst({
-      where: { id, tenantId: session.user.tenantId, ...siteFilter },
+      where: mergeFilters(
+        { id, tenantId: session.user.tenantId },
+        siteFilter,
+        await teacherEleveRelationFilter(session.user, "eleve")
+      ),
     });
     if (!existing) return NextResponse.json({ error: "Bulletin introuvable" }, { status: 404 });
 
@@ -54,8 +62,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     const siteFilter2 = siteFilterForRelation(session.user, "eleve");
 
+    // Même garde qu'en PUT : la suppression d'un bulletin n'est ouverte que
+    // dans le périmètre de l'enseignant (404 par identifiant d'URL).
     const existing = await prisma.bulletin.findFirst({
-      where: { id, tenantId: session.user.tenantId, ...siteFilter2 },
+      where: mergeFilters(
+        { id, tenantId: session.user.tenantId },
+        siteFilter2,
+        await teacherEleveRelationFilter(session.user, "eleve")
+      ),
     });
     if (!existing) return NextResponse.json({ error: "Bulletin introuvable" }, { status: 404 });
 

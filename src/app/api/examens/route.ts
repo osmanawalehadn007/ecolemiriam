@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel, requireSiteIdForCreate } from "@/lib/site-scope";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import { revalidateTag } from "next/cache";
 
 const CreateSchema = z.object({
@@ -25,11 +26,54 @@ export async function GET(req: NextRequest) {
     const statut = searchParams.get("statut");
     const tenantId = session.user.tenantId;
 
+    // Restriction enseignant : ses sessions ne concernent que les matières qu'il
+    // dispense et les niveaux de SES classes. Les sessions sans niveau restent
+    // visibles (niveau optionnel à la création).
+    let teacherSessionFilter: Record<string, unknown> = {};
+    if (isTeacherRole(session.user.role)) {
+      const scope = await getTeacherScope(tenantId, session.user.id, session.user.role);
+      if (scope.isRestricted) {
+        const [matieresAutorisees, classesAutorisees] = await Promise.all([
+          scope.matiereIds.length > 0
+            ? prisma.matiere.findMany({
+                where: {
+                  tenantId,
+                  ...siteFilterForModel("matiere", session.user),
+                  id: { in: scope.matiereIds },
+                },
+                select: { nom: true },
+              })
+            : [],
+          scope.classeIds.length > 0
+            ? prisma.classe.findMany({
+                where: {
+                  tenantId,
+                  ...siteFilterForModel("classe", session.user),
+                  id: { in: scope.classeIds },
+                },
+                select: { niveau: true },
+                distinct: ["niveau"],
+              })
+            : [],
+        ]);
+        const niveaux = classesAutorisees.map((c) => c.niveau).filter(Boolean);
+        teacherSessionFilter = {
+          matiereNom: { in: matieresAutorisees.map((m) => m.nom) },
+          ...(niveaux.length > 0 ? { OR: [{ niveau: { in: niveaux } }, { niveau: null }] } : {}),
+        };
+      }
+    }
+
     const examens = await prisma.examen.findMany({
       where: { tenantId, ...siteFilter,
         ...(statut ? { statut: statut as never } : {}),
       },
-      include: { sessions: { orderBy: { date: "asc" } } },
+      include: {
+        sessions: {
+          where: { ...siteFilterForModel("sessionExamen", session.user), ...teacherSessionFilter },
+          orderBy: { date: "asc" },
+        },
+      },
       orderBy: { dateDebut: "desc" },
     });
 

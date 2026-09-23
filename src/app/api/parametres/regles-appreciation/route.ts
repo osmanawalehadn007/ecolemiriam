@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { checkPermission } from "@/lib/rbac";
 
 export async function GET() {
   const session = await auth();
@@ -21,6 +22,11 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
+
+  // Les règles d'appréciation façonnent les bulletins de l'établissement :
+  // acte de direction (`notes:manage`), pas un acte d'enseignant.
+  const denied = checkPermission(session.user.role, "notes:manage");
+  if (denied) return denied;
 
   const body = await req.json();
   const { contexte, seuilMin, seuilMax, libelle, ordre } = body;
@@ -49,6 +55,9 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
 
+  const denied = checkPermission(session.user.role, "notes:manage");
+  if (denied) return denied;
+
   const body = await req.json();
   const { id, contexte, seuilMin, seuilMax, libelle, ordre } = body;
 
@@ -75,6 +84,9 @@ export async function DELETE(req: NextRequest) {
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
+
+  const denied = checkPermission(session.user.role, "notes:manage");
+  if (denied) return denied;
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { checkPermission } from "@/lib/rbac";
 import { revalidateTag } from "next/cache";
 
 export async function POST(req: NextRequest) {
@@ -10,6 +11,11 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
+
+  // Génère des comptes élèves et renvoie leurs mots de passe en clair :
+  // réservé aux rôles qui administrent les élèves.
+  const denied = checkPermission(session.user.role, "eleves:write");
+  if (denied) return denied;
 
   const body = await req.json();
   const { classeId, customPassword, usernameFormat } = body as {
@@ -50,6 +56,7 @@ export async function POST(req: NextRequest) {
 
     const password = customPassword || generateRandomPassword();
 
+    // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter -- vérification d'unicité globale par email avant création de compte élève
     const existing = await prisma.user.findUnique({ where: { email: username } });
     if (existing) continue;
 

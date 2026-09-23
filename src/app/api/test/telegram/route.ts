@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { authorizeSuperAdmin } from "@/lib/rbac";
+import { rateLimit } from "@/lib/security/rate-limit";
 import { sendTelegramMessage, sendAbsenceTelegram, sendRetardTelegram, getTelegramUpdates } from "@/lib/notifications/telegram";
 import { z } from "zod";
 
@@ -11,10 +12,15 @@ const TestSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.tenantId) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
+  const limited = await rateLimit(req, {
+    keyPrefix: "test:telegram:ip",
+    limit: 10,
+    windowSeconds: 60,
+  });
+  if (limited) return limited;
+
+  const gate = await authorizeSuperAdmin();
+  if (!gate.ok) return gate.response;
 
   const url = new URL(req.url);
   const step = url.searchParams.get("step");
@@ -57,10 +63,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.tenantId) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
+  const limited = await rateLimit(req, {
+    keyPrefix: "test:telegram:ip",
+    limit: 5,
+    windowSeconds: 60,
+  });
+  if (limited) return limited;
+
+  const gate = await authorizeSuperAdmin();
+  if (!gate.ok) return gate.response;
 
   const body = await req.json();
   const parsed = TestSchema.safeParse(body);

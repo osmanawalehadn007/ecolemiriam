@@ -14,8 +14,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     const { id } = await params;
     const tenantId = session.user.tenantId;
+    // `EmploiTemps` n'a pas de colonne `siteId` : son site est celui de sa
+    // classe. Sans ce fragment, un créneau d'un autre site du même
+    // établissement restait supprimable en forgeant son identifiant.
+    const emploiFilter = siteFilterForModel("emploiTemps", session.user);
 
-    const existing = await prisma.emploiTemps.findFirst({ where: { id, tenantId } });
+    const existing = await prisma.emploiTemps.findFirst({
+      where: { id, tenantId, ...emploiFilter },
+    });
     if (!existing) return NextResponse.json({ error: "Créneau introuvable" }, { status: 404 });
 
     await prisma.emploiTemps.delete({ where: { id } });
@@ -38,8 +44,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { id } = await params;
     const tenantId = session.user.tenantId;
     const body = await req.json();
+    const emploiFilter = siteFilterForModel("emploiTemps", session.user);
 
-    const existing = await prisma.emploiTemps.findFirst({ where: { id, tenantId } });
+    const existing = await prisma.emploiTemps.findFirst({
+      where: { id, tenantId, ...emploiFilter },
+    });
     if (!existing) return NextResponse.json({ error: "Créneau introuvable" }, { status: 404 });
 
     const newJour = body.jour ?? existing.jour;
@@ -55,6 +64,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       where: {
         id: { not: id },
         tenantId,
+        ...emploiFilter,
         classeId: existing.classeId,
         jour: newJour,
         OR: [
@@ -90,6 +100,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         where: {
           id: { not: id },
           tenantId,
+          ...emploiFilter,
           enseignantId: newEnseignantId,
           jour: newJour,
           OR: [
@@ -110,6 +121,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         where: {
           id: { not: id },
           tenantId,
+          ...emploiFilter,
           salle: newSalle,
           jour: newJour,
           OR: [

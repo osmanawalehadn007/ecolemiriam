@@ -33,10 +33,11 @@ import {
   RESTRUCTURER_TOOL,
   RestructurerArgsSchema,
   resolveRestructuration,
+  type ScheduleClaims,
 } from "@/lib/ai/schedule-tool";
 import type { BulkCreneauProposal } from "@/lib/emploi-du-temps/bulk-generate";
 import type { Role } from "@prisma/client";
-import { siteFilterForModel, siteFilterForRelation, type SessionSiteClaims } from "@/lib/site-scope";
+import { siteFilterForModel, siteFilterForRelation } from "@/lib/site-scope";
 
 type PendingAction = CreneauProposal & { type: "create_emploi_du_temps" };
 
@@ -52,7 +53,7 @@ interface BulkPlan {
 async function executeScheduleTool(
   call: ToolCall,
   tenantId: string,
-  siteClaims: SessionSiteClaims
+  siteClaims: ScheduleClaims
 ): Promise<{ payload: unknown; pendingAction?: PendingAction; suggestedActions?: PendingAction[]; bulkPlan?: BulkPlan }> {
   if (call.name === "proposer_creneau_emploi_du_temps") {
     try {
@@ -239,6 +240,11 @@ Pour toute question sur l'emploi du temps, les classes, les enseignants ou les s
   const parent = await prisma.parent.findFirst({
     where: { userId, tenantId },
     include: {
+      // `enfants` est la liste des liens de CE parent, retrouvé par son propre
+      // `userId` : le périmètre est personnel, pas géographique. Un parent peut
+      // d'ailleurs avoir des enfants sur plusieurs sites, filtrer par site serait
+      // faux (voir RELATION_SCOPED_ROLES dans site-scope.ts).
+      // eslint-disable-next-line ecolpro/require-site-filter
       enfants: {
         include: {
           // eslint-disable-next-line ecolpro/require-site-filter -- eleve scoping via parent.userId (personal scope)
@@ -366,7 +372,7 @@ export async function POST(req: NextRequest) {
           pendingAction: actionFromCall,
           suggestedActions: suggestionsFromCall,
           bulkPlan: bulkPlanFromCall,
-        } = await executeScheduleTool(call, tenantId, session.user as SessionSiteClaims);
+        } = await executeScheduleTool(call, tenantId, session.user as ScheduleClaims);
         if (actionFromCall) {
           pendingAction = actionFromCall;
           writeProposed = true;

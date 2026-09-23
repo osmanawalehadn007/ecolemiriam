@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
 import prisma from "@/lib/prisma";
-import { eleveScopeFilter, siteFilterForModel } from "@/lib/site-scope";
+import { eleveScopeFilter, siteFilterForModel, mergeFilters } from "@/lib/site-scope";
+import { teacherClasseFilter, teacherEleveFilter } from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,14 +14,22 @@ export async function GET(req: NextRequest) {
     const eleveFilter = eleveScopeFilter(user, null);
     const classeFilter = siteFilterForModel("classe", user);
 
+    // Périmètre ENSEIGNANT : la liste des classes ET les élèves imbriqués sont
+    // bornés. `_count`/`include` non borné aurait ramené les effectifs complets
+    // des classes du site, avec les noms des élèves.
+    const [teacherClasseScope, teacherEleveScope] = await Promise.all([
+      teacherClasseFilter(user),
+      teacherEleveFilter(user),
+    ]);
+
     // `Classe` porte `siteId` ; les élèves imbriqués sont filtrés séparément
     // pour qu'un parent ne récupère pas la liste complète de la classe.
 
     const classes = await prisma.classe.findMany({
-      where: { tenantId: user.tenantId, ...classeFilter },
+      where: mergeFilters({ tenantId: user.tenantId }, classeFilter, teacherClasseScope),
       include: {
         eleves: {
-          where: { statut: "ACTIF", ...eleveFilter },
+          where: mergeFilters({ statut: "ACTIF" }, eleveFilter, teacherEleveScope),
           select: {
             id: true,
             nom: true,

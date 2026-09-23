@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { canAccessSite } from "@/lib/site-filter";
+import { siteFilterForModel, personalScopeFilter, isRelationScopedRole } from "@/lib/site-scope";
+import { checkPermission } from "@/lib/rbac";
 
 export async function GET(
   _req: NextRequest,
@@ -12,10 +14,24 @@ export async function GET(
     if (!session?.user?.tenantId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
+    // Document financier : réservé aux rôles finance. Une famille garde accès
+    // aux documents de SES enfants — c'est le filtre de périmètre du `where`
+    // ci-dessous qui le borne, et non un refus global (ancien comportement :
+    // aucun contrôle de rôle, facture d'autrui accessible par identifiant).
+    if (!isRelationScopedRole(session.user.role)) {
+      const denied = checkPermission(session.user.role, "finance:read");
+      if (denied) return denied;
+    }
 
     const { id } = await params;
     const facture = await prisma.facture.findFirst({
-      where: { id, tenantId: session.user.tenantId },
+      where: {
+        id,
+        tenantId: session.user.tenantId,
+        ...siteFilterForModel("facture", session.user),
+        // Neutre pour le personnel ; borne PARENT / STUDENT à leurs enfants.
+        ...personalScopeFilter(session.user, "eleve"),
+      },
       include: {
         eleve: {
           select: {
@@ -32,6 +48,7 @@ export async function GET(
           },
         },
         tenant: true,
+        // eslint-disable-next-line ecolpro/require-site-filter -- paiement n'a pas de siteId, scopé via la facture parente déjà filtrée par site
         paiements: {
           orderBy: { date: "desc" },
           include: { enregistrePar: { select: { name: true } } },

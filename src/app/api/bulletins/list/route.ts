@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { checkPermission } from "@/lib/rbac";
 import { eleveScopeFilter, mergeFilters } from "@/lib/site-filter";
+import { teacherEleveFilter } from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
   try {
@@ -22,6 +23,10 @@ export async function GET(req: NextRequest) {
     // `bulletins:read` et pouvait, sans ce filtre, lister les bulletins de tous
     // les élèves du tenant — ou cibler n'importe quel `eleveId`.
     const scopeFilter = eleveScopeFilter(session.user, "eleve");
+    // Comme pour les notes : `eleveScopeFilter` est NEUTRE pour les rôles
+    // enseignants. Sans ce fragment, un `classeId` / `eleveId` forgé donnait
+    // accès aux bulletins d'une classe qui n'est pas la sienne.
+    const teacherFilter = await teacherEleveFilter(session.user);
 
     const where: any = mergeFilters(
       {
@@ -30,7 +35,8 @@ export async function GET(req: NextRequest) {
         ...(eleveId ? { eleveId } : {}),
         ...(!eleveId && classeId ? { eleve: { classeId } } : {}),
       },
-      scopeFilter
+      scopeFilter,
+      teacherFilter
     );
 
     const bulletins = await prisma.bulletin.findMany({

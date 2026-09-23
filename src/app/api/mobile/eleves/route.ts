@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
 import { eleveScopeFilter, mergeFilters } from "@/lib/site-filter";
+import { teacherEleveFilter } from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
   const user = await verifyMobileScope(req);
@@ -20,6 +21,12 @@ export async function GET(req: NextRequest) {
   // un fragment étalé naïvement.
   const scopeFilter = eleveScopeFilter(user, null);
 
+  // Périmètre ENSEIGNANT — cumulatif, jamais substitué au filtre de site.
+  // Sans lui, cette route expose l'annuaire complet du site : noms, matricules,
+  // dates de naissance et photos de tous les élèves, y compris hors de ses
+  // classes. Vide pour tout rôle non enseignant (aucune régression admin).
+  const teacherFilter = await teacherEleveFilter(user);
+
   const eleves = await prisma.eleve.findMany({
     where: mergeFilters(
       {
@@ -35,7 +42,8 @@ export async function GET(req: NextRequest) {
             }
           : {}),
       },
-      scopeFilter
+      scopeFilter,
+      teacherFilter
     ),
     select: {
       id: true,

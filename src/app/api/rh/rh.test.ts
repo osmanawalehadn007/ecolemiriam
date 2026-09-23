@@ -22,6 +22,9 @@ vi.mock("@/lib/prisma", () => ({
     },
     ficheRH: {
       update: vi.fn().mockResolvedValue({}),
+      // Les routes PATCH vérifient l'appartenance de la fiche avant de la
+      // mettre à jour (compteurs d'absences / congés).
+      findFirst: vi.fn(),
     },
     enseignant: {
       findFirst: vi.fn(),
@@ -53,6 +56,7 @@ const mockPrisma = prisma as unknown as {
   };
   ficheRH: {
     update: ReturnType<typeof vi.fn>;
+    findFirst: ReturnType<typeof vi.fn>;
   };
   enseignant: {
     findFirst: ReturnType<typeof vi.fn>;
@@ -327,6 +331,9 @@ describe("RH Congés API", () => {
         id: "c1",
         statut: "APPROUVE",
       });
+      // Fiche RH trouvée dans le périmètre : le compteur de congés doit être
+      // incrémenté sur cette fiche.
+      mockPrisma.ficheRH.findFirst.mockResolvedValue({ id: "fiche1" });
       const req = createMockReq("http://localhost/api/rh/conges/c1", "PATCH", {
         action: "APPROUVE",
       });

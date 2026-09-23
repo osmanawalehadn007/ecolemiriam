@@ -29,8 +29,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     const tenantId = session.user.tenantId;
+    // `Examen` porte une colonne `siteId` : sans ce filtre, un examen d'un
+    // autre site du même établissement restait modifiable par identifiant.
+    const examenFilter = siteFilterForModel("examen", session.user);
 
-    const existing = await prisma.examen.findFirst({ where: { id, tenantId } });
+    const existing = await prisma.examen.findFirst({ where: { id, tenantId, ...examenFilter } });
     if (!existing) return NextResponse.json({ error: "Examen introuvable" }, { status: 404 });
 
     const { intitule, description, statut, dateDebut, dateFin } = parsed.data;
@@ -66,7 +69,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
     const tenantId = session.user.tenantId;
 
-    const existing = await prisma.examen.findFirst({ where: { id, tenantId } });
+    const existing = await prisma.examen.findFirst({
+      where: { id, tenantId, ...siteFilterForModel("examen", session.user) },
+    });
     if (!existing) return NextResponse.json({ error: "Examen introuvable" }, { status: 404 });
 
     await prisma.examen.delete({ where: { id } });

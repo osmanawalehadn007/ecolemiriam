@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
-import { siteFilterForRelation } from "@/lib/site-filter";
+import { siteFilterForRelation, mergeFilters } from "@/lib/site-filter";
+import { teacherEmploiTempsFilter } from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
   const user = await verifyMobileScope(req);
@@ -11,8 +12,15 @@ export async function GET(req: NextRequest) {
   }
 
   // `EmploiTemps` n'a pas de colonne `siteId` : filtrage via la classe.
+  // Pour un enseignant, on borne en plus sur SA propre fiche : `teacherClasseFilter`
+  // ne suffirait pas — il montrerait les créneaux de ses collègues pour les
+  // mêmes classes. Un rôle non enseignant reçoit `{}` : rien ne change.
   const emploi = await prisma.emploiTemps.findMany({
-    where: { tenantId: user.tenantId, ...siteFilterForRelation(user, "classe") },
+    where: mergeFilters(
+      { tenantId: user.tenantId },
+      siteFilterForRelation(user, "classe"),
+      await teacherEmploiTempsFilter(user)
+    ),
     select: {
       id: true,
       jour: true,

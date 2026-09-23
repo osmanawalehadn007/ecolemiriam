@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { checkPermission } from "@/lib/rbac";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { checkPermission, roleHasPermission } from "@/lib/rbac";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
+import {
+  teacherEleveFilter,
+  teacherClasseFilter,
+  teacherNoteFilter,
+  teacherEleveRelationFilter,
+} from "@/lib/teacher-classes";
+import type { Prisma } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -15,8 +22,25 @@ export async function GET(req: NextRequest) {
   const tenantId = session.user.tenantId;
 
   // Données agrégées en parallèle
-  const eleveFilter = siteFilterForModel("eleve", session.user);
-  const classeFilter = siteFilterForModel("classe", session.user);
+  //
+  // `analytics:read` est accordé aux enseignants : sans ces fragments, un
+  // professeur lisait les moyennes, les rangs, les absences et les incidents de
+  // TOUT l'établissement (top 5 / bottom 5 nominatifs compris).
+  const [tEleve, tClasse, tNote, tBulletin, tAbsence, tIncident] = await Promise.all([
+    teacherEleveFilter(session.user),
+    teacherClasseFilter(session.user),
+    teacherNoteFilter(session.user),
+    teacherEleveRelationFilter(session.user),
+    teacherEleveRelationFilter(session.user),
+    teacherEleveRelationFilter(session.user),
+  ]);
+
+  const eleveFilter = mergeFilters(siteFilterForModel("eleve", session.user), tEleve);
+  const classeFilter = mergeFilters(siteFilterForModel("classe", session.user), tClasse);
+  const noteFilter = mergeFilters(siteFilterForModel("note", session.user), tNote);
+  const bulletinFilter = mergeFilters(siteFilterForModel("bulletin", session.user), tBulletin);
+  const absenceFilter = mergeFilters(siteFilterForModel("absence", session.user), tAbsence);
+  const incidentFilter = mergeFilters(siteFilterForModel("incident", session.user), tIncident);
   const examenFilter = siteFilterForModel("examen", session.user);
   const [
     totalEleves,
@@ -28,11 +52,13 @@ export async function GET(req: NextRequest) {
     examens,
   ] = await Promise.all([
     // Total élèves actifs
-    prisma.eleve.count({ where: { tenantId, ...eleveFilter, statut: "ACTIF" } }),
+    prisma.eleve.count({
+      where: mergeFilters({ tenantId, ...eleveFilter, statut: "ACTIF" }) as Prisma.EleveWhereInput,
+    }),
 
     // Élèves par classe
     prisma.classe.findMany({
-      where: { tenantId, ...classeFilter },
+      where: mergeFilters({ tenantId, ...classeFilter }) as Prisma.ClasseWhereInput,
       select: {
         nom: true, niveau: true,
         _count: { select: { eleves: { where: { statut: "ACTIF" } } } },
@@ -41,7 +67,7 @@ export async function GET(req: NextRequest) {
 
     // Toutes les notes publiées pour calcul de moyennes
     prisma.note.findMany({
-      where: { tenantId, ...siteFilterForModel("note", session.user), isPubliee: true },
+      where: mergeFilters({ tenantId, ...noteFilter, isPubliee: true }) as Prisma.NoteWhereInput,
       select: {
         valeur: true, noteMax: true, coefficient: true,
         eleve: { select: { id: true, nom: true, prenom: true, classeId: true } },
@@ -54,16 +80,18 @@ export async function GET(req: NextRequest) {
     // Absences des 30 derniers jours
     prisma.absence.groupBy({
       by: ["statut", "date"],
-      where: { tenantId, ...siteFilterForModel("absence", session.user),
+      where: mergeFilters({
+        tenantId,
+        ...absenceFilter,
         date: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
-      },
+      }) as Prisma.AbsenceWhereInput,
       _count: { id: true },
       orderBy: { date: "asc" },
     }),
 
     // Bulletins publiés
     prisma.bulletin.findMany({
-      where: { tenantId, ...siteFilterForModel("bulletin", session.user), isPublie: true },
+      where: mergeFilters({ tenantId, ...bulletinFilter, isPublie: true }) as Prisma.BulletinWhereInput,
       select: {
         moyenneGenerale: true, rang: true, decision: true,
         eleve: { select: { id: true, nom: true, prenom: true, classeId: true } },
@@ -74,9 +102,11 @@ export async function GET(req: NextRequest) {
     // Incidents par mois (6 derniers mois)
     prisma.incident.groupBy({
       by: ["type", "statut"],
-      where: { tenantId, ...siteFilterForModel("incident", session.user),
+      where: mergeFilters({
+        tenantId,
+        ...incidentFilter,
         date: { gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) },
-      },
+      }) as Prisma.IncidentWhereInput,
       _count: { id: true },
     }),
 
@@ -135,7 +165,7 @@ export async function GET(req: NextRequest) {
   const absencesParEleve: Record<string, number> = {};
   const allAbsences = await prisma.absence.groupBy({
     by: ["eleveId", "statut"],
-    where: { tenantId, ...siteFilterForModel("absence", session.user), statut: "INJUSTIFIEE" },
+    where: mergeFilters({ tenantId, ...absenceFilter, statut: "INJUSTIFIEE" }) as Prisma.AbsenceWhereInput,
     _count: { id: true },
   });
   for (const a of allAbsences) {
@@ -205,17 +235,27 @@ export async function GET(req: NextRequest) {
 
   // Gender distribution
   const [garcons, filles] = await Promise.all([
-    prisma.eleve.count({ where: { tenantId, ...eleveFilter, statut: "ACTIF", sexe: "M" } }),
-    prisma.eleve.count({ where: { tenantId, ...eleveFilter, statut: "ACTIF", sexe: "F" } }),
+    prisma.eleve.count({
+      where: mergeFilters({ tenantId, ...eleveFilter, statut: "ACTIF", sexe: "M" }) as Prisma.EleveWhereInput,
+    }),
+    prisma.eleve.count({
+      where: mergeFilters({ tenantId, ...eleveFilter, statut: "ACTIF", sexe: "F" }) as Prisma.EleveWhereInput,
+    }),
   ]);
 
   // Revenue (last 6 months)
+  // Réservé aux rôles ayant accès aux finances : `analytics:read` est accordé
+  // aux enseignants, qui n'ont aucune raison de voir le chiffre d'affaires de
+  // l'établissement. Sans ce garde-fou, la donnée partait dans la réponse.
+  const canSeeFinance = roleHasPermission(session.user.role, "finance:read");
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-  const paiements = await prisma.paiement.findMany({
-    where: { facture: { tenantId }, date: { gte: sixMonthsAgo } },
-    select: { montant: true, devise: true, date: true },
-  });
+  const paiements = canSeeFinance
+    ? await prisma.paiement.findMany({
+        where: { ...siteFilterForModel("paiement", session.user), facture: { tenantId }, date: { gte: sixMonthsAgo } },
+        select: { montant: true, devise: true, date: true },
+      })
+    : [];
   const revenueByMonth: Record<string, number> = {};
   for (const p of paiements) {
     const monthKey = new Date(p.date).toLocaleDateString("fr-FR", { month: "short" });
@@ -226,7 +266,7 @@ export async function GET(req: NextRequest) {
   // Absence rate by class
   const absencesByClasse: Record<string, number> = {};
   const allAbsencesWithEleve = await prisma.absence.findMany({
-    where: { tenantId, ...siteFilterForModel("absence", session.user) },
+    where: mergeFilters({ tenantId, ...absenceFilter }) as Prisma.AbsenceWhereInput,
     select: { eleve: { select: { classeId: true, classe: { select: { nom: true } } } } },
   });
   for (const a of allAbsencesWithEleve) {

@@ -2,13 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel } from "@/lib/site-scope";
-import { revalidateTag } from "next/cache";
+import { checkPermission } from "@/lib/rbac";
+import { revalidateTag, revalidatePath } from "next/cache";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
+
+  // Déplacement d'élèves en masse : action administrative.
+  const denied = checkPermission(session.user.role, "eleves:write");
+  if (denied) return denied;
 
   const body = await req.json();
   const { eleveIds, nouvelleClasseId } = body as {
@@ -41,6 +46,9 @@ export async function POST(req: NextRequest) {
   });
 
   revalidateTag("eleves-stats");
+  // Les effectifs par classe affichés dans Paramètres → Pédagogie.
+  revalidatePath("/parametres");
+  revalidatePath("/eleves");
   revalidateTag("dashboard-data");
   revalidateTag("classes-list");
 

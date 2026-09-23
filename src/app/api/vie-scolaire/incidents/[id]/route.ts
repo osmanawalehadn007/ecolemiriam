@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
+import { teacherEleveRelationFilter } from "@/lib/teacher-classes";
 
 const PatchSchema = z.object({
   statut: z.enum(["OUVERT", "EN_TRAITEMENT", "RESOLU", "CLASSE"]).optional(),
@@ -32,7 +33,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const parsed = PatchSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Données invalides" }, { status: 400 });
 
-    const existing = await prisma.incident.findFirst({ where: { id, tenantId } });
+    // `id` vient de l'URL : l'incident doit porter sur un élève du périmètre de
+    // l'enseignant, sinon il est « introuvable » (404) — modifier le dossier
+    // disciplinaire d'un élève d'une autre classe n'est pas dans ses droits.
+    const existing = await prisma.incident.findFirst({
+      where: mergeFilters(
+        { id, tenantId },
+        siteFilterForModel("incident", session.user),
+        await teacherEleveRelationFilter(session.user, "eleve")
+      ),
+    });
     if (!existing) return NextResponse.json({ error: "Incident introuvable" }, { status: 404 });
 
     const updated = await prisma.incident.update({
@@ -70,7 +80,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const parsed = SanctionSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Données invalides" }, { status: 400 });
 
-    const existing = await prisma.incident.findFirst({ where: { id, tenantId } });
+    // Même garde que ci-dessus : on ne sanctionne que dans son périmètre.
+    const existing = await prisma.incident.findFirst({
+      where: mergeFilters(
+        { id, tenantId },
+        siteFilterForModel("incident", session.user),
+        await teacherEleveRelationFilter(session.user, "eleve")
+      ),
+    });
     if (!existing) return NextResponse.json({ error: "Incident introuvable" }, { status: 404 });
 
     const { type, description, dateDebut, dateFin, parentNotifie } = parsed.data;

@@ -4,12 +4,20 @@ import prisma from "@/lib/prisma";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { isEleveInTeacherScope } from "@/lib/teacher-classes";
+import { checkPermission } from "@/lib/rbac";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
+
+  // Une convocation est un courrier officiel signé du directeur : elle exige
+  // la permission d'écriture du module vie scolaire (le périmètre enseignant
+  // ci-dessous ne fait que borner l'élève, il n'autorise personne).
+  const denied = checkPermission(session.user.role, "vie-scolaire:write");
+  if (denied) return denied;
 
   const body = await req.json();
   const { eleveId, motif, motifDetail, dateConvocation } = body;
@@ -18,12 +26,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "eleveId requis" }, { status: 400 });
   }
 
+  // `eleveId` vient du corps : la convocation est un courrier adressé à la
+  // famille — un enseignant ne convoque que les familles de ses classes.
+  if (!(await isEleveInTeacherScope(session.user, eleveId))) {
+    return NextResponse.json({ error: "Élève hors de votre périmètre" }, { status: 403 });
+  }
+
 
   const siteFilter = siteFilterForModel("eleve", session.user);
   const eleve = await prisma.eleve.findFirst({
     where: { id: eleveId, tenantId: session.user.tenantId, ...siteFilter },
     include: {
       classe: true,
+      // Enfants de l'élève déjà borné au périmètre par le `where` ci-dessus :
+      // `EleveParent` n'a aucun chemin de site propre (il passe par l'élève).
+      // eslint-disable-next-line ecolpro/require-site-filter
       parents: { include: { parent: true } },
     },
   });

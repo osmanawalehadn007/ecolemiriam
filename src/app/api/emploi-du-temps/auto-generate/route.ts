@@ -54,6 +54,12 @@ export async function POST(req: NextRequest) {
     if (denied) return denied;
     const classeFilter = siteFilterForModel("classe", session.user);
     const salleFilter = siteFilterForModel("salle", session.user);
+    // Matières, enseignants et disponibilités doivent provenir du MÊME site que
+    // la classe : sans ces filtres, le moteur pouvait affecter à une classe un
+    // enseignant d'un autre site du même établissement.
+    const matiereFilter = siteFilterForModel("matiere", session.user);
+    const enseignantFilter = siteFilterForModel("enseignant", session.user);
+    const dispoFilter = siteFilterForModel("disponibiliteEnseignant", session.user);
 
     const tenantId = session.user.tenantId;
   const siteId = (session.user as { siteId?: string | null }).siteId ?? null;
@@ -99,14 +105,14 @@ export async function POST(req: NextRequest) {
     // Fetch all data needed
     const [classe, allMatieres, enseignants, allSalles, existingCreneaux, disponibilites] = await Promise.all([
       prisma.classe.findFirst({ where: { id: classeId, tenantId, ...classeFilter }, select: { id: true, nom: true, siteId: true } }),
-      prisma.matiere.findMany({ where: { tenantId }, orderBy: { coefficient: "desc" } }),
+      prisma.matiere.findMany({ where: { tenantId, ...matiereFilter }, orderBy: { coefficient: "desc" } }),
       prisma.enseignant.findMany({
-        where: { tenantId },
+        where: { tenantId, ...enseignantFilter },
         include: { user: { select: { name: true } } },
       }),
       prisma.salle.findMany({ where: { tenantId, ...salleFilter } }),
       prisma.emploiTemps.findMany({ where: { tenantId, ...emploiFilter, annee } }),
-      prisma.disponibiliteEnseignant.findMany({ where: { tenantId } }),
+      prisma.disponibiliteEnseignant.findMany({ where: { tenantId, ...dispoFilter } }),
     ]);
 
     if (!classe) return NextResponse.json({ error: "Classe introuvable" }, { status: 404 });

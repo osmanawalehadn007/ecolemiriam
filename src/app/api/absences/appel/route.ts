@@ -8,6 +8,7 @@ import { sendEmail, renderNotificationEmail } from "@/lib/notifications/email";
 import { sendAbsenceWhatsApp, sendRetardWhatsApp } from "@/lib/notifications/whatsapp";
 import { sendAbsenceTelegram, sendRetardTelegram } from "@/lib/notifications/telegram";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import { revalidateTag } from "next/cache";
 
 const AppelSchema = z.object({
@@ -35,12 +36,25 @@ export async function POST(req: NextRequest) {
     const tenantId = session.user.tenantId;
     const appelDate = new Date(date);
 
-    // Vérifier que la classe appartient au tenant
+    // Vérifier que la classe appartient au tenant et au site
     const classe = await prisma.classe.findFirst({
-      where: { id: classeId, tenantId },
+      where: { id: classeId, tenantId, ...siteFilterForModel("classe", session.user) },
     });
     if (!classe) {
       return NextResponse.json({ error: "Classe introuvable" }, { status: 404 });
+    }
+
+    // Garde serveur : un enseignant ne fait l'appel que pour SES classes.
+    // Sans cette vérification, un prof pouvait poster l'id d'une classe d'un
+    // collègue (le seul filtre de site ne l'en empêchait pas).
+    if (isTeacherRole(session.user.role)) {
+      const scope = await getTeacherScope(tenantId, session.user.id, session.user.role);
+      if (scope.isRestricted && !scope.classeIds.includes(classeId)) {
+        return NextResponse.json(
+          { error: "Vous ne pouvez faire l'appel que pour vos propres classes" },
+          { status: 403 }
+        );
+      }
     }
 
     // Créer les absences pour les absents et retards
@@ -92,7 +106,7 @@ export async function POST(req: NextRequest) {
 
       // Récupérer les élèves signalés avec leurs parents (tous les parents liés, pas seulement le gardien)
       const elevesSignales = await prisma.eleve.findMany({
-        where: { id: { in: signaleEleveIds.map((e) => e.eleveId) } },
+        where: { id: { in: signaleEleveIds.map((e) => e.eleveId) }, tenantId, ...siteFilterForModel("eleve", session.user) },
         select: {
           id: true,
           nom: true,

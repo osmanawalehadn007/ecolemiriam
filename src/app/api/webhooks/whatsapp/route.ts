@@ -53,7 +53,12 @@ export async function POST(request: NextRequest) {
 
             console.log(`[WhatsApp Webhook] Message de ${from}: ${text}`);
 
-            // Chercher le parent par téléphone
+            // Webhook entrant : aucune session, donc aucun tenant connu à
+            // l'avance. C'est le numéro qui détermine le tenant — la recherche
+            // est inter-tenants par nécessité.
+            // Limite connue : si deux établissements enregistrent le même
+            // numéro, le message est rattaché au premier trouvé.
+            // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter -- webhook entrant sans session : le numéro est le seul discriminant (il détermine le tenant ET donc le site)
             const parent = await prisma.parent.findFirst({
               where: {
                 OR: [

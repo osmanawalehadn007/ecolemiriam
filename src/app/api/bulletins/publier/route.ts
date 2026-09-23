@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
+import { isClasseInTeacherScope, teacherEleveFilter, teacherEleveRelationFilter } from "@/lib/teacher-classes";
 
 const Schema = z.object({
   classeId: z.string().min(1),
@@ -28,20 +29,36 @@ export async function POST(req: NextRequest) {
     const { classeId, periodeId } = parsed.data;
     const tenantId = session.user.tenantId;
 
+    // `classeId` vient du corps : publier les bulletins d'une classe, c'est
+    // rendre accessibles aux familles des documents de résultats. Un
+    // enseignant ne le fait que pour SES classes (403 — écriture).
+    if (!(await isClasseInTeacherScope(session.user, classeId))) {
+      return NextResponse.json({ error: "Cette classe n'est pas dans votre périmètre" }, { status: 403 });
+    }
+
     // Récupérer tous les bulletins de la classe pour la période
     const eleves = await prisma.eleve.findMany({
-      where: { classeId, tenantId, statut: "ACTIF" },
+      where: mergeFilters(
+        { classeId, tenantId, statut: "ACTIF" },
+        siteFilterForModel("eleve", session.user),
+        await teacherEleveFilter(session.user)
+      ),
       select: { id: true },
     });
 
     const eleveIds = eleves.map((e) => e.id);
 
     const result = await prisma.bulletin.updateMany({
-      where: { tenantId, ...siteFilterForModel("bulletin", session.user),
-        periodeId,
-        eleveId: { in: eleveIds },
-        isPublie: false,
-      },
+      where: mergeFilters(
+        {
+          tenantId,
+          periodeId,
+          eleveId: { in: eleveIds },
+          isPublie: false,
+        },
+        siteFilterForModel("bulletin", session.user),
+        await teacherEleveRelationFilter(session.user, "eleve")
+      ),
       data: {
         isPublie: true,
         publishedAt: new Date(),

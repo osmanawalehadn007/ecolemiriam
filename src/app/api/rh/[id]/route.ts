@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
-import { checkPermission } from "@/lib/rbac";
-import { siteFilterForRelation } from "@/lib/site-filter";
+import { checkAnyPermission, checkPermission } from "@/lib/rbac";
+import { siteFilterForRelation, siteFilterForModel } from "@/lib/site-filter";
 
 const FicheRHSchema = z.object({
   typeContrat: z.enum(["CDI", "CDD", "VACATAIRE", "FONCTIONNAIRE", "STAGIAIRE"]).optional(),
@@ -77,7 +77,11 @@ export async function POST(
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
-  const denied = checkPermission(session.user.role, "rh:write");
+  // Générer un bulletin de paie n'est pas modifier la fiche RH : la direction
+  // le tient de `rh:write` (elle a `rh:*`), le comptable de `paie:write`
+  // (décision B1, 23/09/2026). Le comptable perd l'écriture RH — salaire, RIB,
+  // absences, congés — mais garde la génération des bulletins.
+  const denied = checkAnyPermission(session.user.role, ["rh:write", "paie:write"]);
   if (denied) return denied;
 
   const { id } = await params;
@@ -87,10 +91,21 @@ export async function POST(
   const siteFilter2 = siteFilterForRelation(session.user, "user");
 
   const ficheRH = await prisma.ficheRH.findFirst({
-    where: { enseignantId: id, tenantId: session.user.tenantId, enseignant: { ...(siteFilter2 as any).user ? { user: (siteFilter2 as any).user } : {} } },
+    // Périmètre canonique du modèle `ficheRH` (rattachement ficheRH → enseignant
+    // → sites) : la construction manuelle précédente ne couvrait pas
+    // EnseignantSite et laissait fuiter une fiche d'un autre site.
+    where: {
+      enseignantId: id,
+      tenantId: session.user.tenantId,
+      ...siteFilterForModel("ficheRH", session.user),
+      ...siteFilter2,
+    },
     include: {
       enseignant: {
         include: {
+          // L'emploi du temps suit l'enseignant déjà borné au périmètre
+          // ci-dessus : il ne peut appartenir qu'à un enseignant autorisé.
+          // eslint-disable-next-line ecolpro/require-site-filter
           emploiTemps: { select: { heureDebut: true, heureFin: true } },
         },
       },

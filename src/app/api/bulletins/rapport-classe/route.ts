@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { eleveScopeFilter, mergeFilters, isRelationScopedRole } from "@/lib/site-scope";
+import { isClasseInTeacherScope, teacherEleveRelationFilter } from "@/lib/teacher-classes";
+import { checkPermission } from "@/lib/rbac";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+  }
+  const denied = checkPermission(session.user.role, "bulletins:read");
+  if (denied) return denied;
+
+  // Rapport de classe (noms, moyennes, rangs, décisions) : artefact de
+  // personnel, jamais borné à un élève.
+  if (isRelationScopedRole(session.user.role)) {
+    return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
   }
 
   const { searchParams } = new URL(req.url);
@@ -17,14 +27,30 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "classeId et periodeId requis" }, { status: 400 });
   }
 
+  // `classeId` vient de la requête : le rapport de classe expose noms,
+  // moyennes, rangs et décisions. 404 — ne pas confirmer l'existence d'une
+  // classe à un enseignant qui n'y a pas accès.
+  if (!(await isClasseInTeacherScope(session.user, classeId))) {
+    return NextResponse.json({ error: "Classe introuvable" }, { status: 404 });
+  }
 
   const bulletins = await prisma.bulletin.findMany({
-    where: {
-      eleve: { classeId, tenantId: session.user.tenantId, ...siteFilterForModel("bulletin", session.user) },
-      periodeId,
-    },
+    where: mergeFilters(
+      {
+        eleve: { classeId, tenantId: session.user.tenantId },
+        periodeId,
+        tenantId: session.user.tenantId,
+      },
+      eleveScopeFilter(session.user, "eleve"),
+      await teacherEleveRelationFilter(session.user, "eleve")
+    ),
     include: {
       eleve: { select: { id: true, nom: true, prenom: true, matricule: true } },
+      // Les lignes de matière suivent le bulletin parent, déjà borné au tenant
+      // et au périmètre de sites : elles ne peuvent appartenir qu'à un bulletin
+      // autorisé. `BulletinMatiere` n'a pas de chemin de site propre (elle
+      // passe par le bulletin, qui ne porte pas de colonne `siteId`).
+      // eslint-disable-next-line ecolpro/require-site-filter
       matieres: { include: { matiere: { select: { nom: true, code: true } } } },
     },
     orderBy: { rang: "asc" },

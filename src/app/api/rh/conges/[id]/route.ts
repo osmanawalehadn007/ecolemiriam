@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForRelation } from "@/lib/site-filter";
+import { siteFilterForRelation, siteFilterForModel } from "@/lib/site-filter";
 
 const ActionSchema = z.object({
   action: z.enum(["APPROUVE", "REFUSE", "ANNULE"]),
@@ -29,9 +29,14 @@ export async function PATCH(
   const siteFilter = Object.keys(userFilter).length > 0
     ? { enseignant: (userFilter as any).user }
     : {};
+  // Filtre canonique (rattachement `congePersonnel → enseignant`) : la
+  // construction manuelle ci-dessus ignorait EnseignantSite et pouvait viser
+  // un congé d'un autre site.
+  const congeFilter = siteFilterForModel("congePersonnel", session.user);
+  const ficheFilter = siteFilterForModel("ficheRH", session.user);
 
   const conge = await prisma.congePersonnel.findFirst({
-    where: { id, tenantId: session.user.tenantId, ...siteFilter },
+    where: { id, tenantId: session.user.tenantId, ...siteFilter, ...congeFilter },
   });
   if (!conge) {
     return NextResponse.json({ error: "Congé introuvable" }, { status: 404 });
@@ -48,10 +53,17 @@ export async function PATCH(
   });
 
   if (action === "APPROUVE" && conge.type === "ANNUEL") {
-    await prisma.ficheRH.update({
-      where: { enseignantId: conge.enseignantId },
-      data: { congesPris: { increment: conge.nbJours } },
+    // Écriture par identifiant : contrôle d'appartenance préalable.
+    const fiche = await prisma.ficheRH.findFirst({
+      where: { enseignantId: conge.enseignantId, tenantId: session.user.tenantId, ...ficheFilter },
+      select: { id: true },
     });
+    if (fiche) {
+      await prisma.ficheRH.update({
+        where: { id: fiche.id },
+        data: { congesPris: { increment: conge.nbJours } },
+      });
+    }
   }
 
   return NextResponse.json({ conge: updated });

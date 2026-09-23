@@ -5,6 +5,7 @@ import { sendAbsenceAlert } from "@/lib/sms/africasTalking";
 import { sendEmail, renderNotificationEmail } from "@/lib/notifications/email";
 import { sendAbsenceWhatsApp } from "@/lib/notifications/whatsapp";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { isClasseInTeacherScope } from "@/lib/teacher-classes";
 import { revalidateTag } from "next/cache";
 
 export async function POST(req: NextRequest) {
@@ -23,6 +24,18 @@ export async function POST(req: NextRequest) {
 
   if (!classeId || !date || !presences) {
     return NextResponse.json({ error: "Données manquantes" }, { status: 400 });
+  }
+
+  // `classeId` vient du corps de la requête : c'est la SEULE route mobile qui
+  // ÉCRIT des données (absences + notifications SMS/WhatsApp/e-mail aux
+  // parents). Un enseignant pouvait donc marquer absent un élève de la classe
+  // d'un collègue, déclenchant au passage les alertes aux familles. Refus en
+  // 403 : c'est une écriture, le périmètre est une règle métier opposable.
+  if (!(await isClasseInTeacherScope(user, classeId))) {
+    return NextResponse.json(
+      { error: "Cette classe n'est pas dans votre périmètre" },
+      { status: 403 }
+    );
   }
 
   const appelDate = new Date(date);
@@ -108,6 +121,10 @@ export async function POST(req: NextRequest) {
   if (absentEleveIds.length > 0) {
     const dateFr = appelDate.toLocaleDateString("fr-FR");
 
+    // `absentEleveIds` est un sous-ensemble de `eleveIdsSaisis`, dont l'appartenance
+    // à la classe, au tenant et au périmètre de sites vient d'être vérifiée
+    // ci-dessus (rejet en 403 sinon) : la portée est acquise en amont.
+    // eslint-disable-next-line ecolpro/require-site-filter
     const eleveParents = await prisma.eleveParent.findMany({
       where: {
         eleveId: { in: absentEleveIds },

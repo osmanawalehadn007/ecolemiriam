@@ -3,12 +3,22 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, eleveScopeFilter, mergeFilters, isRelationScopedRole } from "@/lib/site-scope";
+import { teacherClasseFilter, teacherEleveFilter } from "@/lib/teacher-classes";
+import { checkPermission } from "@/lib/rbac";
+import type { Prisma } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+  }
+  const denied = checkPermission(session.user.role, "absences:read");
+  if (denied) return denied;
+
+  // Feuille de présence : liste nominative de classe, réservée au personnel.
+  if (isRelationScopedRole(session.user.role)) {
+    return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
   }
 
   const { searchParams } = new URL(req.url);
@@ -20,14 +30,29 @@ export async function GET(req: NextRequest) {
 
 
   const classeFilter = siteFilterForModel("classe", session.user);
-  const eleveFilter = siteFilterForModel("eleve", session.user);
+  // Liste nominative : site **et** périmètre personnel (PARENT / STUDENT ne
+  // voient que leurs enfants, un rôle de site neutre ne change rien).
+  const eleveFilter = eleveScopeFilter(session.user, "eleve");
+  // `classeId` vient de l'URL : le seul filtre de site laissait un enseignant
+  // imprimer la feuille de présence — donc la liste nominative — d'une classe
+  // qui n'est pas la sienne.
+  const [teacherClasseF, teacherEleveF] = await Promise.all([
+    teacherClasseFilter(session.user),
+    teacherEleveFilter(session.user),
+  ]);
   const [classe, eleves, tenant] = await Promise.all([
     prisma.classe.findFirst({
-      where: { id: classeId, tenantId: session.user.tenantId, ...classeFilter },
+      where: mergeFilters(
+        { id: classeId, tenantId: session.user.tenantId, ...classeFilter },
+        teacherClasseF
+      ) as Prisma.ClasseWhereInput,
       include: { profPrincipal: { include: { user: { select: { name: true } } } } },
     }),
     prisma.eleve.findMany({
-      where: { classeId, tenantId: session.user.tenantId, ...eleveFilter, statut: "ACTIF" },
+      where: mergeFilters(
+        { classeId, tenantId: session.user.tenantId, ...eleveFilter, statut: "ACTIF" },
+        teacherEleveF
+      ) as Prisma.EleveWhereInput,
       select: { id: true, nom: true, prenom: true, matricule: true, sexe: true },
       orderBy: { nom: "asc" },
     }),

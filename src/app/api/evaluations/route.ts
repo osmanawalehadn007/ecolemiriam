@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForRelation, requireSiteIdForCreate } from "@/lib/site-filter";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   try {
@@ -19,10 +21,27 @@ export async function GET(req: NextRequest) {
 
     const siteFilter = siteFilterForRelation(session.user, "classe");
 
+    // Restriction enseignant : ne voir que les évaluations de SES classes/matières.
+    const scope = isTeacherRole(session.user.role as Role)
+      ? await getTeacherScope(session.user.tenantId, session.user.id, session.user.role as Role)
+      : undefined;
+    const teacherFilter = scope?.isRestricted
+      ? {
+          OR:
+            scope.classeIds.length > 0 || scope.matiereIds.length > 0
+              ? [
+                  ...(scope.classeIds.length > 0 ? [{ classeId: { in: scope.classeIds } }] : []),
+                  ...(scope.matiereIds.length > 0 ? [{ matiereId: { in: scope.matiereIds } }] : []),
+                ]
+              : [{ id: "__none__" }],
+        }
+      : {};
+
     const evaluations = await prisma.evaluation.findMany({
       where: {
         tenantId: session.user.tenantId,
         ...siteFilter,
+        ...teacherFilter,
         ...(classeId ? { classeId } : {}),
       },
       include: {
@@ -73,6 +92,24 @@ export async function POST(req: NextRequest) {
     }
 
     const data = parsed.data;
+
+    // Garde serveur : un enseignant restreint ne peut créer une évaluation
+    // que pour SES classes et SES matières (même si la requête est forgée).
+    if (isTeacherRole(session.user.role as Role)) {
+      const scope = await getTeacherScope(
+        session.user.tenantId,
+        session.user.id,
+        session.user.role as Role
+      );
+      const classeAutorisee = !scope.isRestricted || scope.classeIds.includes(data.classeId);
+      const matiereAutorisee = !scope.isRestricted || scope.matiereIds.includes(data.matiereId);
+      if (!classeAutorisee || !matiereAutorisee) {
+        return NextResponse.json(
+          { error: "Vous ne pouvez créer une évaluation que pour vos classes et vos matières." },
+          { status: 403 }
+        );
+      }
+    }
 
     const evaluation = await prisma.evaluation.create({
       data: {

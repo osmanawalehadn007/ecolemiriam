@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { siteFilterForRelation } from "@/lib/site-filter";
+import { eleveScopeFilter, mergeFilters } from "@/lib/site-filter";
+import { teacherEleveRelationFilter } from "@/lib/teacher-classes";
 
 export async function GET() {
   const session = await auth();
@@ -10,7 +11,9 @@ export async function GET() {
   }
 
   const tenantId = session.user.tenantId;
-  const siteFilter = siteFilterForRelation(session.user, "eleve");
+  // Périmètre personnel inclus : un parent ne voit, dans le graphique du
+  // tableau de bord, que les absences de ses propres enfants.
+  const eleveScope = eleveScopeFilter(session.user, "eleve");
 
   // Calculer la date d'il y a 8 semaines
   const now = new Date();
@@ -18,11 +21,14 @@ export async function GET() {
   eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56);
 
   const absences = await prisma.absence.findMany({
-    where: {
-      tenantId,
-      ...siteFilter,
-      date: { gte: eightWeeksAgo },
-    },
+    // Agrégat du tableau de bord : le filtre de site borne le SITE, le
+    // périmètre enseignant borne les CLASSES. Sans lui, le graphique d'un
+    // enseignant additionnait les absences de tout le site.
+    where: mergeFilters(
+      { tenantId, date: { gte: eightWeeksAgo } },
+      eleveScope,
+      await teacherEleveRelationFilter(session.user, "eleve")
+    ),
     select: {
       date: true,
       statut: true,

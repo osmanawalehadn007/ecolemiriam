@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { canAccessSite } from "@/lib/site-filter";
+import { checkPermission } from "@/lib/rbac";
+import { eleveScopeFilter, isRelationScopedRole } from "@/lib/site-scope";
 
 export async function GET(
   req: NextRequest,
@@ -12,8 +14,15 @@ export async function GET(
     if (!session?.user?.tenantId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
+    // Reçu de paiement : réservé aux rôles finance. Une famille garde accès aux
+    // reçus de SES enfants — contrôle d'appartenance ci-dessous.
+    if (!isRelationScopedRole(session.user.role)) {
+      const denied = checkPermission(session.user.role, "finance:read");
+      if (denied) return denied;
+    }
 
     const { id } = await params;
+    // eslint-disable-next-line ecolpro/require-site-filter -- paiement n'a pas de siteId, contrôle de site via canAccessSite(facture.siteId) ligne 55
     const paiement = await prisma.paiement.findUnique({
       where: { id },
       include: {
@@ -54,6 +63,23 @@ export async function GET(
     // et son tuteur — d'un paiement du site B en devinant l'identifiant.
     if (!canAccessSite(session.user, paiement.facture.siteId)) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 403 });
+    }
+
+    // Familles : le reçu doit porter sur l'un de leurs propres enfants. Le
+    // contrôle se fait sur l'élève (chemin `paiement → facture → élève`, trop
+    // profond pour `personalScopeFilter`) via le filtre de périmètre complet.
+    if (isRelationScopedRole(session.user.role)) {
+      const own = await prisma.eleve.findFirst({
+        where: {
+          id: paiement.facture.eleve.id,
+          tenantId: session.user.tenantId,
+          ...eleveScopeFilter(session.user, "eleve"),
+        },
+        select: { id: true },
+      });
+      if (!own) {
+        return NextResponse.json({ error: "Non autorisé" }, { status: 403 });
+      }
     }
 
     const tenant = paiement.facture.tenant;

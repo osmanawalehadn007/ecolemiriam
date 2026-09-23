@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { isClasseInTeacherScope } from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
   try {
@@ -21,10 +22,19 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 });
     }
 
+    // Garde serveur : les données du conseil de classe (moyennes, rangs,
+    // décisions) d'une classe hors périmètre ne sont pas consultables.
+    if (!(await isClasseInTeacherScope(session.user, classeId))) {
+      return NextResponse.json(
+        { error: "Cette classe ne fait pas partie de votre périmètre" },
+        { status: 403 }
+      );
+    }
+
     const tenantId = session.user.tenantId;
 
     const eleves = await prisma.eleve.findMany({
-      where: { classeId, tenantId, statut: "ACTIF" },
+      where: { classeId, tenantId, statut: "ACTIF", ...siteFilterForModel("eleve", session.user) },
       select: {
         id: true,
         nom: true,

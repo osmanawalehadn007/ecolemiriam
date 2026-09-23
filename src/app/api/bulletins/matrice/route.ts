@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, eleveScopeFilter, isRelationScopedRole } from "@/lib/site-scope";
+import { isClasseInTeacherScope } from "@/lib/teacher-classes";
+import { checkPermission } from "@/lib/rbac";
 
 export async function GET(req: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user?.tenantId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+    }
+    const denied = checkPermission(session.user.role, "bulletins:read");
+    if (denied) return denied;
+
+    // Relevé nominatif de classe : artefact de personnel. Un périmètre
+    // personnel (PARENT / STUDENT) n'y a pas accès — le borner à un élève
+    // laisserait croire à un droit, et la matrice n'aurait aucun sens.
+    if (isRelationScopedRole(session.user.role)) {
+      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);
@@ -18,12 +29,25 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "classeId et periodeId requis" }, { status: 400 });
     }
 
+    // Garde serveur : la matrice d'une classe hors périmètre enseignant
+    // (relevé nominatif de tous les élèves) ne doit pas être consultable.
+    if (!(await isClasseInTeacherScope(session.user, classeId))) {
+      return NextResponse.json(
+        { error: "Cette classe ne fait pas partie de votre périmètre" },
+        { status: 403 }
+      );
+    }
+
     const tenantId = session.user.tenantId;
+    // Périmètre complet pour tout ce qui pend d'un élève : site **et** périmètre
+    // personnel. `siteFilterForModel` était neutre pour PARENT / STUDENT (rôles
+    // « relation-scoped ») : la matrice d'une classe entière leur était servie.
+    const eleveScope = eleveScopeFilter(session.user, "eleve");
 
     // 1. Récupérer élèves + bulletins + notes en parallèle (3 requêtes simultanées)
     const [eleves, bulletins, notes] = await Promise.all([
       prisma.eleve.findMany({
-        where: { classeId, tenantId, statut: "ACTIF" },
+        where: { classeId, tenantId, statut: "ACTIF", ...eleveScope },
         select: {
           id: true, nom: true, prenom: true, matricule: true,
           sexe: true, dateNaissance: true,
@@ -31,13 +55,24 @@ export async function GET(req: NextRequest) {
         orderBy: [{ prenom: "asc" }, { nom: "asc" }],
       }),
       prisma.bulletin.findMany({
-        where: { eleve: { classeId, tenantId, statut: "ACTIF" }, periodeId, tenantId },
+        where: {
+          eleve: { classeId, tenantId, statut: "ACTIF" },
+          periodeId,
+          tenantId,
+          ...eleveScope,
+        },
         include: {
+          // Les lignes de matière suivent le bulletin parent, déjà borné au
+          // tenant et au périmètre de sites : elles ne peuvent appartenir qu'à
+          // un bulletin autorisé. `BulletinMatiere` n'offre par ailleurs aucun
+          // chemin de site propre (elle passe par le bulletin, qui n'a pas de
+          // colonne `siteId`).
+          // eslint-disable-next-line ecolpro/require-site-filter
           matieres: { include: { matiere: { select: { id: true, nom: true, code: true } } } },
         },
       }),
       prisma.note.findMany({
-        where: { classeId, periodeId, tenantId },
+        where: { classeId, periodeId, tenantId, ...eleveScope },
         select: {
           id: true, eleveId: true, matiereId: true,
           valeur: true, noteMax: true, coefficient: true,
@@ -70,7 +105,7 @@ export async function GET(req: NextRequest) {
     const missingMatiereIds = [...new Set(notes.map((n) => n.matiereId))].filter((id) => !matiereMap.has(id));
     if (missingMatiereIds.length > 0) {
       const missingMatieres = await prisma.matiere.findMany({
-        where: { id: { in: missingMatiereIds } },
+        where: { id: { in: missingMatiereIds }, tenantId, ...siteFilterForModel("matiere", session.user) },
         select: { id: true, nom: true, code: true },
       });
       for (const m of missingMatieres) matiereMap.set(m.id, m);
@@ -186,7 +221,12 @@ export async function GET(req: NextRequest) {
       // Batch: récupérer tous les bulletins de toutes les périodes en une seule requête
       const allPeriodeIds = allPeriodes.map((p) => p.id);
       const allBullTrim = await prisma.bulletin.findMany({
-        where: { eleveId: { in: eleveIds }, periodeId: { in: allPeriodeIds }, tenantId },
+        where: {
+          eleveId: { in: eleveIds },
+          periodeId: { in: allPeriodeIds },
+          tenantId,
+          ...eleveScope,
+        },
         select: { eleveId: true, periodeId: true, moyenneGenerale: true, rang: true },
       });
 

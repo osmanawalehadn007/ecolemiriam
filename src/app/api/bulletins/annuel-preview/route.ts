@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getBulletinAnnuelData } from "@/lib/pdf/bulletin-generator";
 import { checkPermission } from "@/lib/rbac";
+import { isEleveInTeacherScope } from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,6 +19,15 @@ export async function GET(req: NextRequest) {
 
     if (!eleveId || !anneeId) {
       return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 });
+    }
+
+    // Garde serveur : `eleveId` vient de l'URL — le bilan annuel n'est
+    // prévisualisable que pour un élève de ses classes.
+    if (!(await isEleveInTeacherScope(session.user, eleveId))) {
+      return NextResponse.json(
+        { error: "Cet élève ne fait pas partie de votre périmètre" },
+        { status: 403 }
+      );
     }
 
     const data = await getBulletinAnnuelData(eleveId, anneeId, session.user.tenantId);

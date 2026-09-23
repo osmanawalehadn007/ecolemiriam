@@ -26,12 +26,18 @@ export async function GET(req: NextRequest) {
       },
       ficheRH: {
         include: {
+          // Enfants d'une fiche RH elle-même rattachée à un enseignant déjà
+          // borné au périmètre par le `where` racine : aucun chemin de site
+          // propre (`BulletinPaie` → `FicheRH` → `Enseignant` → sites).
+          // eslint-disable-next-line ecolpro/require-site-filter
           bulletinsPaie: {
             orderBy: [{ annee: "desc" }, { mois: "desc" }],
             take: 3,
           },
         },
       },
+      // Même raisonnement : créneaux et classes de CET enseignant, déjà filtré.
+      // eslint-disable-next-line ecolpro/require-site-filter
       emploiTemps: {
         select: {
           jour: true, heureDebut: true, heureFin: true,
@@ -39,6 +45,7 @@ export async function GET(req: NextRequest) {
           classe: { select: { nom: true } },
         },
       },
+      // eslint-disable-next-line ecolpro/require-site-filter
       classesPrincipales: {
         select: { id: true, nom: true, niveau: true },
       },

@@ -4,8 +4,9 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { generateMatricule } from "@/lib/utils";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForModel, siteIdForCreate, requireSiteIdForCreate } from "@/lib/site-scope";
-import { revalidateTag } from "next/cache";
+import { siteFilterForModel, siteIdForCreate, requireSiteIdForCreate, mergeFilters } from "@/lib/site-scope";
+import { teacherEleveFilter } from "@/lib/teacher-classes";
+import { revalidateTag, revalidatePath } from "next/cache";
 
 const EleveSchema = z.object({
   nom: z.string().min(1).max(100),
@@ -42,20 +43,27 @@ export async function GET(req: NextRequest) {
     const isExport = searchParams.get("export") === "true";
 
 
-    const where = {
-      tenantId: session.user.tenantId,
-      ...siteFilter,
-      deletedAt: null, // Exclure les élèves supprimés (soft delete)
-      ...(classeId && { classeId }),
-      ...(statut && { statut: statut as "ACTIF" }),
-      ...(q && {
-        OR: [
-          { nom: { contains: q, mode: "insensitive" as const } },
-          { prenom: { contains: q, mode: "insensitive" as const } },
-          { matricule: { contains: q, mode: "insensitive" as const } },
-        ],
-      }),
-    };
+    const where = mergeFilters(
+      {
+        tenantId: session.user.tenantId,
+        deletedAt: null, // Exclure les élèves supprimés (soft delete)
+        ...(classeId && { classeId }),
+        ...(statut && { statut: statut as "ACTIF" }),
+        ...(q && {
+          OR: [
+            { nom: { contains: q, mode: "insensitive" as const } },
+            { prenom: { contains: q, mode: "insensitive" as const } },
+            { matricule: { contains: q, mode: "insensitive" as const } },
+          ],
+        }),
+      },
+      siteFilter,
+      // `eleves:read` est accordé aux enseignants : sans ce fragment, la liste
+      // — et surtout l'export CSV (`?export=true`, jusqu'à MAX_EXPORT_ROWS
+      // lignes d'identités) — portait sur TOUT le site. Cumulatif, jamais
+      // substitué : le filtre de site reste appliqué en premier.
+      await teacherEleveFilter(session.user)
+    );
 
     const include = {
       classe: { select: { nom: true, niveau: true } },
@@ -120,11 +128,10 @@ export async function POST(req: NextRequest) {
     // prédicat (`AND` / `OR`) et n'a rien à faire dans un `data` de création :
     // l'étaler produisait soit une erreur Prisma, soit un élève sans site donc
     // visible depuis tous les sites du tenant.
-    const newSiteId = siteIdForCreate(session.user);
-
     // La classe cible doit appartenir au tenant ET au périmètre de sites de
     // l'utilisateur : sans cette vérification, on pouvait rattacher un élève à
     // une classe d'un autre site.
+    let resolvedSiteId = siteIdForCreate(session.user);
     if (parsed.data.classeId) {
       const classe = await prisma.classe.findFirst({
         where: { id: parsed.data.classeId, tenantId, ...siteFilter },
@@ -133,6 +140,7 @@ export async function POST(req: NextRequest) {
       if (!classe) {
         return NextResponse.json({ error: "Classe introuvable ou hors de votre périmètre" }, { status: 403 });
       }
+      resolvedSiteId = classe.siteId;
     }
 
     // Générer le matricule
@@ -142,7 +150,7 @@ export async function POST(req: NextRequest) {
     const matricule = generateMatricule(annee, count + 1);
 
     const eleve = await prisma.eleve.create({
-      data: { tenantId, siteId: newSiteId, ...parsed.data,
+      data: { tenantId, siteId: resolvedSiteId, ...parsed.data,
         dateNaissance: new Date(parsed.data.dateNaissance),
         matricule,
         anneeInscription: annee,
@@ -154,6 +162,9 @@ export async function POST(req: NextRequest) {
     });
 
     revalidateTag("eleves-stats");
+    // Les effectifs par classe affichés dans Paramètres → Pédagogie.
+    revalidatePath("/parametres");
+    revalidatePath("/eleves");
     revalidateTag("dashboard-data");
 
     return NextResponse.json({ eleve }, { status: 201 });

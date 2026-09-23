@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel, eleveScopeFilter, mergeFilters } from "@/lib/site-scope";
+import { teacherNoteFilter, resolveTeacherScope } from "@/lib/teacher-classes";
 import { revalidateTag } from "next/cache";
 
 const NoteSchema = z.object({
@@ -49,6 +50,12 @@ export async function GET(req: NextRequest) {
     // et lisait donc les notes de tous les élèves du tenant.
     const scopeFilter = eleveScopeFilter(session.user, "eleve");
 
+    // Périmètre enseignant : `eleveScopeFilter` est NEUTRE pour TEACHER /
+    // CLASS_TEACHER (rôles non « relation-scoped »). Sans ce fragment, passer
+    // un `classeId` ou un `eleveId` arbitraire du même site suffisait à lire
+    // les notes d'une classe qui n'est pas la nôtre.
+    const teacherFilter = await teacherNoteFilter(session.user);
+
     const where = mergeFilters(
       {
         tenantId: session.user.tenantId,
@@ -57,7 +64,8 @@ export async function GET(req: NextRequest) {
         ...(periodeId && { periodeId }),
         ...(eleveId && { eleveId }),
       },
-      scopeFilter
+      scopeFilter,
+      teacherFilter
     );
 
     const [notes, total] = await Promise.all([
@@ -100,6 +108,28 @@ export async function POST(req: NextRequest) {
     // Filtre de site appliqué directement sur `Eleve` (qui porte `siteId`),
     // utilisé pour valider le périmètre des élèves visés par la saisie.
     const { notes, isPubliee } = parsed.data;
+
+    // Périmètre enseignant : refuse toute saisie visant une classe ou une
+    // matière hors de son emploi du temps. C'était le trou le plus grave de
+    // l'API — un enseignant pouvait ÉCRIRE des notes dans la classe d'un
+    // collègue en forgeant `classeId` / `matiereId`.
+    const teacherScope = await resolveTeacherScope(session.user);
+    if (teacherScope.isRestricted) {
+      const horsClasse = notes.find((n) => !teacherScope.classeIds.includes(n.classeId));
+      if (horsClasse) {
+        return NextResponse.json(
+          { error: "Vous ne pouvez saisir des notes que pour vos propres classes" },
+          { status: 403 }
+        );
+      }
+      const horsMatiere = notes.find((n) => !teacherScope.matiereIds.includes(n.matiereId));
+      if (horsMatiere) {
+        return NextResponse.json(
+          { error: "Vous ne pouvez saisir des notes que pour les matières que vous enseignez" },
+          { status: 403 }
+        );
+      }
+    }
 
     // Garde-fou : refuse la saisie sur une période clôturée ou dont la date limite est dépassée.
     const periodeIds = [...new Set(notes.map((n) => n.periodeId).filter((id): id is string => !!id))];
@@ -147,7 +177,7 @@ export async function POST(req: NextRequest) {
     const matiereIds = [...new Set(notes.map((n) => n.matiereId).filter(Boolean))];
     if (matiereIds.length > 0) {
       const matieres = await prisma.matiere.count({
-        where: { id: { in: matiereIds as string[] }, tenantId },
+        where: { id: { in: matiereIds as string[] }, tenantId, ...siteFilterForModel("matiere", session.user) },
       });
       if (matieres !== matiereIds.length) {
         return NextResponse.json(

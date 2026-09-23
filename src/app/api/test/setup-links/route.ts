@@ -1,14 +1,22 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { authorizeSuperAdmin } from "@/lib/rbac";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.tenantId) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+  // Route de développement (crée un parent et le lie aux élèves) : réservée à
+  // l'équipe plateforme, jamais accessible aux comptes d'établissement.
+  const gate = await authorizeSuperAdmin();
+  if (!gate.ok) return gate.response;
+
+  const session = gate.session;
+  const tenantId = gate.tenantId;
+  if (!tenantId) {
+    return NextResponse.json(
+      { error: "Aucun établissement associé au compte" },
+      { status: 403 }
+    );
   }
-  const tenantId = session.user.tenantId;
 
   // Get first 3 active students
   const siteFilter = siteFilterForModel("eleve", session.user);
@@ -40,6 +48,7 @@ export async function GET() {
   // Link each student to this parent if not already linked
   const results: string[] = [];
   for (const eleve of eleves) {
+    // eslint-disable-next-line ecolpro/require-site-filter -- route de test/développement, élèves déjà filtrés par site ci-dessus
     const existing = await prisma.eleveParent.findUnique({
       where: { eleveId_parentId: { eleveId: eleve.id, parentId: parent.id } },
     });

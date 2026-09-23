@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForModel, requireSiteIdForCreate } from "@/lib/site-scope";
+import { siteFilterForModel, requireSiteIdForCreate, mergeFilters } from "@/lib/site-scope";
+import { isEleveInTeacherScope, teacherEleveRelationFilter } from "@/lib/teacher-classes";
 
 const CreateSchema = z.object({
   eleveId: z.string().min(1),
@@ -28,10 +29,18 @@ export async function GET(req: NextRequest) {
     const tenantId = session.user.tenantId;
 
     const incidents = await prisma.incident.findMany({
-      where: { tenantId, ...siteFilterForModel("incident", session.user),
-        ...(eleveId ? { eleveId } : {}),
-        ...(statut ? { statut: statut as never } : {}),
-      },
+      // Le filtre de site borne le SITE ; le périmètre enseignant borne les
+      // CLASSES. Les deux sont cumulatifs : un enseignant ne doit voir que les
+      // incidents de ses propres élèves, pas ceux du site entier.
+      where: mergeFilters(
+        {
+          tenantId,
+          ...(eleveId ? { eleveId } : {}),
+          ...(statut ? { statut: statut as never } : {}),
+        },
+        siteFilterForModel("incident", session.user),
+        await teacherEleveRelationFilter(session.user, "eleve")
+      ),
       include: {
         eleve: { select: { id: true, nom: true, prenom: true, matricule: true, classe: { select: { nom: true } } } },
         rapportePar: { select: { name: true } },
@@ -66,8 +75,17 @@ export async function POST(req: NextRequest) {
     const { eleveId, type, gravite, description, lieu, date, notes } = parsed.data;
     const tenantId = session.user.tenantId;
 
-    // Vérifier que l'élève appartient au tenant
-    const eleve = await prisma.eleve.findFirst({ where: { id: eleveId, tenantId } });
+    // `eleveId` vient du corps : pour un enseignant, seule une classe de son
+    // périmètre est recevable. Refus AVANT la lecture de la fiche élève — un
+    // 404 confirmerait l'organisation des classes d'un collègue.
+    if (!(await isEleveInTeacherScope(session.user, eleveId))) {
+      return NextResponse.json({ error: "Élève hors de votre périmètre" }, { status: 403 });
+    }
+
+    // Vérifier que l'élève appartient au tenant ET au périmètre de sites
+    const eleve = await prisma.eleve.findFirst({
+      where: { id: eleveId, tenantId, ...siteFilterForModel("eleve", session.user) },
+    });
     if (!eleve) return NextResponse.json({ error: "Élève introuvable" }, { status: 404 });
 
     const incident = await prisma.incident.create({

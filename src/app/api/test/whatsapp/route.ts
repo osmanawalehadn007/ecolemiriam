@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { authorizeSuperAdmin } from "@/lib/rbac";
+import { rateLimit } from "@/lib/security/rate-limit";
 import { sendWhatsAppMessage, sendAbsenceWhatsApp, sendRetardWhatsApp } from "@/lib/notifications/whatsapp";
 import { sendSMS } from "@/lib/sms/africasTalking";
 import { z } from "zod";
@@ -12,10 +13,15 @@ const TestSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.tenantId) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
+  const limited = await rateLimit(req, {
+    keyPrefix: "test:whatsapp:ip",
+    limit: 5,
+    windowSeconds: 60,
+  });
+  if (limited) return limited;
+
+  const gate = await authorizeSuperAdmin();
+  if (!gate.ok) return gate.response;
 
   const body = await req.json();
   const parsed = TestSchema.safeParse(body);
@@ -63,7 +69,17 @@ export async function POST(req: NextRequest) {
   });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const limited = await rateLimit(req, {
+    keyPrefix: "test:whatsapp:ip",
+    limit: 10,
+    windowSeconds: 60,
+  });
+  if (limited) return limited;
+
+  const gate = await authorizeSuperAdmin();
+  if (!gate.ok) return gate.response;
+
   const hasWhatsappToken = !!process.env.WHATSAPP_API_TOKEN && !process.env.WHATSAPP_API_TOKEN?.includes("xxxx");
   const hasSmsKey = !!process.env.AT_API_KEY && !!process.env.AT_USERNAME;
 
