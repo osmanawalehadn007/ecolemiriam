@@ -90,7 +90,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
 
         const { email, password } = parsed.data;
 
-        // eslint-disable-next-line ecolpro/require-site-filter -- login: no session exists yet, user must be looked up across all sites
+        // eslint-disable-next-line ecolpro/require-site-filter, ecolpro/require-tenant-id -- login: aucune session n'existe encore, le compte doit être retrouvé au-delà des sites et des établissements (l'email est l'identifiant de connexion)
         const user = await prisma.user.findUnique({
           where: { email },
           select: {
@@ -130,6 +130,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         }
 
         // Mettre à jour lastLoginAt
+        // eslint-disable-next-line ecolpro/require-site-filter, ecolpro/require-tenant-id -- login: le compte vient d'être authentifié (mot de passe vérifié ci-dessus) ; le périmètre n'est pas encore établi à ce stade du flux
         await prisma.user.update({
           where: { id: user.id },
           data: { lastLoginAt: new Date() },

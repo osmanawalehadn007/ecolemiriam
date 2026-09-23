@@ -323,6 +323,25 @@ export const SITE_PATHS: Record<string, SitePath> = {
   // exemple un échange direct entre deux personnes).
   conversation: "column",
 
+  // --- LearnOS : tous les modèles portent `siteId` ---
+  // Le référentiel (curriculum, chapitre, compétence) comme les données
+  // d'élève (preuves, twin, évaluations, interventions…) sont cloisonnés par
+  // site. Aucun n'est inscrit dans `SHARED_NULL_MODELS` : un enregistrement
+  // sans site reste donc invisible d'un compte site-scopé (fail-closed).
+  learnosCurriculum: "column",
+  learnosChapitre: "column",
+  learnosCompetence: "column",
+  learnosEvidence: "column",
+  learnosStudentTwin: "column",
+  learnosAssessment: "column",
+  learnosAssignment: "column",
+  learnosSubmission: "column",
+  learnosDiagnostic: "column",
+  learnosIntervention: "column",
+  learnosInsight: "column",
+  learnosEvent: "column",
+  learnosCopilotMemory: "column",
+
   // --- rattachement via l'élève ---
   absence: { one: "eleve" },
   bulletin: { one: "eleve" },

@@ -47,7 +47,7 @@ export async function deriveClaims(
   userId: string,
   preferredTenantId?: string | null
 ): Promise<TenantSiteClaims | null> {
-  // eslint-disable-next-line ecolpro/require-site-filter -- claims derivation: computing site claims themselves, filtering would be circular
+  // eslint-disable-next-line ecolpro/require-site-filter, ecolpro/require-tenant-id -- calcul des revendications lui-même : filtrer par site ou par tenant serait circulaire (c'est cette lecture qui produit le périmètre)
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -202,7 +202,7 @@ export async function resolveSiteAccess(
   });
   if (!site) return null;
 
-  // eslint-disable-next-line ecolpro/require-site-filter -- site access resolution, filtering would be circular
+  // eslint-disable-next-line ecolpro/require-site-filter, ecolpro/require-tenant-id -- résolution d'accès à un site : la lecture sert précisément à DÉCIDER du périmètre, un filtre serait circulaire
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { role: true, tenantId: true },
