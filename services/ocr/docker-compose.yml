@@ -1,0 +1,9 @@
+services:
+  ocr:
+    build: .
+    ports:
+      - "127.0.0.1:8100:8100"
+    environment:
+      OCR_SERVICE_SECRET: ${OCR_SERVICE_SECRET:?définir OCR_SERVICE_SECRET}
+      OCR_LANG: fra
+    restart: unless-stopped
