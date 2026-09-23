@@ -1,3 +1,4 @@
+import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
@@ -8,6 +9,7 @@ import { AttestationForm } from "@/components/eleves/AttestationForm";
 export default async function AttestationsPage() {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "eleves:read");
 
 
   const siteFilter = siteFilterForModel("classe", session.user);
@@ -15,6 +17,9 @@ export default async function AttestationsPage() {
     prisma.classe.findMany({
       where: { tenantId: session.user.tenantId, ...siteFilter },
       include: {
+        // Élèves d'une classe déjà bornée par le filtre de site ci-dessus :
+        // le rattachement passe par la classe.
+        // eslint-disable-next-line ecolpro/require-site-filter
         eleves: {
           where: { statut: "ACTIF" },
           select: { id: true, nom: true, prenom: true, matricule: true, sexe: true, dateNaissance: true },

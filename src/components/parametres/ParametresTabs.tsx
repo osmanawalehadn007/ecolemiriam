@@ -18,21 +18,13 @@ import { SignatureCachetManager } from "./SignatureCachetManager";
 import { SitesTab } from "./SitesTab";
 import { TarifsTab } from "./TarifsTab";
 import { DoublonsTab } from "./DoublonsTab";
+import { AnneesScolairesTab } from "./AnneesScolairesTab";
 
 import type { AvailableTenant } from "@/auth.config";
 
-type Tab =
-  | "etablissement"
-  | "utilisateurs"
-  | "parents"
-  | "classes"
-  | "matieres"
-  | "appreciations"
-  | "periodes"
-  | "signature"
-  | "sites"
-  | "tarifs"
-  | "doublons";
+import type { ParametresTab as Tab } from "@/lib/parametres-tabs";
+
+export type { Tab };
 
 type TabDef = { id: Tab; labelKey: string; icon: typeof Settings };
 
@@ -48,6 +40,7 @@ const tabGroups: TabGroup[] = [
     icon: School,
     tabs: [
       { id: "etablissement", labelKey: "etablissement", icon: Settings },
+      { id: "annees", labelKey: "anneesScolaires", icon: Calendar },
       { id: "sites", labelKey: "sites", icon: Building2 },
       { id: "signature", labelKey: "signature", icon: Stamp },
     ],
@@ -90,8 +83,15 @@ interface ParametresTabsProps {
   regles: Awaited<ReturnType<typeof import("@/lib/actions/parametres").getReglesAppreciation>>;
   periodes: Awaited<ReturnType<typeof import("@/lib/actions/parametres").getPeriodesForCloture>>;
   sites: Awaited<ReturnType<typeof import("@/lib/actions/parametres").getSitesForSettings>>;
+  annees: Awaited<ReturnType<typeof import("@/lib/actions/parametres").getAnneesScolaires>>;
   canManage: boolean;
   availableTenants?: AvailableTenant[];
+  /**
+   * Onglets auxquels l'appelant a droit. Calculé côté serveur depuis la matrice
+   * RBAC : l'interface ne propose donc que ce que le serveur acceptera.
+   * Absent = tous les onglets (rétro-compatibilité).
+   */
+  allowedTabs?: Tab[];
 }
 
 export function ParametresTabs({
@@ -104,16 +104,28 @@ export function ParametresTabs({
   regles,
   periodes,
   sites,
+  annees,
   canManage,
   availableTenants,
+  allowedTabs,
 }: ParametresTabsProps) {
   const t = useTranslations("parametres");
-  const [activeTab, setActiveTab] = useState<Tab>("etablissement");
+
+  // Groupes réduits aux onglets autorisés — un groupe sans onglet disparaît.
+  const groups = tabGroups
+    .map((group) => ({
+      ...group,
+      tabs: group.tabs.filter((tab) => !allowedTabs || allowedTabs.includes(tab.id)),
+    }))
+    .filter((group) => group.tabs.length > 0);
+  const firstTab: Tab = groups[0]?.tabs[0]?.id ?? "etablissement";
+
+  const [activeTab, setActiveTab] = useState<Tab>(firstTab);
 
   // Trouver le groupe actif
-  const activeGroup = tabGroups.find((g) => g.tabs.some((tab) => tab.id === activeTab)) ?? tabGroups[0];
-  const [activeGroupId, setActiveGroupId] = useState(activeGroup.groupKey);
-  const [expandedGroup, setExpandedGroup] = useState<string | null>(activeGroup.groupKey);
+  const activeGroup = groups.find((g) => g.tabs.some((tab) => tab.id === activeTab)) ?? groups[0];
+  const [activeGroupId, setActiveGroupId] = useState(activeGroup?.groupKey ?? "");
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(activeGroup?.groupKey ?? null);
 
   // Quand on change de groupe, activer le premier sous-onglet
   function handleGroupClick(group: TabGroup) {
@@ -128,7 +140,7 @@ export function ParametresTabs({
     <div className="space-y-4">
       {/* Niveau 1: Onglets de groupe */}
       <div className="flex flex-wrap gap-2">
-        {tabGroups.map((group) => (
+        {groups.map((group) => (
           <button
             key={group.groupKey}
             onClick={() => handleGroupClick(group)}
@@ -154,7 +166,7 @@ export function ParametresTabs({
       {/* Niveau 2: Sous-onglets du groupe actif */}
       {expandedGroup && (
         <div className="flex flex-wrap gap-1.5 border-b pb-px">
-          {tabGroups
+          {groups
             .find((g) => g.groupKey === expandedGroup)
             ?.tabs.map((tab) => (
               <button
@@ -177,6 +189,7 @@ export function ParametresTabs({
       {/* Contenu de l'onglet actif */}
       <div>
         {activeTab === "etablissement" && <EtablissementTab etablissement={etablissement} canManage={canManage} />}
+        {activeTab === "annees" && <AnneesScolairesTab annees={annees} canManage={canManage} />}
         {activeTab === "utilisateurs" && <UsersTab users={users} canManage={canManage} availableTenants={availableTenants} sites={sites} />}
         {activeTab === "parents" && <ParentsTab parents={parents} eleves={eleves} canManage={canManage} />}
         {activeTab === "classes" && <ClassesTab classes={classes} canManage={canManage} sites={sites} />}

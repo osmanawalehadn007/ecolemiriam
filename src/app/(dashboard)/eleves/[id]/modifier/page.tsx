@@ -1,3 +1,4 @@
+import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { Header } from "@/components/layout/Header";
@@ -11,6 +12,7 @@ export default async function ModifierElevePage({
 }) {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "eleves:write");
 
   const { id } = await params;
   const [classes, eleve] = await Promise.all([

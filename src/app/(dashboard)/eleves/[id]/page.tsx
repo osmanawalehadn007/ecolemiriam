@@ -1,7 +1,9 @@
+import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { isEleveInTeacherScope } from "@/lib/teacher-classes";
 import { Header } from "@/components/layout/Header";
 import { EleveDetailView } from "@/components/eleves/EleveDetailView";
 import { getSituationFinanciere, checkEleveAccess } from "@/lib/financial-guard";
@@ -9,8 +11,16 @@ import { getSituationFinanciere, checkEleveAccess } from "@/lib/financial-guard"
 async function getEleveDetail(id: string, tenantId: string, siteFilter: Record<string, unknown>) {
   const eleve = await prisma.eleve.findFirst({
     where: { id, tenantId, ...siteFilter },
+    // Toutes les relations ci-dessous pendent d'une fiche élève unique, déjà
+    // bornée par `tenantId` et par le site au `where` racine : si cette fiche
+    // n'est pas visible, la requête ne renvoie rien du tout. Refiltrer chaque
+    // relation par site serait au mieux redondant, au pire faux — le dossier
+    // d'un élève muté suit l'élève et non le site où la pièce a été produite.
     include: {
       classe: { select: { id: true, nom: true, niveau: true } },
+      // Le lien élève↔parent n'a pas de site propre : c'est la filiation qui
+      // le borne, et un parent peut avoir des enfants sur plusieurs sites.
+      // eslint-disable-next-line ecolpro/require-site-filter
       parents: {
         include: {
           parent: {
@@ -27,6 +37,9 @@ async function getEleveDetail(id: string, tenantId: string, siteFilter: Record<s
           },
         },
       },
+      // Scolarité de cet élève : ces modèles n'ont pas de `siteId` propre,
+      // leur rattachement au site passe justement par l'élève déjà filtré.
+      // eslint-disable-next-line ecolpro/require-site-filter
       notes: {
         include: {
           matiere: { select: { nom: true, code: true, couleur: true, coefficient: true } },
@@ -35,20 +48,29 @@ async function getEleveDetail(id: string, tenantId: string, siteFilter: Record<s
         orderBy: { date: "desc" },
         take: 30,
       },
+      // eslint-disable-next-line ecolpro/require-site-filter
       absences: {
         orderBy: { date: "desc" },
         take: 20,
       },
+      // eslint-disable-next-line ecolpro/require-site-filter
       incidents: {
         include: { sanctions: true },
         orderBy: { date: "desc" },
         take: 10,
       },
+      // La facture porte un `siteId`, mais celui du site émetteur : filtrer
+      // ici ferait disparaître du dossier les impayés contractés avant une
+      // mutation, alors que c'est précisément ce qu'on vient consulter.
+      // eslint-disable-next-line ecolpro/require-site-filter
       factures: {
         include: { paiements: true },
         orderBy: { createdAt: "desc" },
         take: 10,
       },
+      // Le parcours scolaire retrace les années passées, y compris sur un
+      // autre site du même établissement : le borner au site actuel le viderait.
+      // eslint-disable-next-line ecolpro/require-site-filter
       parcours: {
         orderBy: { annee: "desc" },
       },
@@ -65,11 +87,21 @@ export default async function EleveDetailPage({
 }) {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "eleves:read");
 
   const eleveFilter = siteFilterForModel("eleve", session.user);
   const matiereFilter = siteFilterForModel("matiere", session.user);
   const dispenseFilter = siteFilterForModel("dispenseMatiere", session.user);
   const { id } = await params;
+
+  // `id` vient de l'URL : un enseignant n'ouvre que les élèves de ses classes.
+  // 404 (et non 403) : ne pas confirmer l'existence d'une fiche à qui n'a pas
+  // le droit de la connaître — elle porte la santé, les allergies, les
+  // coordonnées des parents et les incidents (cf. plan § 6 : 404 en lecture).
+  if (!(await isEleveInTeacherScope(session.user, id))) {
+    notFound();
+  }
+
   const eleve = await getEleveDetail(id, session.user.tenantId, eleveFilter);
 
   if (!eleve) notFound();

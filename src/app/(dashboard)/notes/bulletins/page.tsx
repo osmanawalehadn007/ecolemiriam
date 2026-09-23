@@ -1,3 +1,4 @@
+import { guardStaff } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
@@ -9,25 +10,38 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, List, Award } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
 import type { Role } from "@prisma/client";
 
 async function getBulletinsData(
   tenantId: string,
-  scope?: { classeIds: string[]; isRestricted: boolean }
+  scope?: { classeIds: string[]; isRestricted: boolean },
+  classeSiteFilter: Record<string, unknown> = {}
 ) {
-  const classeWhere = {
-    tenantId,
-    ...(scope?.isRestricted && scope.classeIds.length > 0
-      ? { id: { in: scope.classeIds } }
-      : scope?.isRestricted
-        ? { id: "__none__" }
-        : {}),
-  };
+  const classeWhere = mergeFilters(
+    {
+      tenantId,
+      ...(scope?.isRestricted && scope.classeIds.length > 0
+        ? { id: { in: scope.classeIds } }
+        : scope?.isRestricted
+          ? { id: "__none__" }
+          : {}),
+    },
+    classeSiteFilter
+  );
 
   const [classes, periodes] = await Promise.all([
+    // `classeWhere` est construit par mergeFilters({ …périmètre enseignant },
+    // classeSiteFilter) — le filtre de site vient du PARAMÈTRE `classeSiteFilter`,
+    // que la règle ne remonte pas. L'appelant passe
+    // siteFilterForModel("classe", session.user).
+    // eslint-disable-next-line ecolpro/require-site-filter
     prisma.classe.findMany({
       where: classeWhere,
       include: {
+        // Élèves d'une classe déjà bornée par `classeWhere` (périmètre + site) :
+        // le lien est porté par la classe, `Eleve` n'a pas d'autre chemin ici.
+        // eslint-disable-next-line ecolpro/require-site-filter
         eleves: { where: { statut: "ACTIF" }, select: { id: true, nom: true, prenom: true, matricule: true }, orderBy: { prenom: "asc" } },
         profPrincipal: { include: { user: { select: { name: true } } } },
       },
@@ -49,13 +63,18 @@ export default async function BulletinsPage() {
     getTranslations("bulletins"),
   ]);
   if (!session?.user?.tenantId) redirect("/login");
+  guardStaff(session, "bulletins:read");
 
   // Filtrer par classes de l'enseignant si applicable
   const scope = isTeacherRole(session.user.role as Role)
     ? await getTeacherScope(session.user.tenantId, session.user.id, session.user.role as Role)
     : undefined;
 
-  const { classes, periodes, anneeId } = await getBulletinsData(session.user.tenantId, scope);
+  const { classes, periodes, anneeId } = await getBulletinsData(
+    session.user.tenantId,
+    scope,
+    siteFilterForModel("classe", session.user)
+  );
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">

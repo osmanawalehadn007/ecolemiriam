@@ -1,3 +1,4 @@
+import { guardStaff } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
@@ -74,6 +75,7 @@ export default async function AbsencesPage() {
     getTranslations("absences"),
   ]);
   if (!session?.user?.tenantId) redirect("/login");
+  guardStaff(session, "absences:read");
 
   const siteFilter = siteFilterForModel("absence", session.user);
   const classeFilter = isTeacherRole(session.user.role)

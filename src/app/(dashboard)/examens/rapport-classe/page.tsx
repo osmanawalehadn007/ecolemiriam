@@ -1,3 +1,4 @@
+import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
@@ -8,6 +9,7 @@ import { RapportClasseTable } from "@/components/examens/RapportClasseTable";
 export default async function RapportClassePage() {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "examens:read");
 
 
   const siteFilter = siteFilterForModel("classe", session.user);

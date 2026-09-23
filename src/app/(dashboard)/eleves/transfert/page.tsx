@@ -1,3 +1,4 @@
+import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
@@ -8,6 +9,7 @@ import { TransfertClasseForm } from "@/components/eleves/TransfertClasseForm";
 export default async function TransfertClassePage() {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "eleves:write");
 
 
   const siteFilter = siteFilterForModel("classe", session.user);

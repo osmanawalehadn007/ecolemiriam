@@ -12,6 +12,8 @@ import {
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import { ClassSelector } from "@/components/sites/ClassSelector";
+import type { SiteColor } from "@/lib/site-colors";
 
 type StatutExamen = "PROGRAMME" | "EN_COURS" | "TERMINE" | "ANNULE";
 
@@ -39,6 +41,8 @@ interface Classe {
   id: string;
   nom: string;
   niveau: string;
+  siteId: string | null;
+  siteNom: string | null;
 }
 
 interface Matiere {
@@ -166,15 +170,20 @@ function CreateExamenModal({
 function AddSessionModal({
   examId,
   matieres,
+  classes = [],
   onClose,
   onAdded,
 }: {
   examId: string;
   matieres: Matiere[];
+  classes?: Classe[];
   onClose: () => void;
   onAdded: (session: SessionExamen) => void;
 }) {
   const t = useTranslations("examens");
+  // Suggestions de niveaux issues des classes du périmètre de l'utilisateur
+  // (pour un enseignant : uniquement SES classes — filtrées côté page).
+  const niveauxSuggeres = Array.from(new Set(classes.map((c) => c.niveau).filter(Boolean)));
   const [form, setForm] = useState({
     matiereNom: matieres[0]?.nom ?? "",
     date: "",
@@ -274,8 +283,16 @@ function AddSessionModal({
                 value={form.niveau}
                 onChange={(e) => setForm({ ...form, niveau: e.target.value })}
                 placeholder={t("levelPlaceholder")}
+                list="niveaux-classes-dispo"
                 className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
               />
+              {niveauxSuggeres.length > 0 && (
+                <datalist id="niveaux-classes-dispo">
+                  {niveauxSuggeres.map((n) => (
+                    <option key={n} value={n} />
+                  ))}
+                </datalist>
+              )}
             </div>
           </div>
           <div className="flex gap-3 pt-2">
@@ -565,16 +582,19 @@ export function ExamensManager({
   examens: initial,
   classes,
   matieres,
+  siteColors,
 }: {
   examens: Examen[];
   classes: Classe[];
   matieres: Matiere[];
+  siteColors: Record<string, SiteColor>;
   tenantId: string;
 }) {
   const t = useTranslations("examens");
   const [examens, setExamens] = useState<Examen[]>(initial);
   const [showCreate, setShowCreate] = useState(false);
   const [filterStatut, setFilterStatut] = useState<StatutExamen | "ALL">("ALL");
+  const [selectedClasseId, setSelectedClasseId] = useState("");
 
   const stats = {
     total: examens.length,
@@ -584,6 +604,10 @@ export function ExamensManager({
   };
 
   const filtered = filterStatut === "ALL" ? examens : examens.filter((e) => e.statut === filterStatut);
+  const selectedClasse = classes.find((c) => c.id === selectedClasseId);
+  const displayed = selectedClasse
+    ? filtered.filter((e) => e.sessions.some((s) => s.niveau === selectedClasse.niveau))
+    : filtered;
 
   function addExamen(exam: Examen) {
     setExamens((prev) => [exam, ...prev]);
@@ -637,8 +661,16 @@ export function ExamensManager({
         </Button>
       </div>
 
+      {/* Filtre par classes coloré */}
+      <ClassSelector
+        classes={classes}
+        siteColors={siteColors}
+        selectedId={selectedClasseId}
+        onSelect={setSelectedClasseId}
+      />
+
       {/* Liste */}
-      {filtered.length === 0 ? (
+      {displayed.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Calendar className="w-12 h-12 text-gray-300 mb-4" />
@@ -652,7 +684,7 @@ export function ExamensManager({
         </Card>
       ) : (
         <div className="space-y-4">
-          {filtered.map((exam) => (
+          {displayed.map((exam) => (
             <ExamenCard
               key={exam.id}
               examen={exam}

@@ -1,16 +1,25 @@
+import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { Header } from "@/components/layout/Header";
 import { ParentsView } from "@/components/parents/ParentsView";
 import { getTranslations } from "next-intl/server";
-import { siteFilterForModel } from "@/lib/site-filter";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-filter";
+import { teacherParentFilter } from "@/lib/teacher-classes";
 
-async function getParentsData(tenantId: string, siteFilter: Record<string, unknown>) {
+async function getParentsData(tenantId: string, parentsWhere: Record<string, unknown>) {
+  // eslint-disable-next-line ecolpro/require-site-filter -- where construit par l'appelant via mergeFilters(siteFilterForModel("parent", …), teacherParentFilter(…))
   const parents = await prisma.parent.findMany({
-    where: { tenantId, enfants: { some: { eleve: { ...siteFilter } } } },
+    where: parentsWhere as Prisma.ParentWhereInput,
     include: {
       user: { select: { id: true, name: true, email: true, avatarUrl: true, lastLoginAt: true } },
+      // Le lien parent↔élève n'a pas de site propre : il est borné par le
+      // `where` racine (parent retenu) ET par le périmètre enseignant fusionné
+      // dans `parentsWhere`. `ParentEnfant` n'offre par ailleurs aucun chemin
+      // de site direct.
+      // eslint-disable-next-line ecolpro/require-site-filter
       enfants: {
         include: {
           eleve: {
@@ -41,10 +50,17 @@ export default async function ParentsPage() {
     getTranslations("parents"),
   ]);
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "parents:read");
 
   // `Parent` n'a pas de colonne `siteId` : le rattachement passe par l'utilisateur.
   const siteFilter = siteFilterForModel("parent", session.user);
-  const { parents: rawParents } = await getParentsData(session.user.tenantId, siteFilter);
+  // Périmètre enseignant : uniquement les familles dont un enfant suit ses cours.
+  const teacherFilter = await teacherParentFilter(session.user);
+  const parentsWhere = mergeFilters(
+    { tenantId: session.user.tenantId, enfants: { some: { eleve: { ...siteFilter } } } },
+    teacherFilter
+  );
+  const { parents: rawParents } = await getParentsData(session.user.tenantId, parentsWhere);
 
   // Mapper 'enfants' (relation Prisma) → 'eleves' (prop attendue par ParentsView)
   const parents = rawParents.map((p) => ({

@@ -8,6 +8,7 @@ import { siteFilterForModel } from "@/lib/site-scope";
 
 async function getEnseignantsRH(tenantId: string, ensFilter: Record<string, unknown>, absFilter: Record<string, unknown>, congeFilter: Record<string, unknown>) {
   const [enseignants, absencesPersonnel, congesPersonnel] = await Promise.all([
+    /* eslint-disable ecolpro/require-site-filter -- les trois `where` sont des PARAMÈTRES construits par l'appelant via siteFilterForModel(...) ; la règle ne remonte pas jusqu'à eux. */
     prisma.enseignant.findMany({
       where: { tenantId, ...ensFilter },
       include: {
@@ -19,12 +20,17 @@ async function getEnseignantsRH(tenantId: string, ensFilter: Record<string, unkn
         },
         ficheRH: {
           include: {
+            // Enfants d'une fiche RH rattachée à un enseignant déjà borné au
+            // périmètre : `BulletinPaie` n'a pas de site propre.
+            // eslint-disable-next-line ecolpro/require-site-filter
             bulletinsPaie: {
               orderBy: [{ annee: "desc" }, { mois: "desc" }],
               take: 3,
             },
           },
         },
+        // Créneaux et classes de CET enseignant, déjà filtré.
+        // eslint-disable-next-line ecolpro/require-site-filter
         emploiTemps: {
           select: {
             jour: true, heureDebut: true, heureFin: true,
@@ -32,6 +38,7 @@ async function getEnseignantsRH(tenantId: string, ensFilter: Record<string, unkn
             classe: { select: { nom: true } },
           },
         },
+        // eslint-disable-next-line ecolpro/require-site-filter
         classesPrincipales: {
           select: { id: true, nom: true, niveau: true },
         },
@@ -57,6 +64,7 @@ async function getEnseignantsRH(tenantId: string, ensFilter: Record<string, unkn
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
+    /* eslint-enable ecolpro/require-site-filter */
   ]);
 
   return { enseignants, absencesPersonnel, congesPersonnel };

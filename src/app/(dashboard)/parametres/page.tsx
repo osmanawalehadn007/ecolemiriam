@@ -1,3 +1,4 @@
+import { allowedParametresTabs } from "@/lib/parametres-tabs";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -13,6 +14,7 @@ import {
   getReglesAppreciation,
   getPeriodesForCloture,
   getSitesForSettings,
+  getAnneesScolaires,
 } from "@/lib/actions/parametres";
 
 export default async function ParametresPage() {
@@ -25,9 +27,15 @@ export default async function ParametresPage() {
     redirect(session.user.role === "SUPER_ADMIN" ? "/super-admin" : "/select-tenant");
   }
 
+  // Onglets accessibles, dérivés de la matrice (voir `lib/parametres-tabs.ts`) :
+  // un rôle sans aucun onglet n'a rien à faire sur cet écran — c'est le cas de
+  // PARENT / STUDENT / NURSE.
+  const allowedTabs = allowedParametresTabs(session.user.role);
+  if (allowedTabs.length === 0) redirect("/dashboard");
+
   const canManage = session.user.role === "TENANT_ADMIN" || session.user.role === "SUPER_ADMIN" || session.user.role === "PRINCIPAL";
 
-  const [etablissement, users, parents, eleves, classes, matieres, regles, periodes, sites] = await Promise.all([
+  const [etablissement, users, parents, eleves, classes, matieres, regles, periodes, sites, annees] = await Promise.all([
     getEtablissementData(),
     getUsersForTenant(),
     getParentsForSettings(),
@@ -37,6 +45,7 @@ export default async function ParametresPage() {
     getReglesAppreciation(),
     getPeriodesForCloture(),
     getSitesForSettings(),
+    getAnneesScolaires(),
   ]);
   if (!etablissement) return redirect("/login");
 
@@ -59,8 +68,10 @@ export default async function ParametresPage() {
           regles={regles}
           periodes={periodes}
           sites={sites}
+          annees={annees}
           canManage={canManage}
           availableTenants={session.user.availableTenants}
+          allowedTabs={allowedTabs}
         />
       </div>
     </div>

@@ -1,7 +1,9 @@
+import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
-import { siteFilterForRelation } from "@/lib/site-filter";
+import { siteFilterForRelation, mergeFilters } from "@/lib/site-filter";
+import { teacherEvaluationFilter } from "@/lib/teacher-classes";
 import Link from "next/link";
 import { ArrowLeft, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,13 +16,25 @@ export default async function SaisieNotesPage({
 }) {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "evaluations:read");
 
   const { id: evaluationId } = await params;
   const siteFilter = siteFilterForRelation(session.user, "classe");
 
   const evaluation = await prisma.evaluation.findFirst({
-    where: { id: evaluationId, tenantId: session.user.tenantId, ...siteFilter },
+    // Le filtre de site (déjà présent) borne le SITE ; il manquait le périmètre
+    // enseignant : `evaluationId` vient de l'URL, l'évaluation d'une autre
+    // classe était donc ouvrable en direct — y compris pour saisir des notes —
+    // alors que la LISTE des évaluations est, elle, bornée (`notes/page.tsx`).
+    where: mergeFilters(
+      { id: evaluationId, tenantId: session.user.tenantId },
+      siteFilter,
+      await teacherEvaluationFilter(session.user)
+    ),
     include: {
+      // La classe est déjà bornée par le `where` (site + tenant) : ses élèves en
+      // découlent, `Eleve` n'a pas d'autre chemin ici.
+      // eslint-disable-next-line ecolpro/require-site-filter
       classe: { include: { eleves: { orderBy: { nom: 'asc' } } } },
       matiere: true,
       notes: true,
@@ -58,7 +72,7 @@ export default async function SaisieNotesPage({
           <Link href="/evaluations">
             <Button className="bg-orange-500 hover:bg-orange-600 text-white gap-2 shadow-sm border-none">
               <ArrowLeft className="h-4 w-4" />
-              Retour à l'examen
+              Retour à l&apos;examen
             </Button>
           </Link>
           <Button className="bg-green-600 hover:bg-green-700 text-white gap-2 shadow-sm border-none">
@@ -68,7 +82,7 @@ export default async function SaisieNotesPage({
         </div>
       </div>
       <p className="text-sm text-gray-500 mt-2 ml-1">
-        Saisie et consultation des notes pour l'examen "{evaluation.titre}" de la classe {evaluation.classe.nom} en {evaluation.matiere.nom.toUpperCase()}.
+        Saisie et consultation des notes pour l&apos;examen &quot;{evaluation.titre}&quot; de la classe {evaluation.classe.nom} en {evaluation.matiere.nom.toUpperCase()}.
       </p>
 
       {/* Grid */}

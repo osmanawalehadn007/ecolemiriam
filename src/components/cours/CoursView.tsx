@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import type { SiteColor } from "@/lib/site-colors";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,8 @@ interface Cours {
   dureeMin: number | null;
   nbVues: number;
   nbInscrits: number;
+  siteId?: string | null;
+  siteNom?: string | null;
   createdAt: string | Date;
   _count?: { contenus: number; progressions: number };
   contenus?: ContenuCours[];
@@ -75,9 +78,18 @@ const TYPE_CONTENU_CONFIG: Record<TypeContenu, { labelKey: string; icon: React.R
 
 // ─── Modal Création Cours ───────────────────────────────────────────────────────
 
-function CreerCoursModal({ onClose, onCreate }: {
+function CreerCoursModal({
+  onClose,
+  onCreate,
+  classes = [],
+  matieres = [],
+  enseignantNom,
+}: {
   onClose: () => void;
   onCreate: (c: Cours) => void;
+  classes?: { id: string; nom: string }[];
+  matieres?: { id: string; nom: string }[];
+  enseignantNom?: string | null;
 }) {
   const t = useTranslations("cours");
   const [form, setForm] = useState({
@@ -114,39 +126,51 @@ function CreerCoursModal({ onClose, onCreate }: {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-lg border-0 shadow-2xl">
-        <CardHeader className="pb-3">
+    <div
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <Card
+        className="w-full max-w-lg border shadow-2xl bg-white dark:bg-gray-900 relative"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CardHeader className="pb-3 border-b border-gray-100 dark:border-gray-800">
           <CardTitle className="flex items-center gap-2 text-base">
             <BookOpen className="w-5 h-5 text-primary" /> {t("newCourse")}
           </CardTitle>
+          {enseignantNom && (
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+              <GraduationCap className="w-3.5 h-3.5" />
+              {enseignantNom}
+            </p>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <label className="text-xs font-medium text-gray-600 mb-1 block">{t("courseTitle")}</label>
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">{t("courseTitle")}</label>
             <Input value={form.titre} onChange={e => set("titre", e.target.value)}
               placeholder="Ex : Introduction aux mathématiques" className="text-sm" />
           </div>
 
           <div>
-            <label className="text-xs font-medium text-gray-600 mb-1 block">{t("description")}</label>
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">{t("description")}</label>
             <textarea value={form.description} onChange={e => set("description", e.target.value)}
               rows={3} placeholder="Objectifs, contenu du cours…"
-              className="w-full rounded-md border border-input px-3 py-2 text-sm bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
+              className="w-full rounded-md border border-input px-3 py-2 text-sm bg-white dark:bg-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-gray-600 mb-1 block">{t("level")}</label>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">{t("level")}</label>
               <select value={form.niveau} onChange={e => set("niveau", e.target.value)}
-                className="w-full rounded-md border border-input px-3 py-2 text-sm bg-background">
+                className="w-full rounded-md border border-input px-3 py-2 text-sm bg-white dark:bg-gray-800">
                 <option value="DEBUTANT">{t("beginner")}</option>
                 <option value="INTERMEDIAIRE">{t("intermediate")}</option>
                 <option value="AVANCE">{t("advanced")}</option>
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600 mb-1 block">{t("estimatedDuration")}</label>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">{t("estimatedDuration")}</label>
               <Input type="number" value={form.dureeMin} onChange={e => set("dureeMin", e.target.value)}
                 placeholder="60" className="text-sm" />
             </div>
@@ -154,14 +178,40 @@ function CreerCoursModal({ onClose, onCreate }: {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-gray-600 mb-1 block">{t("subject")}</label>
-              <Input value={form.matiereNom} onChange={e => set("matiereNom", e.target.value)}
-                placeholder="Mathématiques" className="text-sm" />
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">{t("subject")}</label>
+              {matieres.length > 0 ? (
+                <select
+                  value={form.matiereNom}
+                  onChange={e => set("matiereNom", e.target.value)}
+                  className="w-full rounded-md border border-input px-3 py-2 text-sm bg-white dark:bg-gray-800"
+                >
+                  <option value="">—</option>
+                  {matieres.map(m => (
+                    <option key={m.id} value={m.nom}>{m.nom}</option>
+                  ))}
+                </select>
+              ) : (
+                <Input value={form.matiereNom} onChange={e => set("matiereNom", e.target.value)}
+                  placeholder="Mathématiques" className="text-sm" />
+              )}
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600 mb-1 block">{t("targetClass")}</label>
-              <Input value={form.classeNom} onChange={e => set("classeNom", e.target.value)}
-                placeholder="Terminale S" className="text-sm" />
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">{t("targetClass")}</label>
+              {classes.length > 0 ? (
+                <select
+                  value={form.classeNom}
+                  onChange={e => set("classeNom", e.target.value)}
+                  className="w-full rounded-md border border-input px-3 py-2 text-sm bg-white dark:bg-gray-800"
+                >
+                  <option value="">—</option>
+                  {classes.map(c => (
+                    <option key={c.id} value={c.nom}>{c.nom}</option>
+                  ))}
+                </select>
+              ) : (
+                <Input value={form.classeNom} onChange={e => set("classeNom", e.target.value)}
+                  placeholder="Terminale S" className="text-sm" />
+              )}
             </div>
           </div>
 
@@ -240,16 +290,22 @@ function AjouterContenuModal({ coursId, ordre, onClose, onAdded }: {
   const needsTexte = ["TEXTE", "QUIZ"].includes(form.type);
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-lg border-0 shadow-2xl">
-        <CardHeader className="pb-3">
+    <div
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <Card
+        className="w-full max-w-lg border shadow-2xl bg-white dark:bg-gray-900 relative"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CardHeader className="pb-3 border-b border-gray-100 dark:border-gray-800">
           <CardTitle className="flex items-center gap-2 text-base">
             <Layers className="w-5 h-5 text-primary" /> {t("addContent")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <label className="text-xs font-medium text-gray-600 mb-1 block">{t("contentTitle")}</label>
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">{t("contentTitle")}</label>
             <Input value={form.titre} onChange={e => set("titre", e.target.value)}
               placeholder="Ex : Chapitre 1 — Introduction" className="text-sm" />
           </div>
@@ -287,7 +343,7 @@ function AjouterContenuModal({ coursId, ordre, onClose, onAdded }: {
               </label>
               <textarea value={form.texte} onChange={e => set("texte", e.target.value)}
                 rows={5} placeholder={form.type === "QUIZ" ? "Q1: ...\nA) ...\nB) ...\nRéponse: A" : "Rédigez le contenu ici…"}
-                className="w-full rounded-md border border-input px-3 py-2 text-sm bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
+                className="w-full rounded-md border border-input px-3 py-2 text-sm bg-white dark:bg-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
           )}
 
@@ -312,14 +368,23 @@ function AjouterContenuModal({ coursId, ordre, onClose, onAdded }: {
 
 // ─── Carte Cours ────────────────────────────────────────────────────────────────
 
-function CoursCard({ cours, onSelect, onDelete }: {
+const FALLBACK: SiteColor = {
+  base: "#6b7280",
+  light: "#f3f4f6",
+  border: "#e5e7eb",
+  text: "#374151",
+};
+
+function CoursCard({ cours, siteColors, onSelect, onDelete }: {
   cours: Cours;
+  siteColors: Record<string, SiteColor>;
   onSelect: (c: Cours) => void;
   onDelete: (id: string) => void;
 }) {
   const t = useTranslations("cours");
   const nConfig = NIVEAU_CONFIG[cours.niveau];
   const sConfig = STATUT_CONFIG[cours.statut];
+  const siteColor = cours.siteId ? (siteColors[cours.siteId] ?? FALLBACK) : FALLBACK;
 
   return (
     <Card className="border-0 shadow-sm hover:shadow-md transition-all cursor-pointer group"
@@ -331,6 +396,14 @@ function CoursCard({ cours, onSelect, onDelete }: {
             <BookMarked className="w-5 h-5 text-primary" />
           </div>
           <div className="flex gap-1.5 flex-shrink-0">
+            {cours.siteId && cours.siteNom && (
+              <Badge
+                className="text-xs"
+                style={{ backgroundColor: siteColor.light, borderColor: siteColor.border, color: siteColor.text }}
+              >
+                {cours.siteNom}
+              </Badge>
+            )}
             <Badge className={cn("text-xs border", nConfig.color)}>{t(nConfig.labelKey)}</Badge>
             <Badge className={cn("text-xs", sConfig.color)}>{t(sConfig.labelKey)}</Badge>
           </div>
@@ -552,7 +625,19 @@ function CoursDetail({ cours: initial, onBack }: {
 
 // ─── Vue principale ─────────────────────────────────────────────────────────────
 
-export function CoursView() {
+export function CoursView({
+  siteColors,
+  activeSite,
+  classes = [],
+  matieres = [],
+  enseignantNom,
+}: {
+  siteColors: Record<string, SiteColor>;
+  activeSite: string;
+  classes?: { id: string; nom: string }[];
+  matieres?: { id: string; nom: string }[];
+  enseignantNom?: string | null;
+}) {
   const t = useTranslations("cours");
   const [cours, setCours] = useState<Cours[]>([]);
   const [selected, setSelected] = useState<Cours | null>(null);
@@ -563,14 +648,16 @@ export function CoursView() {
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
 
-  // Charger les cours au montage
+  // Charger les cours au montage et quand le site actif change
   useEffect(() => {
-    fetch("/api/cours")
+    const url = activeSite === "all" ? "/api/cours" : `/api/cours?siteId=${encodeURIComponent(activeSite)}`;
+    setLoading(true);
+    fetch(url)
       .then(r => r.json())
       .then(({ cours }) => setCours(cours ?? []))
       .catch(() => toast.error(t("loadError")))
       .finally(() => setLoading(false));
-  }, []);
+  }, [t, activeSite]);
 
   const stats = useMemo(() => ({
     total: cours.length,
@@ -621,6 +708,9 @@ export function CoursView() {
         <CreerCoursModal
           onClose={() => setShowCreate(false)}
           onCreate={c => setCours(prev => [c, ...prev])}
+          classes={classes}
+          matieres={matieres}
+          enseignantNom={enseignantNom}
         />
       )}
 
@@ -714,7 +804,7 @@ export function CoursView() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map(c => (
-            <CoursCard key={c.id} cours={c} onSelect={handleSelect} onDelete={handleDelete} />
+            <CoursCard key={c.id} cours={c} siteColors={siteColors} onSelect={handleSelect} onDelete={handleDelete} />
           ))}
         </div>
       )}

@@ -1,3 +1,4 @@
+import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
@@ -10,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getTranslations } from "next-intl/server";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 
 export const metadata = {
   title: "Liste des examens | EcolPro",
@@ -26,13 +29,36 @@ export default async function EvaluationsPage({
     searchParams,
   ]);
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "evaluations:read");
 
   const tenantId = session.user.tenantId;
   const { matiereId } = sp;
+  const role = session.user.role as Role;
+
+  // Périmètre de l'enseignant connecté : seules SES classes et SES matières
+  // lui sont proposées dans la modale de création d'évaluation.
+  const scope = isTeacherRole(role)
+    ? await getTeacherScope(tenantId, session.user.id, role)
+    : undefined;
 
   const evalFilter = siteFilterForModel("evaluation", session.user);
   const classeFilter = siteFilterForModel("classe", session.user);
   const matiereFilter = siteFilterForModel("matiere", session.user);
+
+  // Restriction enseignant : la liste d'évaluations ne montre que celles de
+  // SES classes et SES matières ; les listes de la modale sont pré-filtrées.
+  const teacherClasseFilter =
+    scope?.isRestricted && scope.classeIds.length > 0
+      ? { id: { in: scope.classeIds } }
+      : scope?.isRestricted
+        ? { id: "__none__" }
+        : {};
+  const teacherMatiereFilter =
+    scope?.isRestricted && scope.matiereIds.length > 0
+      ? { id: { in: scope.matiereIds } }
+      : scope?.isRestricted
+        ? { id: "__none__" }
+        : {};
 
   const [evaluations, classes, matieres, periodes] = await Promise.all([
     prisma.evaluation.findMany({
@@ -40,6 +66,17 @@ export default async function EvaluationsPage({
         tenantId,
         ...evalFilter,
         ...(matiereId ? { matiereId } : {}),
+        ...(scope?.isRestricted
+          ? {
+              OR:
+                scope.classeIds.length > 0 || scope.matiereIds.length > 0
+                  ? [
+                      ...(scope.classeIds.length > 0 ? [{ classeId: { in: scope.classeIds } }] : []),
+                      ...(scope.matiereIds.length > 0 ? [{ matiereId: { in: scope.matiereIds } }] : []),
+                    ]
+                  : [{ id: "__none__" }],
+            }
+          : {}),
       },
       include: {
         classe: { select: { nom: true, niveau: true } },
@@ -49,8 +86,16 @@ export default async function EvaluationsPage({
       },
       orderBy: { date: "desc" }
     }),
-    prisma.classe.findMany({ where: { tenantId, ...classeFilter }, select: { id: true, nom: true } }),
-    prisma.matiere.findMany({ where: { tenantId, ...matiereFilter }, select: { id: true, nom: true } }),
+    prisma.classe.findMany({
+      where: { tenantId, ...classeFilter, ...teacherClasseFilter },
+      select: { id: true, nom: true },
+      orderBy: { nom: "asc" },
+    }),
+    prisma.matiere.findMany({
+      where: { tenantId, ...matiereFilter, ...teacherMatiereFilter },
+      select: { id: true, nom: true },
+      orderBy: { nom: "asc" },
+    }),
     prisma.periode.findMany({ where: { annee: { tenantId } }, select: { id: true, nom: true } }),
   ]);
 

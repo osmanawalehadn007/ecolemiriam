@@ -8,7 +8,14 @@ import { QuickActions } from "@/components/dashboard/QuickActions";
 import { AbsenceChart } from "@/components/dashboard/AbsenceChart";
 import { getTranslations, getLocale } from "next-intl/server";
 import { unstable_cache } from "next/cache";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, personalScopeFilter, mergeFilters } from "@/lib/site-scope";
+import {
+  teacherEleveFilter,
+  teacherClasseFilter,
+  teacherEleveRelationFilter,
+  teacherNoteFilter,
+} from "@/lib/teacher-classes";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import type { Prisma } from "@prisma/client";
 
 const getDashboardData = unstable_cache(
@@ -26,6 +33,7 @@ const getDashboardData = unstable_cache(
     const noteWhere = { tenantId, ...noteFilter } as Prisma.NoteWhereInput;
     const examenWhere = { tenantId, ...examenFilter } as Prisma.ExamenWhereInput;
 
+    /* eslint-disable ecolpro/require-site-filter -- les 5 filtres sont des PARAMÈTRES de cette fonction mémoïsée : chacun est construit par l'appelant via mergeFilters(siteFilterForModel(...), teacher<…>Filter(...)). Ils sont passés explicitement (et non capturés en closure) pour faire partie de la clé d'`unstable_cache`. */
     const [
       eleveStats,
       totalClasses,
@@ -66,6 +74,7 @@ const getDashboardData = unstable_cache(
         orderBy: { dateDebut: "asc" },
       }),
     ]);
+    /* eslint-enable ecolpro/require-site-filter */
 
     const statutMap = Object.fromEntries(eleveStats.map((s) => [s.statut, s._count]));
     const totalEleves = Object.values(statutMap).reduce((a, b) => a + b, 0);
@@ -97,13 +106,49 @@ export default async function DashboardPage() {
 
   if (!session?.user?.tenantId) redirect("/login");
 
-  const eleveFilter = siteFilterForModel("eleve", session.user);
-  const classeFilter = siteFilterForModel("classe", session.user);
-  const absenceFilter = siteFilterForModel("absence", session.user);
-  const noteFilter = siteFilterForModel("note", session.user);
+  // Le périmètre enseignant est fusionné ICI, avant l'appel : les filtres
+  // résultants sont des ARGUMENTS de `getDashboardData`, donc partie intégrante
+  // de la clé de cache `unstable_cache`. Capturer le périmètre dans une closure
+  // externe aurait fait ressortir à un enseignant les chiffres mis en cache
+  // pour un autre. Les fragments enseignant sont donc calculés PUIS fusionnés
+  // avec le filtre de site, chaque filtre restant une valeur autonome.
+  const [tEleveFilter, tClasseFilter, tAbsenceFilter, tNoteFilter] = await Promise.all([
+    teacherEleveFilter(session.user),
+    teacherClasseFilter(session.user),
+    teacherEleveRelationFilter(session.user),
+    teacherNoteFilter(session.user),
+  ]);
+
+  const eleveFilter = mergeFilters(siteFilterForModel("eleve", session.user), tEleveFilter);
+  const classeFilter = mergeFilters(siteFilterForModel("classe", session.user), tClasseFilter);
+  const absenceFilter = mergeFilters(siteFilterForModel("absence", session.user), tAbsenceFilter);
+  const noteFilter = mergeFilters(
+    siteFilterForModel("note", session.user),
+    tNoteFilter,
+    // « Notes récentes » affiche des NOMS d'élèves : un parent ne doit voir que
+    // celles de ses enfants (le fragment est neutre pour le personnel).
+    personalScopeFilter(session.user, "eleve")
+  );
+  // `Examen` ne porte pas de classe (c'est une période d'épreuves à l'échelle
+  // de l'établissement) : le KPI « prochain examen » reste borné au site.
   const examenFilter = siteFilterForModel("examen", session.user);
 
-  const data = await getDashboardData(session.user.tenantId, eleveFilter, classeFilter, absenceFilter, noteFilter, examenFilter);
+  const tenantId = session.user.tenantId;
+  const [data, sites, anneeCourante] = await Promise.all([
+    getDashboardData(tenantId, eleveFilter, classeFilter, absenceFilter, noteFilter, examenFilter),
+    prisma.site.findMany({
+      where: { tenantId, actif: true, deletedAt: null },
+      select: { id: true, nom: true },
+    }),
+    getAnneeCouranteLibelle(tenantId),
+  ]);
+
+  const currentSiteId = (session.user as { siteId?: string | null }).siteId ?? null;
+  const currentSiteName = currentSiteId
+    ? (sites.find((s) => s.id === currentSiteId)?.nom ?? "Site inconnu")
+    : session.user.role === "TENANT_ADMIN"
+      ? "Tous les sites"
+      : "Aucun site";
 
   const stats = [
     {
@@ -120,7 +165,7 @@ export default async function DashboardPage() {
       value: data.totalClasses.toString(),
       icon: "school" as const,
       color: "blue" as const,
-      change: "2025-2026",
+      change: anneeCourante ?? "—",
     },
     {
       label: t("title") === "Dashboard" ? "Absences today" : "Absences aujourd'hui",
@@ -146,6 +191,7 @@ export default async function DashboardPage() {
       <Header
         title={t("title")}
         subtitle={`${t("welcome")} ${session.user.name?.split(" ")[0]} 👋 — ${new Intl.DateTimeFormat(locale === "en" ? "en-US" : "fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date())}`}
+        site={currentSiteName}
         userName={session.user.name}
         userAvatar={session.user.image ?? undefined}
       />

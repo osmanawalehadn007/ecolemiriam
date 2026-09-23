@@ -1,3 +1,4 @@
+import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
@@ -8,6 +9,7 @@ import { ConvocationForm } from "@/components/vie-scolaire/ConvocationForm";
 export default async function ConvocationsPage() {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "vie-scolaire:write");
 
 
   const siteFilter = siteFilterForModel("classe", session.user);
@@ -15,10 +17,13 @@ export default async function ConvocationsPage() {
     prisma.classe.findMany({
       where: { tenantId: session.user.tenantId, ...siteFilter },
       include: {
+        // Élèves d'une classe déjà bornée par le filtre de site ci-dessus.
+        // eslint-disable-next-line ecolpro/require-site-filter
         eleves: {
           where: { statut: "ACTIF" },
           select: {
             id: true, nom: true, prenom: true, matricule: true,
+            // eslint-disable-next-line ecolpro/require-site-filter
             parents: { include: { parent: { select: { id: true, nom: true, prenom: true, phone: true, email: true } } } },
           },
           orderBy: { nom: "asc" },

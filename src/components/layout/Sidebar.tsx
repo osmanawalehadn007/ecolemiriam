@@ -36,6 +36,8 @@ import {
 import { useState, useMemo, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getInitials } from "@/lib/utils";
+import { isMenuItemVisible } from "@/lib/menu";
+import type { Role } from "@prisma/client";
 import { useTranslations } from "next-intl";
 
 type NavItem = {
@@ -43,7 +45,6 @@ type NavItem = {
   icon: LucideIcon;
   href: string;
   color: string;
-  roles?: string[];
 };
 
 type NavGroup = {
@@ -72,33 +73,36 @@ const navGroups: NavGroup[] = [
     groupKey: "groupVieScolaire",
     items: [
       { labelKey: "absences", icon: ClipboardList, href: "/absences", color: "text-orange-500" },
-      { labelKey: "vieScolaire", icon: Shield, href: "/vie-scolaire", color: "text-red-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "CLASS_TEACHER"] },
-      { labelKey: "parents", icon: UserCheck, href: "/parents", color: "text-pink-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "TEACHER", "CLASS_TEACHER"] },
+      { labelKey: "vieScolaire", icon: Shield, href: "/vie-scolaire", color: "text-red-500" },
+      { labelKey: "parents", icon: UserCheck, href: "/parents", color: "text-pink-500" },
+      // Écran famille : factures/paiements des enfants du compte (PARENT/STUDENT),
+      // aussi visible des rôles finance. La page serveur borne via eleveScopeFilter.
+      { labelKey: "mesFactures", icon: Receipt, href: "/mes-factures", color: "text-emerald-500" },
     ],
   },
   {
     groupKey: "groupGestion",
     items: [
-      { labelKey: "admissions", icon: UserPlus, href: "/admissions", color: "text-teal-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY"] },
-      { labelKey: "facturation", icon: Receipt, href: "/facturation", color: "text-emerald-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT"] },
-      { labelKey: "rh", icon: Briefcase, href: "/rh", color: "text-amber-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT"] },
-      { labelKey: "inventaire", icon: Package, href: "/inventaire", color: "text-stone-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT"] },
+      { labelKey: "admissions", icon: UserPlus, href: "/admissions", color: "text-teal-500" },
+      { labelKey: "facturation", icon: Receipt, href: "/facturation", color: "text-emerald-500" },
+      { labelKey: "rh", icon: Briefcase, href: "/rh", color: "text-amber-500" },
+      { labelKey: "inventaire", icon: Package, href: "/inventaire", color: "text-stone-500" },
     ],
   },
   {
     groupKey: "groupCommunication",
     items: [
       { labelKey: "messages", icon: MessageSquare, href: "/messages", color: "text-indigo-500" },
-      { labelKey: "communication", icon: Bell, href: "/communication", color: "text-sky-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY"] },
+      { labelKey: "communication", icon: Bell, href: "/communication", color: "text-sky-500" },
     ],
   },
   {
     groupKey: "groupRapports",
     items: [
-      { labelKey: "rapports", icon: FileText, href: "/rapports", color: "text-slate-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "ACCOUNTANT"] },
-      { labelKey: "analytics", icon: BarChart3, href: "/analytics", color: "text-red-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT"] },
-      { labelKey: "orientation", icon: Compass, href: "/orientation", color: "text-lime-600", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "COUNSELOR", "CLASS_TEACHER"] },
-      { labelKey: "alumni", icon: Archive, href: "/alumni", color: "text-purple-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY"] },
+      { labelKey: "rapports", icon: FileText, href: "/rapports", color: "text-slate-500" },
+      { labelKey: "analytics", icon: BarChart3, href: "/analytics", color: "text-red-500" },
+      { labelKey: "orientation", icon: Compass, href: "/orientation", color: "text-lime-600" },
+      { labelKey: "alumni", icon: Archive, href: "/alumni", color: "text-purple-500" },
     ],
   },
   {
@@ -142,9 +146,11 @@ export function Sidebar({ userName = "Admin", userRole = "Directeur", userAvatar
       .map((group) => ({
         ...group,
         items: group.items.filter((item) => {
+          // /super-admin : filtré séparément (contrôle serveur inline)
           if (item.href === "/super-admin") return isSuperAdmin;
-          if (!item.roles) return true;
-          return item.roles.includes(roleKey);
+          // Menu DÉRIVÉ DE LA MATRICE RBAC (source unique avec les gardes
+          // serveur `guardPage`) : plus d'entrée visible mais redirigée.
+          return isMenuItemVisible(item.href, roleKey as Role);
         }),
       }))
       .filter((group) => group.items.length > 0),
@@ -172,7 +178,7 @@ export function Sidebar({ userName = "Admin", userRole = "Directeur", userAvatar
   return (
     <aside
       className={cn(
-        "relative flex flex-col h-screen bg-slate-950 text-slate-100 transition-all duration-300 ease-in-out border-r border-slate-800/60 shadow-xl shadow-indigo-950/10",
+        "relative flex flex-col h-screen bg-slate-950 text-slate-100 transition-all duration-300 ease-in-out border-r border-slate-800/60 shadow-xl shadow-indigo-950/10 print:hidden",
         collapsed ? "w-20" : "w-72"
       )}
     >

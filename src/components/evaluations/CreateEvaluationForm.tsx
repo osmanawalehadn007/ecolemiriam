@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,21 @@ export function CreateEvaluationForm({ classes, matieres, periodes }: Props) {
   const t = useTranslations("evaluations");
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [classeId, setClasseId] = useState("");
+  const [matiereId, setMatiereId] = useState("");
   const router = useRouter();
+
+  // Reconnaissance automatique de l'enseignant : si sa matière et/ou sa classe
+  // sont uniques dans son périmètre, elles sont pré-sélectionnées à l'ouverture.
+  useEffect(() => {
+    if (open) {
+      if (classes.length === 1) setClasseId(classes[0].id);
+      else setClasseId("");
+      if (matieres.length === 1) setMatiereId(matieres[0].id);
+      else setMatiereId("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -37,8 +51,8 @@ export function CreateEvaluationForm({ classes, matieres, periodes }: Props) {
           body: JSON.stringify({
             titre: data.titre,
             type: data.type,
-            classeId: data.classeId,
-            matiereId: data.matiereId,
+            classeId: classeId,
+            matiereId: matiereId,
             periodeId: data.periodeId,
             date: data.date,
             duree: Number(data.duree),
@@ -70,7 +84,7 @@ export function CreateEvaluationForm({ classes, matieres, periodes }: Props) {
         </Button>
       </DialogTrigger>
       <DialogContent
-        className="max-w-2xl bg-background border-none shadow-2xl rounded-xl"
+        className="max-w-2xl bg-white dark:bg-gray-900 border shadow-2xl rounded-xl"
         onEscapeKeyDown={(e) => e.preventDefault()}
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
@@ -107,7 +121,7 @@ export function CreateEvaluationForm({ classes, matieres, periodes }: Props) {
 
               <div className="space-y-2">
                 <Label htmlFor="classeId" className="text-red-500 font-medium">{t("class")}</Label>
-                <Select name="classeId" required>
+                <Select name="classeId" required value={classeId} onValueChange={setClasseId}>
                   <SelectTrigger className="bg-background"><SelectValue placeholder={t("selectClass")} /></SelectTrigger>
                   <SelectContent>
                     {classes.map(c => <SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>)}
@@ -116,7 +130,7 @@ export function CreateEvaluationForm({ classes, matieres, periodes }: Props) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="matiereId" className="text-red-500 font-medium">{t("subject")}</Label>
-                <Select name="matiereId" required>
+                <Select name="matiereId" required value={matiereId} onValueChange={setMatiereId}>
                   <SelectTrigger className="bg-background"><SelectValue placeholder={t("selectSubject")} /></SelectTrigger>
                   <SelectContent>
                     {matieres.map(m => <SelectItem key={m.id} value={m.id}>{m.nom}</SelectItem>)}

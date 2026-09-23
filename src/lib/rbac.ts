@@ -21,106 +21,18 @@ import type { Role } from "@prisma/client";
 import type { Session } from "next-auth";
 import { auditFire } from "@/lib/audit";
 
-export type Permission = string;
-
 // ------------------------------------------------------------
-// Matrice des permissions par rôle
+// Cœur pur extrait dans `./rbac-matrix` : le type `Permission`, la matrice
+// `ROLE_PERMISSIONS` et `roleHasPermission` n'ont AUCUN import runtime
+// (auth, audit, Prisma) et sont donc importables depuis le bundle client
+// (`Sidebar` → `menu.ts`). Tout est ré-exporté ici : les imports existants
+// vers `@/lib/rbac` restent valides.
 // ------------------------------------------------------------
-export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
-  // Plateforme EcolPro — accès total (y compris super-admin)
-  SUPER_ADMIN: ["*"],
+import { roleHasPermission, type Permission } from "./rbac-matrix";
+export { ROLE_PERMISSIONS, roleHasPermission } from "./rbac-matrix";
+export type { Permission };
 
-  // Directeur / Propriétaire de l'établissement — tout sauf l'administration plateforme
-  TENANT_ADMIN: [
-    "eleves:*", "parents:*", "enseignants:*", "classes:*", "matieres:*",
-    "notes:*", "evaluations:*", "bulletins:*", "absences:*", "examens:*",
-    "emploi-du-temps:*", "communication:*", "messages:*", "vie-scolaire:*",
-    "admissions:*", "rh:*", "finance:*", "inventaire:*", "alumni:*",
-    "orientation:*", "cours:*", "analytics:*", "rapports:*", "documents:*",
-    "ai:*", "audit:read",
-  ],
 
-  // Chef d'établissement — pédagogie & vie scolaire complètes, pas la finance/RH en écriture
-  PRINCIPAL: [
-    "eleves:*", "parents:*", "enseignants:*", "classes:*", "matieres:*",
-    "notes:*", "evaluations:*", "bulletins:*", "absences:*", "examens:*",
-    "emploi-du-temps:*", "communication:*", "messages:*", "vie-scolaire:*",
-    "admissions:*", "rh:read", "finance:read", "inventaire:*", "alumni:*",
-    "orientation:*", "cours:*", "analytics:*", "rapports:*", "documents:*",
-    "ai:*",
-  ],
-
-  // Secrétariat — gestion administrative
-  SECRETARY: [
-    "eleves:*", "parents:*", "classes:read", "matieres:read",
-    "absences:*", "emploi-du-temps:*", "communication:read", "communication:send",
-    "messages:*", "admissions:*", "examens:read", "inventaire:read",
-    "documents:*", "alumni:read", "bulletins:read", "rapports:read",
-  ],
-
-  // Enseignant — sa pédagogie
-  TEACHER: [
-    "eleves:read", "classes:read", "matieres:read",
-    "notes:*", "evaluations:*", "absences:read", "absences:write",
-    "bulletins:read", "emploi-du-temps:read", "messages:*",
-    "cours:*", "analytics:read", "examens:read", "ai:teacher",
-  ],
-
-  // Professeur principal — enseignant + bulletins/conseil + vie scolaire
-  CLASS_TEACHER: [
-    "eleves:read", "classes:read", "matieres:read",
-    "notes:*", "evaluations:*", "absences:*",
-    "bulletins:read", "bulletins:write", "bulletins:publish",
-    "emploi-du-temps:read", "messages:*", "cours:*",
-    "vie-scolaire:*", "orientation:read", "orientation:write",
-    "analytics:read", "examens:read", "parents:read", "ai:teacher",
-  ],
-
-  // Conseiller / CPE — vie scolaire & orientation
-  COUNSELOR: [
-    "eleves:read", "absences:read", "vie-scolaire:*", "orientation:*",
-    "messages:*", "parents:read", "communication:read", "analytics:read",
-  ],
-
-  // Infirmier(e) — consultation santé/élèves
-  NURSE: [
-    "eleves:read", "absences:read", "messages:read", "messages:write",
-  ],
-
-  // Comptable — finance & paie
-  ACCOUNTANT: [
-    "finance:*", "rh:*", "eleves:read", "parents:read", "inventaire:*",
-    "analytics:read", "messages:*", "rapports:read",
-  ],
-
-  // Parent — consultation de son périmètre (lecture seule + messagerie)
-  PARENT: [
-    "bulletins:read", "absences:read", "notes:read", "messages:*",
-    "communication:read", "cours:read", "orientation:read",
-    "emploi-du-temps:read", "ai:parent",
-  ],
-
-  // Élève — consultation de son périmètre (lecture seule + messagerie limitée)
-  // Un élève peut lire et répondre dans une conversation où il est déjà participant,
-  // mais ne peut pas initier de nouvelle conversation (règle École360).
-  STUDENT: [
-    "bulletins:read", "absences:read", "notes:read",
-    "messages:read", "messages:reply",
-    "communication:read", "cours:*", "emploi-du-temps:read",
-  ],
-};
-
-// ------------------------------------------------------------
-// Vérification de permission
-// ------------------------------------------------------------
-export function roleHasPermission(role: Role, permission: Permission): boolean {
-  const perms = ROLE_PERMISSIONS[role] ?? [];
-  if (perms.includes("*")) return true;
-  if (perms.includes(permission)) return true;
-  const moduleName = permission.split(":")[0];
-  if (perms.includes(`${moduleName}:*`)) return true;
-  return false;
-}
 
 // ------------------------------------------------------------
 // Garde d'autorisation pour les route handlers
@@ -243,6 +155,36 @@ export function checkPermission(
   }
   return null;
 }
+
+/**
+ * Variante de {@link checkPermission} pour une action couverte par **plusieurs**
+ * modules (OU logique) : générer un bulletin de paie, par exemple, que la
+ * direction tient de `rh:write` et le comptable de `paie:write` — deux métiers,
+ * deux permissions, une seule route.
+ *
+ *   const denied = checkAnyPermission(session.user.role, ["rh:write", "paie:write"]);
+ *   if (denied) return denied;
+ */
+export function checkAnyPermission(
+  role: Role,
+  permissions: Permission[]
+): NextResponse | null {
+  if (permissions.some((permission) => roleHasPermission(role, permission))) {
+    return null;
+  }
+  auditFire({
+    action: "auth:check",
+    verdict: "DENIED",
+    resource: permissions.join(","),
+    reason: "Privilèges insuffisants",
+    metadata: { role },
+  });
+  return NextResponse.json(
+    { error: "Accès refusé : privilèges insuffisants" },
+    { status: 403 }
+  );
+}
+
 
 /** Réservé aux administrateurs de la plateforme EcolPro. */
 export async function authorizeSuperAdmin(): Promise<AuthSuccess | AuthFailure> {

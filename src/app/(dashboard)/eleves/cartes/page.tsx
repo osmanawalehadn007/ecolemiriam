@@ -1,3 +1,4 @@
+import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
@@ -8,6 +9,7 @@ import { CartesScolairesForm } from "@/components/eleves/CartesScolairesForm";
 export default async function CartesScolairesPage() {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
+  guardPage(session, "eleves:read");
 
 
   const siteFilter = siteFilterForModel("classe", session.user);
