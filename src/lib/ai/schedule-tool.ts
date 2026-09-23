@@ -17,6 +17,37 @@ import { fuzzyFind, normalizeHeure } from "@/lib/text-match";
 import { suggestSlots, ALL_DAYS, type CreneauSuggestion, type Jour } from "@/lib/emploi-du-temps/suggest";
 import { generateBulkPlan, type MatiereCible, type PaireCible } from "@/lib/emploi-du-temps/bulk-generate";
 import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-filter";
+import { resolveTeacherScope } from "@/lib/teacher-classes";
+
+/**
+ * Revendications transmises par la route IA : `SessionSiteClaims` complétées de
+ * l'identité, nécessaire pour résoudre le périmètre ENSEIGNANT.
+ */
+export type ScheduleClaims = SessionSiteClaims & {
+  id?: string;
+  userId?: string;
+  tenantId?: string | null;
+};
+
+/**
+ * Bornage ENSEIGNANT d'une liste de classes déjà bornée par site.
+ *
+ * Sans lui, un enseignant demandant à l'assistant IA « l'emploi du temps de la
+ * 2nde C » obtenait le planning d'une classe qui n'est pas la sienne : le filtre
+ * de site seul ne limite pas au périmètre personnel (cf. plan § 4.8). Renvoie la
+ * liste inchangée pour tout rôle non enseignant — aucune régression.
+ */
+async function withinTeacherScope<T>(
+  rows: T[],
+  claims: ScheduleClaims | undefined,
+  getId: (row: T) => string
+): Promise<T[]> {
+  if (!claims) return rows;
+  const scope = await resolveTeacherScope(claims);
+  if (!scope.isRestricted) return rows;
+  const allowed = new Set(scope.classeIds);
+  return rows.filter((row) => allowed.has(getId(row)));
+}
 
 export const CRENEAU_TOOL: ToolDefinition = {
   type: "function",
@@ -256,7 +287,7 @@ type Resolution = { ok: true; proposal: CreneauProposal } | { ok: false; message
 export async function resolveCreneauProposal(
   tenantId: string,
   rawArgs: z.infer<typeof CreneauArgsSchema>,
-  siteClaims?: SessionSiteClaims
+  siteClaims?: ScheduleClaims
 ): Promise<Resolution> {
   const heureDebut = normalizeHeure(rawArgs.heureDebut);
   const heureFin = normalizeHeure(rawArgs.heureFin);
@@ -274,7 +305,13 @@ export async function resolveCreneauProposal(
   // Recherche floue en mémoire (plutôt qu'un simple ILIKE en base) : le modèle
   // écrit souvent des abréviations sans accent ("maths", "1ere L") qui ne sont
   // pas des sous-chaînes littérales du nom réel ("Mathématiques", "1ère L").
-  const allClasses = await prisma.classe.findMany({ where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) }, select: { id: true, nom: true } });
+  // Le périmètre enseignant est appliqué ici : la recherche « floue » ne doit
+  // pas devenir un moyen de retrouver, puis d'ouvrir, la classe d'un collègue.
+  const allClasses = await withinTeacherScope(
+    await prisma.classe.findMany({ where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) }, select: { id: true, nom: true } }),
+    siteClaims,
+    (c) => c.id
+  );
   const classes = fuzzyFind(allClasses, args.classeNom);
   if (classes.length === 0) {
     return { ok: false, message: `Aucune classe ne correspond à "${args.classeNom}".` };
@@ -398,9 +435,14 @@ type ListerResult =
 export async function listCreneaux(
   tenantId: string,
   args: z.infer<typeof ListerArgsSchema>,
-  siteClaims?: SessionSiteClaims
+  siteClaims?: ScheduleClaims
 ): Promise<ListerResult> {
-  const allClasses = await prisma.classe.findMany({ where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) }, select: { id: true, nom: true } });
+  // Idem : un enseignant ne consulte que le planning de SES classes.
+  const allClasses = await withinTeacherScope(
+    await prisma.classe.findMany({ where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) }, select: { id: true, nom: true } }),
+    siteClaims,
+    (c) => c.id
+  );
   const classes = fuzzyFind(allClasses, args.classeNom);
   if (classes.length === 0) {
     return { ok: false, message: `Aucune classe ne correspond à "${args.classeNom}".` };
@@ -446,14 +488,27 @@ export async function listCreneaux(
   };
 }
 
-export async function listClasses(tenantId: string, args: z.infer<typeof ListerClassesArgsSchema>, siteClaims?: SessionSiteClaims) {
-  const allClasses = await prisma.classe.findMany({
-    where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) },
-    select: { nom: true, niveau: true, effectifMax: true },
-    orderBy: { nom: "asc" },
-  });
+/**
+ * Projection publique d'une classe pour l'outil `lister_classes` : l'identifiant
+ * technique n'était pas exposé avant l'ajout du bornage enseignant, on continue
+ * de ne pas le renvoyer (le modèle raisonne sur les noms).
+ */
+function toPublic(classe: { nom: string; niveau: string; effectifMax: number }) {
+  return { nom: classe.nom, niveau: classe.niveau, effectifMax: classe.effectifMax };
+}
+
+export async function listClasses(tenantId: string, args: z.infer<typeof ListerClassesArgsSchema>, siteClaims?: ScheduleClaims) {
+  const allClasses = await withinTeacherScope(
+    await prisma.classe.findMany({
+      where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) },
+      select: { id: true, nom: true, niveau: true, effectifMax: true },
+      orderBy: { nom: "asc" },
+    }),
+    siteClaims,
+    (c) => c.id
+  );
   if (!args.niveau) {
-    return { ok: true as const, classes: allClasses };
+    return { ok: true as const, classes: allClasses.map(toPublic) };
   }
   const matchedNiveaux = new Set(
     fuzzyFind(
@@ -461,7 +516,10 @@ export async function listClasses(tenantId: string, args: z.infer<typeof ListerC
       args.niveau
     ).map((m) => m.nom)
   );
-  return { ok: true as const, classes: allClasses.filter((c) => matchedNiveaux.has(c.niveau)) };
+  return {
+    ok: true as const,
+    classes: allClasses.filter((c) => matchedNiveaux.has(c.niveau)).map(toPublic),
+  };
 }
 
 export async function listEnseignants(tenantId: string, args: z.infer<typeof ListerEnseignantsArgsSchema>, siteClaims?: SessionSiteClaims) {
@@ -492,8 +550,14 @@ export async function listSalles(tenantId: string, siteClaims?: SessionSiteClaim
   return { ok: true as const, salles };
 }
 
-export async function suggererCreneaux(tenantId: string, args: z.infer<typeof SuggererArgsSchema>, siteClaims?: SessionSiteClaims) {
-  const allClasses = await prisma.classe.findMany({ where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) }, select: { id: true, nom: true } });
+export async function suggererCreneaux(tenantId: string, args: z.infer<typeof SuggererArgsSchema>, siteClaims?: ScheduleClaims) {
+  // Le bornage enseignant s'applique avant la recherche floue : suggérer des
+  // créneaux suppose d'abord de pouvoir viser la classe.
+  const allClasses = await withinTeacherScope(
+    await prisma.classe.findMany({ where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) }, select: { id: true, nom: true } }),
+    siteClaims,
+    (c) => c.id
+  );
   const classes = fuzzyFind(allClasses, args.classeNom);
   if (classes.length === 0) return { ok: false as const, message: `Aucune classe ne correspond à "${args.classeNom}".` };
   if (classes.length > 1) {
@@ -549,8 +613,15 @@ export async function suggererCreneaux(tenantId: string, args: z.infer<typeof Su
   };
 }
 
-export async function resolveRestructuration(tenantId: string, args: z.infer<typeof RestructurerArgsSchema>, siteClaims?: SessionSiteClaims) {
-  const allClasses = await prisma.classe.findMany({ where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) }, select: { id: true, nom: true } });
+export async function resolveRestructuration(tenantId: string, args: z.infer<typeof RestructurerArgsSchema>, siteClaims?: ScheduleClaims) {
+  // Une restructuration remplace TOUS les créneaux d'une classe : hors
+  // périmètre, elle est refusée comme les autres (message explicite plutôt que
+  // « classe inexistante », pour ne pas laisser croire à une erreur de saisie).
+  const allClasses = await withinTeacherScope(
+    await prisma.classe.findMany({ where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) }, select: { id: true, nom: true } }),
+    siteClaims,
+    (c) => c.id
+  );
   const classes = fuzzyFind(allClasses, args.classeNom);
   if (classes.length === 0) return { ok: false as const, message: `Aucune classe ne correspond à "${args.classeNom}".` };
   if (classes.length > 1) {
