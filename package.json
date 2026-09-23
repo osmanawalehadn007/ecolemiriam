@@ -20,6 +20,7 @@
     "cap:copy": "npx cap copy",
     "test:e2e": "npx playwright test",
     "test:e2e:ui": "npx playwright test --ui",
+    "test:isolation": "npx playwright test tests/e2e/isolation.spec.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -54,6 +55,7 @@
     "@stripe/stripe-js": "^9.9.0",
     "@supabase/supabase-js": "^2.110.0",
     "@types/papaparse": "^5.5.2",
+    "@upstash/redis": "^1.38.2",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -71,7 +73,7 @@
     "react-hook-form": "^7.54.2",
     "recharts": "^2.15.0",
     "resend": "^4.0.1",
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.3",
     "sonner": "^1.7.2",
     "stripe": "^22.3.0",
     "tailwind-merge": "^2.5.4",
@@ -103,10 +105,13 @@
     "typescript": "^5",
     "vitest": "^4.1.10"
   },
+  "packageManager": "pnpm@11.21.0",
   "overrides": {
     "next": {
-      "postcss": "8.5.15"
+      "postcss": "8.5.26",
+      "sharp": "^0.35.3"
     },
-    "tar": "^7.5.16"
+    "tar": "^7.5.22",
+    "uuid": "^11.1.1"
   }
 }

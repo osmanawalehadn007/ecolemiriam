@@ -66,3 +66,6 @@ next-env.d.ts
 /android/build/
 /android/local.properties
 .gstack/
+
+# Sauvegardes DB (données sensibles)
+backups/

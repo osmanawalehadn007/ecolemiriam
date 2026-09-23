@@ -7,6 +7,11 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // ESLint est temporairement désactivé lors du build pour débloquer le
+  // déploiement. La dette doit être corrigée : toutes les erreurs
+  // ecolpro/require-tenant-id et ecolpro/require-site-filter signalent des
+  // trous d'isolation multi-tenant/site. Lancer `pnpm run lint` pour voir la
+  // liste complète. Cette ligne sera supprimée une fois la dette résolue.
   eslint: {
     ignoreDuringBuilds: true,
   },
