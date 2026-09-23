@@ -113,6 +113,19 @@ model Tenant {
   tarifsNiveau       TarifNiveau[]
   relances           Relance[]
   exclusionsEleve    ExclusionEleve[]
+  learnosEvidence    LearnosEvidence[]
+  learnosStudentTwin LearnosStudentTwin[]
+  learnosAssessment  LearnosAssessment[]
+  learnosAssignment  LearnosAssignment[]
+  learnosSubmission  LearnosSubmission[]
+  learnosDiagnostic  LearnosDiagnostic[]
+  learnosIntervention LearnosIntervention[]
+  learnosInsight     LearnosInsight[]
+  learnosEvent       LearnosEvent[]
+  learnosCopilotMemory LearnosCopilotMemory[]
+  learnosCurriculum  LearnosCurriculum[]
+  learnosChapitre    LearnosChapitre[]
+  learnosCompetence  LearnosCompetence[]
 
   @@map("tenants")
 }
@@ -159,6 +172,20 @@ model Site {
 
   // Tarifs par niveau
   tarifsNiveau TarifNiveau[]
+
+  learnosEvidence    LearnosEvidence[]
+  learnosStudentTwin LearnosStudentTwin[]
+  learnosAssessment  LearnosAssessment[]
+  learnosAssignment  LearnosAssignment[]
+  learnosSubmission  LearnosSubmission[]
+  learnosDiagnostic  LearnosDiagnostic[]
+  learnosIntervention LearnosIntervention[]
+  learnosInsight     LearnosInsight[]
+  learnosEvent       LearnosEvent[]
+  learnosCopilotMemory LearnosCopilotMemory[]
+  learnosCurriculum  LearnosCurriculum[]
+  learnosChapitre    LearnosChapitre[]
+  learnosCompetence  LearnosCompetence[]
 
   // Soft-delete / purge planifiée (Option B — industry standard)
   deletedAt        DateTime?
@@ -2073,4 +2100,338 @@ model AuditLog {
   @@index([verdict])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+
+// ============================================================
+// LEARNOS — Couche IA pédagogique
+// Isolation multi-tenant via tenantId/siteId, liens métier par IDs.
+// ============================================================
+
+enum LearnosEvidenceType {
+  EXERCICE
+  DEVOIR
+  INTERROGATION
+  EXAMEN
+  OCR
+  ORAL
+  PROJET
+  PARTICIPATION
+}
+
+enum LearnosEvidenceSource {
+  MANUEL
+  DIGITAL
+  OCR
+  IMPORT
+  SYNC
+}
+
+enum LearnosInterventionStatus {
+  PROPOSED
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+enum LearnosInterventionType {
+  REMEDIATION
+  ENRICHMENT
+  REVISION
+}
+
+model LearnosCurriculum {
+  id        String @id @default(cuid())
+  tenantId  String
+  siteId    String?
+  matiereId String
+  anneeId   String
+
+  nom        String
+  niveau     String
+  objectifs  String?
+  chapitres  LearnosChapitre[]
+  competences LearnosCompetence[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, siteId, matiereId, anneeId])
+  @@index([tenantId, matiereId])
+  @@map("learnos_curriculum")
+}
+
+model LearnosChapitre {
+  id           String @id @default(cuid())
+  tenantId     String
+  siteId       String?
+  curriculumId String
+
+  nom        String
+  ordre      Int    @default(0)
+  objectifs  String?
+  competences LearnosCompetence[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site       Site?             @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  curriculum LearnosCurriculum @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, curriculumId])
+  @@map("learnos_chapitre")
+}
+
+model LearnosCompetence {
+  id          String @id @default(cuid())
+  tenantId    String
+  siteId      String?
+  curriculumId String
+  chapitreId  String?
+
+  code        String
+  nom         String
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site       Site?             @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  curriculum LearnosCurriculum @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  chapitre   LearnosChapitre?  @relation(fields: [chapitreId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, siteId, code])
+  @@index([tenantId, curriculumId])
+  @@map("learnos_competence")
+}
+
+model LearnosEvidence {
+  id           String @id @default(cuid())
+  tenantId     String
+  siteId       String?
+  eleveId      String
+  matiereId    String
+  chapitreId   String?
+  competenceId String?
+
+  type            LearnosEvidenceType
+  source          LearnosEvidenceSource
+  rawData         Json
+  processedAt     DateTime?
+  extractedSkills String[]
+  confidence      Float   @default(0)
+  noteId          String?
+  examenId        String?
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, siteId, eleveId])
+  @@index([tenantId, matiereId])
+  @@index([tenantId, competenceId])
+  @@map("learnos_evidence")
+}
+
+model LearnosStudentTwin {
+  id            String @id @default(cuid())
+  tenantId      String
+  siteId        String?
+  eleveId       String
+  matiereId     String
+
+  masteryVector  Json
+  trendSlope     Float    @default(0)
+  decayFactor    Float    @default(0.95)
+  lastEvidenceAt DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, siteId, eleveId, matiereId])
+  @@index([tenantId, eleveId])
+  @@map("learnos_student_twin")
+}
+
+model LearnosAssessment {
+  id          String @id @default(cuid())
+  tenantId    String
+  siteId      String?
+  createdById String
+  matiereId   String
+  chapitreId  String?
+
+  difficulty           Float
+  variantSeed          String
+  antiCheatTag         String
+  reasoningCheckpoints Json[]
+  questions            Json[]
+  competenceIds        String[]
+
+  status      String   @default("DRAFT")
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, siteId, matiereId])
+  @@map("learnos_assessment")
+}
+
+model LearnosAssignment {
+  id          String @id @default(cuid())
+  tenantId    String
+  siteId      String?
+  assessmentId String?
+  eleveId     String
+  matiereId   String
+
+  assignedById String
+  payload      Json
+  dueDate      DateTime?
+  status       String   @default("PENDING")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, siteId, eleveId])
+  @@map("learnos_assignment")
+}
+
+model LearnosSubmission {
+  id           String @id @default(cuid())
+  tenantId     String
+  siteId       String?
+  assignmentId String
+  eleveId      String
+
+  answers      Json
+  score        Float?
+  feedback     String?
+  errorTypes   String[]
+  submittedAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, siteId, assignmentId])
+  @@map("learnos_submission")
+}
+
+model LearnosDiagnostic {
+  id           String @id @default(cuid())
+  tenantId     String
+  siteId       String?
+  eleveId      String
+  matiereId    String
+  competenceId String?
+
+  errorType      String
+  falseMastery   Boolean  @default(false)
+  evidenceIds    String[]
+  recommendation String?
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, siteId, eleveId])
+  @@index([tenantId, matiereId])
+  @@map("learnos_diagnostic")
+}
+
+model LearnosIntervention {
+  id         String @id @default(cuid())
+  tenantId   String
+  siteId     String?
+  eleveId    String
+
+  type       LearnosInterventionType
+  proposedBy String // AI or TEACHER
+  approvedById String?
+  status     LearnosInterventionStatus @default(PROPOSED)
+  payload    Json // exercices, ressources, réévaluation
+  retestId   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, siteId, eleveId])
+  @@map("learnos_intervention")
+}
+
+model LearnosInsight {
+  id          String @id @default(cuid())
+  tenantId    String
+  siteId      String?
+  generatedBy String
+
+  scope       String // CLASS, STUDENT, SCHOOL, MATIERE
+  targetId    String?
+  title       String
+  summary     String
+  evidenceIds String[]
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, siteId, scope])
+  @@map("learnos_insight")
+}
+
+model LearnosEvent {
+  id            String @id @default(cuid())
+  tenantId      String
+  siteId        String?
+  aggregateType String
+  aggregateId   String
+  eventType     String
+  payload       Json
+
+  occurredAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, aggregateType, aggregateId])
+  @@index([tenantId, eventType])
+  @@map("learnos_events")
+}
+
+model LearnosCopilotMemory {
+  id         String @id @default(cuid())
+  tenantId   String
+  siteId     String?
+  userId     String
+  role       String
+
+  contextKey String
+  contextData Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, siteId, userId, contextKey])
+  @@index([tenantId, userId])
+  @@map("learnos_copilot_memory")
 }
