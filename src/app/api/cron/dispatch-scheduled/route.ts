@@ -5,11 +5,12 @@ import { dispatchNotification } from "@/lib/notifications/dispatch";
 /**
  * Cron — Envoi des notifications planifiées arrivées à échéance.
  * ============================================================
- * À appeler par un ordonnanceur (Vercel Cron, GitHub Actions, cron-job.org…).
+ * À appeler par un ordonnanceur (cron systemd du conteneur GCP, Cloudflare
+ * Worker Cron, GitHub Actions, cron-job.org…).
  * Protégé par CRON_SECRET : `Authorization: Bearer <CRON_SECRET>`.
- * Vercel Cron envoie automatiquement ce header si CRON_SECRET est défini.
+ * Cet ordonnanceur doit envoyer le header lui-même.
  *
- * Planifié toutes les 5 min via vercel.json.
+ * Planifié toutes les 5 min (voir docker/ ou le cron de l'hôte GCP).
  */
 async function handler(req: NextRequest) {
   const secret = process.env.CRON_SECRET;

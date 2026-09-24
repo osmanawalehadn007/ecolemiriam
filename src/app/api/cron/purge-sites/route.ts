@@ -4,7 +4,8 @@ import prisma from "@/lib/prisma";
 /**
  * Cron endpoint: PURGE definitively deleted sites after their grace period.
  *
- * Protect with CRON_SECRET env var. Call daily via Vercel/Netlify cron.
+ * Protect with CRON_SECRET env var. Call daily via the host scheduler
+ * (cron systemd on the GCP container, Cloudflare Worker Cron, or crontab).
  *
  * GET /api/cron/purge-sites
  * Header: Authorization: Bearer <CRON_SECRET>

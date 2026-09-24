@@ -25,8 +25,8 @@
 ## 1. Pré-requis applicatif : déployer le web d'abord
 
 La coque mobile pointe vers l'app **déployée** (pas le code local). Déployer le
-front Next.js (Vercel recommandé) et noter l'URL de production, ex.
-`https://app.ecolpro.app`.
+front Next.js (cible : conteneur sur GCP derrière Cloudflare Tunnel,
+`https://ecolemirlam.com`) et noter l'URL de production.
 
 > **Multi-tenant :** chaque école a un sous-domaine (`lycee-x.ecolpro.app`).
 > Pour le mobile, deux options :
@@ -44,7 +44,7 @@ front Next.js (Vercel recommandé) et noter l'URL de production, ex.
 
 ```bash
 # Définir l'URL de prod (sinon valeur par défaut de capacitor.config.ts)
-export CAP_SERVER_URL=https://app.ecolpro.app
+export CAP_SERVER_URL=https://ecolemirlam.com
 
 npm run cap:add:ios       # crée ./ios
 npm run cap:add:android   # crée ./android

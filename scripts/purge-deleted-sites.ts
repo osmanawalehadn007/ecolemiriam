@@ -1,8 +1,8 @@
 /**
  * Cron: Purge définitive des sites supprimés après 90 jours.
  *
- * Ce script doit être exécuté quotidiennement (ex: via Vercel Cron, Netlify
- * Scheduled Functions, ou un cron Linux).
+ * Ce script doit être exécuté quotidiennement (ex: cron systemd de l'hôte GCP,
+ * crontab, ou Cloudflare Worker Cron).
  *
  * Il:
  *   1. Trouve tous les sites dont `scheduledPurgeAt` est dépassé.

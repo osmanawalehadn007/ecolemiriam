@@ -1,4 +1,15 @@
-name: CI — Test, Build & E2E
+name: CI — Vérifications, Tests & Build
+
+# Cible de production : https://ecolemirlam.com (Cloudflare → conteneur GCP).
+# Le projet n'est plus hébergé chez un PaaS : vercel.json, netlify.toml et
+# .vercelignore ont été supprimés, et scripts/ci/check-deploy-target.mjs échoue
+# si l'un d'eux réapparaît (un simple vercel.json réactive un déploiement Git).
+#
+# Jobs :
+#   garde-fous → cible de déploiement, secrets en dur, variables documentées
+#   qualite    → schéma Prisma, lint, type-check, tests unitaires + couverture
+#   build      → build de production + plafond de poids du bundle client
+#   e2e        → suite Playwright (nécessite une base auparavant seedée)
 
 on:
   push:
@@ -12,23 +23,63 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Lint, Type-Check, Tests unitaires & Build
+  # ============================================================
+  # JOB 1 — Contrôles statiques, sans base de données ni secrets
+  # ============================================================
+  garde-fous:
+    name: Garde-fous (déploiement, secrets, documentation)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      # Node 24 : jsdom 30 (dépendance de vitest) exige `^22.22.2 || ^24.15.0`.
+      # Sous Node 20, les workers vitest meurent au démarrage sur
+      # « webidl.util.markAsUncloneable is not a function » : l'ancienne CI
+      # tournait sur Node 20 et n'exécutait donc aucun test.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Ces contrôles remplacent ceux qui étaient délégués au tableau de bord de
+      # l'hébergeur (Vercel/Netlify) : ils tournent dans la CI, sur la cible
+      # Cloudflare/GCP.
+      - name: Cible de déploiement (Cloudflare / ecolemirlam.com)
+        run: node scripts/ci/check-deploy-target.mjs
+
+      - name: Secrets en dur dans le code versionné
+        run: node scripts/ci/scan-secrets.mjs
+
+      - name: Variables d'environnement documentées
+        run: node scripts/ci/check-env-docs.mjs
+
+  # ============================================================
+  # JOB 2 — Qualité du code et tests unitaires
+  # ============================================================
+  qualite:
+    name: Prisma, Lint, Type-check & Tests unitaires
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Le dépôt a migré vers pnpm (packageManager: pnpm@*, pnpm-lock.yaml,
-      # package-lock.json supprimé) : `npm ci` est donc impossible.
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
@@ -40,14 +91,85 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
 
-      - name: Verify (Lint + Type-check + Unit tests)
-        run: pnpm verify
+      # Un schéma invalide ne se voit qu'au build (ou pire, en production).
+      - name: Schéma Prisma valide
+        run: pnpm exec prisma validate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+
+      - name: Lint
+        run: pnpm run lint
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
           AUTH_URL: ${{ secrets.AUTH_URL }}
           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+
+      # `ecolpro/require-tenant-id` et `ecolpro/require-site-filter` sont le
+      # garde-fou d'isolation multi-tenant du projet. Étape dédiée pour que leur
+      # échec soit identifiable sans relire toute la sortie du lint.
+      - name: Isolement multi-tenant (règles ecolpro)
+        run: >-
+          pnpm exec eslint "src/app/api/**/*.{ts,tsx}" "src/lib/**/*.{ts,tsx}"
+          "src/app/(dashboard)/**/*.{ts,tsx}" --max-warnings 0
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+
+      - name: Type-check
+        run: pnpm exec tsc --noEmit
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          AUTH_URL: ${{ secrets.AUTH_URL }}
+          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+          RLS_ACTIVE: ${{ secrets.RLS_ACTIVE }}
+
+      # Les seuils de couverture (60 % lignes/fonctions/branches) sont définis
+      # dans vitest.config.ts : le job échoue s'ils ne sont plus tenus
+      # (couverture mesurée au 24/09 : 89 % lignes, 86 % instructions).
+      - name: Tests unitaires + couverture
+        run: pnpm run test:coverage
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          RLS_ACTIVE: ${{ secrets.RLS_ACTIVE }}
+
+      - name: Upload rapport de couverture
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  # ============================================================
+  # JOB 3 — Build de production réellement servi par le conteneur
+  # ============================================================
+  build:
+    name: Build de production & plafond de bundle
+    runs-on: ubuntu-latest
+    needs: qualite
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Build production
         run: pnpm build
@@ -58,10 +180,22 @@ jobs:
           AUTH_URL: ${{ secrets.AUTH_URL }}
           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
 
+      - name: Artefact de build présent
+        run: test -f .next/BUILD_ID && echo "BUILD_ID=$(cat .next/BUILD_ID)"
+
+      # Chaque kilo-octet de JavaScript est payé par les élèves sur réseau
+      # mobile : une dépendance lourde ajoutée par erreur fait échouer l'étape
+      # (référence au 24/09 : 3,5 Mo, plus gros chunk 911 Ko).
+      - name: Plafond de poids du bundle client
+        run: node scripts/ci/check-bundle-budget.mjs
+
+  # ============================================================
+  # JOB 4 — Parcours réels (Playwright)
+  # ============================================================
   e2e-tests:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
-    needs: test
+    needs: [garde-fous, qualite]
     timeout-minutes: 40
     steps:
       - name: Checkout
@@ -73,7 +207,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
@@ -130,5 +264,8 @@ jobs:
           path: test-results/
           retention-days: 7
 
-# Déploiement confié à l'intégration Git native de Vercel.
-# Voir vercel.json pour la configuration build/crons/env.
+# Déploiement : conteneur sur GCP derrière Cloudflare Tunnel (https://ecolemirlam.com).
+# Aucun déploiement n'est déclenché depuis ce workflow : la mise en ligne est
+# faite par le pipeline de déploiement, et l'intégration Git d'un PaaS
+# (Vercel/Netlify) est désactivée — leurs fichiers de configuration ont été
+# retirés du dépôt.

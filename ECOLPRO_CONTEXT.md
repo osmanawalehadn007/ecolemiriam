@@ -122,8 +122,9 @@ GET /api/analytics
 - **Notifications réelles** — `src/lib/notifications/` : `dispatch.ts` (résolution
   destinataires par cible + envoi), `email.ts` (Resend), `push.ts` (FCM HTTP v1
   signé avec `jose`, Android+iOS). Repli « simulation » si creds absents.
-- **Cron** — `/api/cron/dispatch-scheduled` (protégé `CRON_SECRET`) + `vercel.json`
-  (toutes les 5 min) pour les notifications `PLANIFIEE`.
+- **Cron** — `/api/cron/dispatch-scheduled` (protégé `CRON_SECRET`) appelé
+  toutes les 5 min par l'ordonnanceur de l'hôte (cron systemd GCP) pour les
+  notifications `PLANIFIEE`, et `/api/cron/purge-sites` une fois par jour.
 - **Webhooks signés** — `src/lib/webhooks.ts` : HMAC Meta (WhatsApp) + secret
   partagé (SMS). Exemptés d'auth de session dans `src/middleware.ts`.
 - **Fiche élève** — `/eleves/[id]` + `EleveDetailView` (onglets infos/notes/
@@ -133,10 +134,11 @@ GET /api/analytics
 ## Modules RESTANTS / pistes 🔲
 
 - **Notifications planifiées** : le cron existe mais dépend d'un ordonnanceur
-  externe configuré (Vercel Cron ou autre) + `CRON_SECRET` en prod.
+  externe configuré (cron de l'hôte GCP ou autre) + `CRON_SECRET` en prod.
 - **Intégrations paiement** : Wave Money / Orange Money (modèle `Paiement` prêt,
   pas d'appel API réel) ; Stripe (champs tenant présents, pas branché).
-- **Déploiement & stores** : build web → Vercel ; mobile → comptes Apple (99 $/an)
+- **Déploiement & stores** : build web → conteneur sur GCP derrière Cloudflare
+  Tunnel (`ecolemirlam.com`) ; mobile → comptes Apple (99 $/an)
   et Google Play (25 $) requis, + Xcode/Android Studio. Voir `MOBILE_DEPLOIEMENT.md`.
 - **Tests automatisés** : aucun pour l'instant (pas de Jest/Playwright).
 
@@ -203,7 +205,7 @@ node_modules/.bin/tsc --noEmit
 ## Prochaine instruction pour Claude
 
 Tous les modules fonctionnels sont construits. Priorités restantes (ordre conseillé) :
-1. **Déploiement web** (Vercel) + configuration des secrets prod (`CRON_SECRET`,
+1. **Déploiement web** (GCP + Cloudflare) + configuration des secrets prod (`CRON_SECRET`,
    `RESEND_API_KEY`, `FCM_SERVICE_ACCOUNT`, `WHATSAPP_APP_SECRET`, `AT_*`).
 2. **Publication stores** via Capacitor — voir `MOBILE_DEPLOIEMENT.md` (nécessite
    comptes Apple/Google + Xcode/Android Studio sur la machine).
