@@ -267,6 +267,14 @@ jobs:
       # `PORT=3001` : `next dev` (lancé par webServer de playwright.config.ts)
       # écoute ce port — sans lui, next démarre sur 3000 alors que `webServer.url`
       # attend 3001 et la suite expire (bug de l'ancien workflow).
+      # La suite tourne sur le BUILD DE PRODUCTION : `playwright.config.ts`
+      # démarre `next start` dès que `.next/BUILD_ID` existe. En `next dev`, la
+      # compilation à la demande fausse les tests sensibles au temps (le seau à
+      # jetons du rate limiter se recharge entre deux requêtes lentes) et le
+      # service worker s'enregistre trop tard.
+      - name: Build de production pour la suite e2e
+        run: pnpm build
+
       - name: Run E2E tests
         run: pnpm exec playwright test --reporter=line
         env:

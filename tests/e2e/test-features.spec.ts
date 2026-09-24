@@ -143,15 +143,26 @@ test.describe("Parent — accès en lecture", () => {
 test.describe("PWA — service worker", () => {
   test("Service worker enregistré", async ({ page }) => {
     await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(3000);
 
-    const swRegs = await page.evaluate(() =>
-      navigator.serviceWorker.getRegistrations().then((regs) =>
-        regs.map((r) => ({ scope: r.scope, active: !!r.active }))
+    // L'enregistrement est fait côté client après le montage : on laisse au
+    // navigateur le temps de l'enregistrer. Une attente fixe de 3 s échouait sur
+    // les runners CI (plus lents qu'un poste local).
+    let swRegs: { scope: string; active: boolean }[] = [];
+    await expect
+      .poll(
+        async () => {
+          swRegs = await page.evaluate(() =>
+            navigator.serviceWorker.getRegistrations().then((regs) =>
+              regs.map((r) => ({ scope: r.scope, active: !!r.active }))
+            )
+          );
+          return swRegs.length;
+        },
+        { timeout: 20000, message: "Aucun service worker enregistré après 20 s" }
       )
-    );
+      .toBeGreaterThan(0);
+
     console.log(`  📡 Service workers: ${JSON.stringify(swRegs)}`);
-    expect(swRegs.length).toBeGreaterThan(0);
   });
 
   test("Manifest accessible", async ({ page }) => {
@@ -169,22 +180,23 @@ test.describe("Rate limiting", () => {
   test("Upload photo — rate limit après 10 tentatives", async ({ page }) => {
     await login(page, ADMIN_EMAIL, PASSWORD);
 
-    // Faire 12 requêtes rapides
-    let rateLimited = false;
-    for (let i = 0; i < 12; i++) {
-      const res = await page.evaluate(async () => {
+    // Rafale parallèle : le seau à jetons du limiteur (10 req./min, recharge
+    // d'un jeton toutes les 6 s) est vidé par 10 requêtes simultanées. En
+    // séquentiel, la recharge pouvait suffire entre deux requêtes lentes, ce
+    // qui rendait le test dépendant de la vitesse du serveur.
+    const statuses = await page.evaluate(async () => {
+      const send = async () => {
         const formData = new FormData();
         const blob = new Blob(["fake"], { type: "image/png" });
         formData.append("photo", blob, "test.png");
         const r = await fetch("/api/eleves/upload-photo", { method: "POST", body: formData });
-        return { status: r.status };
-      });
-      if (res.status === 429) {
-        rateLimited = true;
-        console.log(`  ✅ Rate limit déclenché après ${i + 1} tentatives`);
-        break;
-      }
-    }
-    expect(rateLimited).toBeTruthy();
+        return r.status;
+      };
+      return Promise.all(Array.from({ length: 12 }, send));
+    });
+
+    const limited = statuses.filter((s) => s === 429).length;
+    console.log(`  📡 Statuts: ${JSON.stringify(statuses)} — ${limited} refusée(s) (429)`);
+    expect(limited).toBeGreaterThan(0);
   });
 });
