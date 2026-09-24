@@ -16,6 +16,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Relance manuelle : utile pour re-vérifier sans nouveau commit
+  # (`gh workflow run ci.yml --ref <branche>`).
+  workflow_dispatch:
 
 # Un seul run par branche : les pushes successifs annulent le run précédent.
 concurrency:
