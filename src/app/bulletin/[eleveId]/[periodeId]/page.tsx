@@ -14,13 +14,16 @@ export default async function BulletinPage({
   params: Promise<{ eleveId: string; periodeId: string }>;
 }) {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
 
   const { eleveId, periodeId } = await params;
 
   // Blocage financier : bloquer l'accès aux bulletins pour les élèves exclus
   if (session.user.role === "PARENT" || session.user.role === "STUDENT") {
-    const access = await checkEleveAccess(eleveId, session.user.tenantId);
+    const access = await checkEleveAccess(eleveId, session.user.tenantId, {
+      userId: session.user.id,
+      role: session.user.role,
+    });
     if (!access.allowed) {
       redirect("/acces-bloque");
     }
@@ -46,6 +49,7 @@ export default async function BulletinPage({
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 print:bg-white print:py-0">
+      <style dangerouslySetInnerHTML={{ __html: "@page { size: A4; margin: 0; }" }} />
       <div className="max-w-4xl mx-auto mb-4 flex justify-between items-center px-4 print:hidden">
         <Link href="/notes/bulletins">
           <Button variant="outline" size="sm" className="gap-2">

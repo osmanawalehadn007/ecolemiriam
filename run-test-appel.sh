@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test EcolPro - Appel avec notification automatique
+# Test École Miriam - Appel avec notification automatique
 # 1) Initialise les liens élève-parent via API
 # 2) Fait l'appel (1 absent, 1 retard, autres présents)
 # 3) Vérifie les notifications enregistrées
@@ -10,7 +10,7 @@ echo "=== 1. Login admin ==="
 $B goto "$BASE/login"
 $B wait --networkidle
 sleep 1
-$B fill 'input[type="email"]' "admin@lycee-demo.ecolpro.app"
+$B fill 'input[type="email"]' "admin@lycee-demo.ecolemiriam.app"
 $B fill 'input[type="password"]' "Demo@2026!"
 $B click 'button[type="submit"]'
 $B wait --networkidle

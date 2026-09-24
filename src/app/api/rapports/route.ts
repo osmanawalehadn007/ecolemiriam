@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForModel, siteFilterForRelation } from "@/lib/site-scope";
+import { siteFilterForModel, siteFilterForRelation, mergeFilters } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -41,6 +43,9 @@ export async function GET(req: NextRequest) {
     const [totalEleves, totalEnseignants, totalClasses, notesStats, absencesStats] = await Promise.all([
       prisma.eleve.count({ where: { tenantId, ...siteFilter, statut: "ACTIF" } }),
       prisma.enseignant.count({ where: { tenantId, ...siteFilterForModel("enseignant", session.user) } }),
+      prisma.classe.count({
+        where: mergeFilters({ tenantId }, siteFilter, anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId))),
+      }),
       prisma.classe.count({ where: { tenantId, ...siteFilter } }),
       prisma.note.aggregate({
         where: { tenantId, ...eleveFilter, isPubliee: true },
@@ -72,7 +77,11 @@ export async function GET(req: NextRequest) {
     // Rapport d'inspection : données complètes de l'établissement
     const [classes, matieres, enseignants, eleves] = await Promise.all([
       prisma.classe.findMany({
-        where: { tenantId, ...siteFilter },
+        where: mergeFilters(
+          { tenantId },
+          siteFilter,
+          anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+        ),
         select: { nom: true, niveau: true, filiere: true, effectifMax: true, _count: { select: { eleves: { where: { statut: "ACTIF" } } } } },
       }),
       prisma.matiere.findMany({ where: { tenantId, ...siteFilterForModel("matiere", session.user) }, select: { nom: true, code: true, coefficient: true } }),

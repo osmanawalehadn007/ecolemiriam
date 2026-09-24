@@ -3,7 +3,10 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, siteIdForCreate, mergeFilters } from "@/lib/site-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
 
 const CandidatureSchema = z.object({
   nom: z.string().min(1),
@@ -12,7 +15,12 @@ const CandidatureSchema = z.object({
   lieuNaissance: z.string().optional(),
   sexe: z.enum(["M", "F"]).default("M"),
   nationalite: z.string().optional(),
-  classeVoulue: z.string().min(1),
+  // Depuis le dashboard : identifiant de la classe choisie (lié au site). Le
+  // serveur en déduit le nom (classeVoulue) et le site de la candidature.
+  classeId: z.string().optional(),
+  // Nom de la classe. Obligatoire seulement en soumission publique (texte libre)
+  // où aucun classeId n'est fourni ; sinon dérivé du classeId.
+  classeVoulue: z.string().optional(),
   annee: z.string().min(1),
   parentNom: z.string().min(1),
   parentPrenom: z.string().min(1),
@@ -38,13 +46,18 @@ export async function GET(req: NextRequest) {
 
 
   const siteFilter = siteFilterForModel("candidature", session.user);
+  // Année : celle demandée explicitement, sinon l'année courante. Sans ce
+  // défaut, l'API renvoyait les candidatures de toutes les années confondues.
+  const anneeVisee = annee ?? (await getAnneeCouranteLibelle(session.user.tenantId));
   const candidatures = await prisma.candidature.findMany({
-    where: {
-      tenantId: session.user.tenantId,
-      ...siteFilter,
-      ...(statut ? { statut: statut as never } : {}),
-      ...(annee ? { annee } : {}),
-    },
+    where: mergeFilters(
+      {
+        tenantId: session.user.tenantId,
+        ...(statut ? { statut: statut as never } : {}),
+      },
+      siteFilter,
+      anneeFilterForModel("candidature", anneeVisee),
+    ),
     orderBy: { createdAt: "desc" },
   });
 
@@ -54,16 +67,32 @@ export async function GET(req: NextRequest) {
 // POST — soumettre une candidature (public, pas d'auth requise)
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIP(req);
+    const rl = rateLimit({ max: 5, windowSec: 300, key: `admission:${ip}` });
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Trop de candidatures soumises. Réessayez plus tard." },
+        { status: 429, headers: { "Retry-After": "300" } }
+      );
+    }
+
     // Identifier le tenant via le subdomain ou header
     const host = req.headers.get("host") ?? "";
     const slug = host.split(".")[0];
 
     let tenantId: string | null = null;
+    // Site à rattacher à la candidature. Renseigné uniquement lorsqu'un membre
+    // du dashboard (session active) est rattaché à un site unique. Sans cela la
+    // candidature naît avec `siteId: null` et devient invisible aux comptes
+    // site-scopés (le filtre de site exclut `null` pour ce modèle) — d'où le
+    // « Candidature introuvable » au clic sur « Dossier complet ».
+    let siteId: string | null = null;
 
     // Si appelé depuis le dashboard (session active)
     const session = await auth();
     if (session?.user?.tenantId) {
       tenantId = session.user.tenantId;
+      siteId = siteIdForCreate(session.user);
     } else {
       // Appel public : résoudre le tenant via le slug
       const tenant = await prisma.tenant.findUnique({ where: { slug } });
@@ -76,19 +105,67 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const data = CandidatureSchema.parse(body);
 
-    // Année par défaut si non précisée
-    const annee = data.annee || new Date().getFullYear() + "-" + (new Date().getFullYear() + 1);
+    // Année scolaire de la candidature. Depuis le dashboard, elle est
+    // IMPOSÉE par l'année courante du tenant : accepter la valeur du client
+    // permettait de créer une candidature 2026-2027 rattachée à une classe
+    // 2025-2026 (structure d'une année révolue).
+    const anneeCourante = await getAnneeCouranteLibelle(tenantId);
+    const annee =
+      (session?.user?.tenantId ? anneeCourante : null) ??
+      (data.annee ||
+        `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`);
+
+    // Résolution de la classe choisie (dashboard). Le NOM et le SITE de la
+    // candidature proviennent de la classe elle-même : c'est l'unique garant
+    // que la structure existe bien dans le site où l'élève sera inscrit. On
+    // borne la recherche au périmètre de site de l'utilisateur pour empêcher
+    // de rattacher une classe d'un site non autorisé.
+    let classeVoulue = data.classeVoulue?.trim() || "";
+    if (data.classeId && session?.user?.tenantId) {
+       
+      const classe = await prisma.classe.findFirst({
+        where: {
+          id: data.classeId,
+          tenantId,
+          // L'ANNÉE est une borne au même titre que le site : une classe
+          // d'une année révolue n'est plus une structure d'accueil, même
+          // sur le bon site.
+          annee,
+          ...siteFilterForModel("classe", session.user),
+        },
+        select: { nom: true, siteId: true },
+      });
+      if (!classe) {
+        return NextResponse.json(
+          {
+            error: `Classe introuvable, hors de votre périmètre de site, ou n'appartenant pas à l'année ${annee}. Sélectionnez une classe de votre site pour l'année en cours.`,
+          },
+          { status: 400 }
+        );
+      }
+      classeVoulue = classe.nom;
+      // Le site de la candidature suit la classe (source de vérité du site).
+      siteId = classe.siteId;
+    }
+
+    if (!classeVoulue) {
+      return NextResponse.json(
+        { error: "La classe souhaitée est obligatoire." },
+        { status: 400 }
+      );
+    }
 
     const candidature = await prisma.candidature.create({
       data: {
         tenantId,
+        siteId,
         nom: data.nom,
         prenom: data.prenom,
         dateNaissance: new Date(data.dateNaissance),
         lieuNaissance: data.lieuNaissance,
         sexe: data.sexe,
         nationalite: data.nationalite ?? "SN",
-        classeVoulue: data.classeVoulue,
+        classeVoulue,
         annee,
         parentNom: data.parentNom,
         parentPrenom: data.parentPrenom,

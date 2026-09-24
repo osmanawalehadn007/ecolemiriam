@@ -1,11 +1,11 @@
-# EcolPro — Blueprint Complet du Logiciel SaaS de Gestion Scolaire
+# École Miriam — Blueprint Complet du Logiciel SaaS de Gestion Scolaire
 > Version 1.0 | Architecture Multi-Tenant | Niveau Enterprise
 
 ---
 
 ## VISION PRODUIT
 
-EcolPro est une plateforme SaaS multi-tenant de nouvelle génération pour la gestion d'établissements scolaires (écoles primaires, collèges, lycées, universités, centres de formation). Elle remplace les outils fragmentés par un écosystème unifié, sécurisé, et accessible depuis n'importe quel appareil.
+École Miriam est une plateforme SaaS multi-tenant de nouvelle génération pour la gestion d'établissements scolaires (écoles primaires, collèges, lycées, universités, centres de formation). Elle remplace les outils fragmentés par un écosystème unifié, sécurisé, et accessible depuis n'importe quel appareil.
 
 **Positionnement concurrentiel :** Meilleur que PowerSchool, Skolengo, Pronote et Eduka — en termes de modernité UX, profondeur fonctionnelle, et architecture cloud-native.
 
@@ -130,7 +130,7 @@ EcolPro est une plateforme SaaS multi-tenant de nouvelle génération pour la ge
 
 **Transferts inter-établissements :**
 - Export du dossier numérique complet
-- Système de QR Code sécurisé pour transfert de dossier entre tenants EcolPro
+- Système de QR Code sécurisé pour transfert de dossier entre tenants École Miriam
 
 ---
 
@@ -483,7 +483,7 @@ EcolPro est une plateforme SaaS multi-tenant de nouvelle génération pour la ge
 ## ANNEXE — NOMENCLATURE DES RÔLES
 
 ```
-SUPER_ADMIN          → Accès total plateforme (équipe EcolPro)
+SUPER_ADMIN          → Accès total plateforme (équipe École Miriam)
 TENANT_ADMIN         → Directeur/Propriétaire établissement
 PRINCIPAL            → Chef d'établissement
 SECRETARY            → Secrétariat / Administration
@@ -494,10 +494,10 @@ NURSE                → Infirmier(e)
 ACCOUNTANT           → Gestionnaire financier
 PARENT               → Parent / Tuteur légal
 STUDENT              → Élève (accès limité selon l'âge)
-SUPPORT              → Support EcolPro (accès lecture + audit log)
+SUPPORT              → Support École Miriam (accès lecture + audit log)
 ```
 
 ---
 
-*Document rédigé le 26 juin 2026 — EcolPro v1.0 Blueprint*
+*Document rédigé le 26 juin 2026 — École Miriam v1.0 Blueprint*
 *Ce document constitue la base de référence pour le développement du produit.*

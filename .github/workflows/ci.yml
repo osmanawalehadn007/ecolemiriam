@@ -1,8 +1,10 @@
-name: CI — Test, Build & E2E
+name: CI — PR Checks
+
+# Ce workflow s'exécute sur les PRs vers main.
+# Les tests sur push vers main sont gérés par deploy.yml (job ci-gate).
+# Évite la duplication : une PR doit passer ces tests avant d'être mergée.
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
 
@@ -28,7 +30,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
@@ -73,7 +75,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
@@ -130,5 +132,6 @@ jobs:
           path: test-results/
           retention-days: 7
 
-# Déploiement confié à l'intégration Git native de Vercel.
-# Voir vercel.json pour la configuration build/crons/env.
+# Le déploiement sur push vers main est géré par deploy.yml
+# (pipeline complet : CI gate → build → staging → approval → blue-green).
+# Voir docker/DEPLOYMENT-CI.md pour la documentation complète.

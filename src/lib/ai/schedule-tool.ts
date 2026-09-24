@@ -1,5 +1,5 @@
 /**
- * EcolPro — Outil IA : proposition de créneau d'emploi du temps
+ * École Miriam — Outil IA : proposition de créneau d'emploi du temps
  * ============================================================
  * L'IA ne crée JAMAIS de créneau directement. Elle résout les noms
  * (classe/matière/enseignant) en identifiants réels, vérifie les conflits
@@ -13,6 +13,8 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import type { ToolDefinition } from "@/lib/ai/glm-client";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { mergeFilters } from "@/lib/site-scope";
 import { fuzzyFind, normalizeHeure } from "@/lib/text-match";
 import { suggestSlots, ALL_DAYS, type CreneauSuggestion, type Jour } from "@/lib/emploi-du-temps/suggest";
 import { generateBulkPlan, type MatiereCible, type PaireCible } from "@/lib/emploi-du-temps/bulk-generate";
@@ -305,6 +307,17 @@ export async function resolveCreneauProposal(
   // Recherche floue en mémoire (plutôt qu'un simple ILIKE en base) : le modèle
   // écrit souvent des abréviations sans accent ("maths", "1ere L") qui ne sont
   // pas des sous-chaînes littérales du nom réel ("Mathématiques", "1ère L").
+  const allClasses = await prisma.classe.findMany({
+    // L'assistant ne manipule que la grille de l'année en cours : sans cette
+    // borne, une classe homonyme d'une année révolue pouvait être retenue par
+    // la recherche floue.
+    where: mergeFilters(
+      { tenantId },
+      siteFilterForModel("classe", siteClaims ?? {}),
+      anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+    ),
+    select: { id: true, nom: true },
+  });
   // Le périmètre enseignant est appliqué ici : la recherche « floue » ne doit
   // pas devenir un moyen de retrouver, puis d'ouvrir, la classe d'un collègue.
   const allClasses = await withinTeacherScope(
@@ -437,6 +450,17 @@ export async function listCreneaux(
   args: z.infer<typeof ListerArgsSchema>,
   siteClaims?: ScheduleClaims
 ): Promise<ListerResult> {
+  const allClasses = await prisma.classe.findMany({
+    // L'assistant ne manipule que la grille de l'année en cours : sans cette
+    // borne, une classe homonyme d'une année révolue pouvait être retenue par
+    // la recherche floue.
+    where: mergeFilters(
+      { tenantId },
+      siteFilterForModel("classe", siteClaims ?? {}),
+      anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+    ),
+    select: { id: true, nom: true },
+  });
   // Idem : un enseignant ne consulte que le planning de SES classes.
   const allClasses = await withinTeacherScope(
     await prisma.classe.findMany({ where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) }, select: { id: true, nom: true } }),
@@ -461,12 +485,12 @@ export async function listCreneaux(
   const emplois = await prisma.emploiTemps.findMany({
     where: { tenantId, ...siteFilterForModel("emploiTemps", siteClaims ?? {}), classeId: classe.id, annee, ...(args.jour ? { jour: args.jour } : {}) },
     include: {
-      // eslint-disable-next-line ecolpro/require-site-filter -- relation to-one depuis emploiTemps déjà filtré par site au niveau parent
+       
       matiere: { select: { nom: true } },
-      // eslint-disable-next-line ecolpro/require-site-filter -- relation to-one depuis emploiTemps déjà filtré par site au niveau parent
+       
       enseignant: {
         include: {
-          // eslint-disable-next-line ecolpro/require-site-filter -- user est un modèle d'auth, pas de données tenant
+           
           user: { select: { name: true } },
         },
       },
@@ -488,6 +512,16 @@ export async function listCreneaux(
   };
 }
 
+export async function listClasses(tenantId: string, args: z.infer<typeof ListerClassesArgsSchema>, siteClaims?: SessionSiteClaims) {
+  const allClasses = await prisma.classe.findMany({
+    where: mergeFilters(
+      { tenantId },
+      siteFilterForModel("classe", siteClaims ?? {}),
+      anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+    ),
+    select: { nom: true, niveau: true, effectifMax: true },
+    orderBy: { nom: "asc" },
+  });
 /**
  * Projection publique d'une classe pour l'outil `lister_classes` : l'identifiant
  * technique n'était pas exposé avant l'ajout du bornage enseignant, on continue
@@ -502,7 +536,6 @@ export async function listClasses(tenantId: string, args: z.infer<typeof ListerC
     await prisma.classe.findMany({
       where: { tenantId, ...siteFilterForModel("classe", siteClaims ?? {}) },
       select: { id: true, nom: true, niveau: true, effectifMax: true },
-      orderBy: { nom: "asc" },
     }),
     siteClaims,
     (c) => c.id
@@ -550,6 +583,18 @@ export async function listSalles(tenantId: string, siteClaims?: SessionSiteClaim
   return { ok: true as const, salles };
 }
 
+export async function suggererCreneaux(tenantId: string, args: z.infer<typeof SuggererArgsSchema>, siteClaims?: SessionSiteClaims) {
+  const allClasses = await prisma.classe.findMany({
+    // L'assistant ne manipule que la grille de l'année en cours : sans cette
+    // borne, une classe homonyme d'une année révolue pouvait être retenue par
+    // la recherche floue.
+    where: mergeFilters(
+      { tenantId },
+      siteFilterForModel("classe", siteClaims ?? {}),
+      anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+    ),
+    select: { id: true, nom: true },
+  });
 export async function suggererCreneaux(tenantId: string, args: z.infer<typeof SuggererArgsSchema>, siteClaims?: ScheduleClaims) {
   // Le bornage enseignant s'applique avant la recherche floue : suggérer des
   // créneaux suppose d'abord de pouvoir viser la classe.
@@ -613,6 +658,18 @@ export async function suggererCreneaux(tenantId: string, args: z.infer<typeof Su
   };
 }
 
+export async function resolveRestructuration(tenantId: string, args: z.infer<typeof RestructurerArgsSchema>, siteClaims?: SessionSiteClaims) {
+  const allClasses = await prisma.classe.findMany({
+    // L'assistant ne manipule que la grille de l'année en cours : sans cette
+    // borne, une classe homonyme d'une année révolue pouvait être retenue par
+    // la recherche floue.
+    where: mergeFilters(
+      { tenantId },
+      siteFilterForModel("classe", siteClaims ?? {}),
+      anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+    ),
+    select: { id: true, nom: true },
+  });
 export async function resolveRestructuration(tenantId: string, args: z.infer<typeof RestructurerArgsSchema>, siteClaims?: ScheduleClaims) {
   // Une restructuration remplace TOUS les créneaux d'une classe : hors
   // périmètre, elle est refusée comme les autres (message explicite plutôt que

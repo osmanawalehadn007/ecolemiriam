@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
+import { siteFilterForModel } from "@/lib/site-scope";
 import { eleveScopeFilter, isRelationScopedRole } from "@/lib/site-scope";
 import { isClasseInTeacherScope } from "@/lib/teacher-classes";
 import { checkPermission } from "@/lib/rbac";
@@ -13,6 +15,8 @@ export async function GET(req: NextRequest) {
     }
     const denied = checkPermission(session.user.role, "bulletins:read");
     if (denied) return denied;
+    // Route agrégée par classe — refuser l'accès aux PARENT/STUDENT
+    if (session.user.role === "PARENT" || session.user.role === "STUDENT") {
 
     // Outil de personnel (état de publication d'une classe) : pas d'usage
     // borné à un élève.
@@ -28,6 +32,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 });
     }
 
+    const siteFilter = siteFilterForModel("bulletin", session.user);
     // Garde serveur : on n'indique l'existence de bulletins que pour ses classes.
     if (!(await isClasseInTeacherScope(session.user, classeId))) {
       return NextResponse.json(
@@ -46,6 +51,7 @@ export async function GET(req: NextRequest) {
         eleve: { classeId },
         periodeId,
         tenantId: session.user.tenantId,
+        ...siteFilter,
         ...eleveScope,
       },
     });
@@ -60,6 +66,7 @@ export async function GET(req: NextRequest) {
         periodeId,
         tenantId: session.user.tenantId,
         isPublie: true,
+        ...siteFilter,
         ...eleveScope,
       },
     });

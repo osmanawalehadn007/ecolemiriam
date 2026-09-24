@@ -14,6 +14,10 @@ export async function GET(req: NextRequest) {
     }
     const denied = checkPermission(session.user.role, "bulletins:read");
     if (denied) return denied;
+    // Route agrégée par classe — refuser l'accès aux PARENT/STUDENT
+    if (session.user.role === "PARENT" || session.user.role === "STUDENT") {
+      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+    }
     const siteFilter = siteFilterForModel("classe", session.user);
 
     const { searchParams } = new URL(req.url);
@@ -34,6 +38,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Récupérer la classe et les élèves
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- export d'archives : une classe d'une année révolue doit rester exportable
     const classe = await prisma.classe.findFirst({
       where: { id: classeId, tenantId: session.user.tenantId, ...siteFilter },
       select: { nom: true },
@@ -64,6 +69,7 @@ export async function GET(req: NextRequest) {
         // tenant et au périmètre de sites : elles ne peuvent appartenir qu'à un
         // bulletin autorisé. `BulletinMatiere` n'a pas de chemin de site propre
         // (elle passe par le bulletin, qui ne porte pas de colonne `siteId`).
+        // eslint-disable-next-line ecolemiriam/require-site-filter
         // eslint-disable-next-line ecolpro/require-site-filter
         matieres: { include: { matiere: { select: { nom: true, code: true } } } },
       },

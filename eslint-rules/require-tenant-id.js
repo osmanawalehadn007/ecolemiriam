@@ -5,7 +5,7 @@
  * Détecte: prisma.eleve.findMany({ where: { ... } }) sans tenantId
  *
  * @example .eslintrc.js
- * rules: { "ecolpro/require-tenant-id": "error" }
+ * rules: { "ecolemiriam/require-tenant-id": "error" }
  */
 
 "use strict";
@@ -165,6 +165,7 @@ module.exports = {
           // place le contrôle d'appartenance qui doit les précéder.
           if (isUniqueSelector) {
             if (whereProp && whereHasTenantId(whereProp.value)) return;
+            const fn = enclosingFunction(context.sourceCode.getAncestors(node));
             const fn = enclosingFunction(context.getAncestors());
             if (fn && hasOwnershipCheck(fn, model)) return;
             context.report({

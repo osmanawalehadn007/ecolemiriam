@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel, eleveScopeFilter, isRelationScopedRole } from "@/lib/site-scope";
 import { isClasseInTeacherScope } from "@/lib/teacher-classes";
@@ -13,6 +14,8 @@ export async function GET(req: NextRequest) {
     }
     const denied = checkPermission(session.user.role, "bulletins:read");
     if (denied) return denied;
+    // Route agrégée par classe — refuser l'accès aux PARENT/STUDENT
+    if (session.user.role === "PARENT" || session.user.role === "STUDENT") {
 
     // Relevé nominatif de classe : artefact de personnel. Un périmètre
     // personnel (PARENT / STUDENT) n'y a pas accès — le borner à un élève
@@ -47,6 +50,7 @@ export async function GET(req: NextRequest) {
     // 1. Récupérer élèves + bulletins + notes en parallèle (3 requêtes simultanées)
     const [eleves, bulletins, notes] = await Promise.all([
       prisma.eleve.findMany({
+        where: { classeId, tenantId, statut: "ACTIF", ...siteFilterForModel("eleve", session.user) },
         where: { classeId, tenantId, statut: "ACTIF", ...eleveScope },
         select: {
           id: true, nom: true, prenom: true, matricule: true,
@@ -59,6 +63,7 @@ export async function GET(req: NextRequest) {
           eleve: { classeId, tenantId, statut: "ACTIF" },
           periodeId,
           tenantId,
+          ...siteFilterForModel("bulletin", session.user),
           ...eleveScope,
         },
         include: {
@@ -67,11 +72,13 @@ export async function GET(req: NextRequest) {
           // un bulletin autorisé. `BulletinMatiere` n'offre par ailleurs aucun
           // chemin de site propre (elle passe par le bulletin, qui n'a pas de
           // colonne `siteId`).
+          // eslint-disable-next-line ecolemiriam/require-site-filter
           // eslint-disable-next-line ecolpro/require-site-filter
           matieres: { include: { matiere: { select: { id: true, nom: true, code: true } } } },
         },
       }),
       prisma.note.findMany({
+        where: { classeId, periodeId, tenantId, ...siteFilterForModel("note", session.user) },
         where: { classeId, periodeId, tenantId, ...eleveScope },
         select: {
           id: true, eleveId: true, matiereId: true,
@@ -225,6 +232,7 @@ export async function GET(req: NextRequest) {
           eleveId: { in: eleveIds },
           periodeId: { in: allPeriodeIds },
           tenantId,
+          ...siteFilterForModel("bulletin", session.user),
           ...eleveScope,
         },
         select: { eleveId: true, periodeId: true, moyenneGenerale: true, rang: true },

@@ -4,6 +4,9 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForRelation, requireSiteIdForCreate } from "@/lib/site-filter";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import type { Role } from "@prisma/client";
 
@@ -38,12 +41,20 @@ export async function GET(req: NextRequest) {
       : {};
 
     const evaluations = await prisma.evaluation.findMany({
+      where: mergeFilters(
+        {
+          tenantId: session.user.tenantId,
+          ...(classeId ? { classeId } : {}),
+        },
+        siteFilter,
+        anneeFilterForModel(
+          "evaluation",
+          await getAnneeCouranteLibelle(session.user.tenantId),
+        ),
+      ),
       where: {
-        tenantId: session.user.tenantId,
         ...siteFilter,
         ...teacherFilter,
-        ...(classeId ? { classeId } : {}),
-      },
       include: {
         classe: { select: { nom: true, niveau: true } },
         matiere: { select: { nom: true, code: true, coefficient: true } },

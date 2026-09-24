@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { canAccessSite } from "@/lib/site-filter";
+import { siteFilterForModel } from "@/lib/site-scope";
+import { niveauToLabel } from "@/lib/niveau";
 import { siteFilterForModel, personalScopeFilter, isRelationScopedRole } from "@/lib/site-scope";
 import { checkPermission } from "@/lib/rbac";
 
@@ -14,17 +17,18 @@ export async function GET(
     if (!session?.user?.tenantId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
+    const denied = checkPermission(session.user.role, "finance:read");
+    if (denied) return denied;
+
+    const { id } = await params;
+    const facture = await prisma.facture.findFirst({
+      where: { id, tenantId: session.user.tenantId, ...siteFilterForModel("facture", session.user) },
     // Document financier : réservé aux rôles finance. Une famille garde accès
     // aux documents de SES enfants — c'est le filtre de périmètre du `where`
     // ci-dessous qui le borne, et non un refus global (ancien comportement :
     // aucun contrôle de rôle, facture d'autrui accessible par identifiant).
     if (!isRelationScopedRole(session.user.role)) {
-      const denied = checkPermission(session.user.role, "finance:read");
-      if (denied) return denied;
     }
-
-    const { id } = await params;
-    const facture = await prisma.facture.findFirst({
       where: {
         id,
         tenantId: session.user.tenantId,
@@ -48,6 +52,7 @@ export async function GET(
           },
         },
         tenant: true,
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- paiement n'a pas de siteId, scopé via la facture parente déjà filtrée par site
         // eslint-disable-next-line ecolpro/require-site-filter -- paiement n'a pas de siteId, scopé via la facture parente déjà filtrée par site
         paiements: {
           orderBy: { date: "desc" },
@@ -67,7 +72,7 @@ export async function GET(
 
     const tenant = facture.tenant;
     const eleve = facture.eleve;
-    const tuteur = eleve.parents[0]?.parent;
+    const tuteur = eleve?.parents[0]?.parent;
     const totalPaye = facture.paiements.reduce((sum, p) => sum + p.montant, 0);
     const restant = facture.montant - totalPaye;
 
@@ -138,22 +143,41 @@ export async function GET(
   .stamp { font-size: 11px; color: #d1d5db; text-align: right; }
   .print-btn { display: block; margin: 16px auto; padding: 10px 24px; background: #1e40af; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
   .print-btn:hover { background: #1e3a8a; }
-  @media print { .print-btn { display: none; } body { padding: 0; background: white; } .invoice { box-shadow: none; } }
+  @page { size: A4; margin: 10mm; }
+  @media print {
+    .print-btn { display: none; }
+    body { padding: 0; background: white; }
+    .invoice { box-shadow: none; max-width: 100%; border-radius: 0; }
+    .header { padding: 14px 20px; }
+    .school-info { padding: 10px 20px; }
+    .body { padding: 14px 20px; }
+    .amount-box { padding: 12px; margin: 12px 0; }
+    .amount-box .amount { font-size: 24px; }
+    .summary-grid { margin: 12px 0; gap: 8px; }
+    .summary-card { padding: 10px; }
+    .footer { padding: 12px 20px; }
+    .signature-line { margin-top: 24px; }
+    table { margin: 10px 0; }
+    th, td { padding: 6px 10px; }
+  }
 </style>
 </head>
 <body>
   <div class="invoice">
-    <div class="header">
-      <div>
-        <h1>FACTURE</h1>
-        <div class="inv-num">N° ${facture.numero}</div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:13px;opacity:0.9">${new Date(facture.createdAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}</div>
-        <div style="margin-top:6px">
-          <span class="status-badge" style="background:${statutColors[facture.statut] ?? "#6b7280"}">
-            ${statutLabels[facture.statut] ?? facture.statut}
-          </span>
+    <div class="header" style="flex-direction:column;align-items:stretch">
+      ${tenant.logoUrl ? `<img src="${tenant.logoUrl}" alt="Logo" style="max-width:100%;max-height:40mm;object-fit:contain;margin:0 auto 8px" />` : ""}
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <h1>FACTURE</h1>
+          <div class="inv-num">N° ${facture.numero}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:13px;opacity:0.9">${new Date(facture.createdAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}</div>
+          <div style="margin-top:6px">
+            <span class="status-badge" style="background:${statutColors[facture.statut] ?? "#6b7280"}">
+              ${statutLabels[facture.statut] ?? facture.statut}
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -169,9 +193,9 @@ export async function GET(
       <div class="two-col">
         <div>
           <div class="section-title">Élève</div>
-          <div class="row"><span class="label">Nom & Prénom</span><span class="value">${eleve.prenom} ${eleve.nom}</span></div>
-          <div class="row"><span class="label">Matricule</span><span class="value">${eleve.matricule}</span></div>
-          <div class="row"><span class="label">Classe</span><span class="value">${eleve.classe?.nom ?? "N/A"} — ${eleve.classe?.niveau ?? ""}</span></div>
+          <div class="row"><span class="label">Nom & Prénom</span><span class="value">${eleve?.prenom ?? ""} ${eleve?.nom ?? ""}</span></div>
+          <div class="row"><span class="label">Matricule</span><span class="value">${eleve?.matricule ?? ""}</span></div>
+          <div class="row"><span class="label">Classe</span><span class="value">${eleve?.classe?.nom ?? "N/A"} — ${eleve?.classe?.niveau ? niveauToLabel(eleve.classe.niveau) : ""}</span></div>
         </div>
         <div>
           ${tuteur ? `
@@ -187,11 +211,6 @@ export async function GET(
       <div class="row"><span class="label">Libellé</span><span class="value">${facture.libelle}</span></div>
       ${facture.echeance ? `<div class="row"><span class="label">Échéance</span><span class="value">${new Date(facture.echeance).toLocaleDateString("fr-FR")}</span></div>` : ""}
       ${facture.createdBy ? `<div class="row"><span class="label">Émise par</span><span class="value">${facture.createdBy.name}</span></div>` : ""}
-
-      <div class="amount-box">
-        <div class="label">Montant facturé</div>
-        <div class="amount">${formatMoney(facture.montant, facture.devise)}</div>
-      </div>
 
       <div class="summary-grid">
         <div class="summary-card summary-invoiced">
@@ -240,7 +259,7 @@ export async function GET(
         <div class="signature-line">Cachet & Signature</div>
       </div>
       <div class="stamp">
-        EcolPro — Facture générée le ${new Date().toLocaleDateString("fr-FR")}
+        École Miriam — Facture générée le ${new Date().toLocaleDateString("fr-FR")}
       </div>
     </div>
   </div>

@@ -1,5 +1,5 @@
 /**
- * EcolPro — Contrôle d'accès basé sur les rôles (RBAC)
+ * École Miriam — Contrôle d'accès basé sur les rôles (RBAC)
  * ============================================================
  * Source unique de vérité pour l'autorisation côté serveur.
  *
@@ -20,6 +20,7 @@ import { NextResponse } from "next/server";
 import type { Role } from "@prisma/client";
 import type { Session } from "next-auth";
 import { auditFire } from "@/lib/audit";
+import prisma from "@/lib/prisma";
 
 // ------------------------------------------------------------
 // Cœur pur extrait dans `./rbac-matrix` : le type `Permission`, la matrice
@@ -28,11 +29,208 @@ import { auditFire } from "@/lib/audit";
 // (`Sidebar` → `menu.ts`). Tout est ré-exporté ici : les imports existants
 // vers `@/lib/rbac` restent valides.
 // ------------------------------------------------------------
+export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
+  // Plateforme École Miriam — accès total (y compris super-admin)
+  SUPER_ADMIN: ["*"],
+
+  // Directeur / Propriétaire de l'établissement — tout sauf l'administration plateforme
+  TENANT_ADMIN: [
+    "eleves:*", "parents:*", "enseignants:*", "classes:*", "matieres:*",
+    "notes:*", "evaluations:*", "bulletins:*", "absences:*", "examens:*",
+    "emploi-du-temps:*", "communication:*", "messages:*", "vie-scolaire:*",
+    "admissions:*", "rh:*", "finance:*", "finance:approve", "inventaire:*", "alumni:*",
+    "orientation:*", "cours:*", "analytics:*", "rapports:*", "documents:*",
+    "ai:*", "audit:read", "parametres:*", "structures:*",
+    "cahier-texte:*", "export:full",
+    "fournitures:*",
+  ],
+
+  // Chef d'établissement — pédagogie & vie scolaire complètes, pas la finance/RH en écriture
+  // mais peut approuver les annulations de paiement (finance:approve)
+  PRINCIPAL: [
+    "eleves:*", "parents:*", "enseignants:*", "classes:*", "matieres:*",
+    "notes:*", "evaluations:*", "bulletins:*", "absences:*", "examens:*",
+    "emploi-du-temps:*", "communication:*", "messages:*", "vie-scolaire:*",
+    "admissions:*", "rh:read", "finance:read", "finance:approve", "inventaire:*", "alumni:*",
+    "orientation:*", "cours:*", "analytics:*", "rapports:*", "documents:*",
+    "ai:*", "parametres:read", "structures:read",
+    "cahier-texte:*",
+    "fournitures:*",
+  ],
+
+  // Secrétariat — gestion administrative
+  SECRETARY: [
+    "eleves:*", "parents:*", "classes:read", "matieres:read",
+    "absences:*", "emploi-du-temps:*", "communication:read", "communication:send",
+    "messages:*", "admissions:*", "examens:read", "inventaire:read",
+    "documents:*", "alumni:read", "bulletins:read", "rapports:read",
+    "parametres:read", "structures:read",
+    "cahier-texte:read",
+    "fournitures:read", "fournitures:write", "fournitures:validate", "fournitures:publish",
+  ],
+
+  // Enseignant — sa pédagogie
+  TEACHER: [
+    "eleves:read", "classes:read", "matieres:read",
+    "notes:*", "evaluations:*", "absences:read", "absences:write",
+    "bulletins:read", "emploi-du-temps:read", "messages:*",
+    "cours:*", "analytics:read", "examens:read", "ai:teacher",
+    "cahier-texte:*",
+    "fournitures:read", "fournitures:write",
+  ],
+
+  // Professeur principal — enseignant + bulletins/conseil + vie scolaire
+  CLASS_TEACHER: [
+    "eleves:read", "classes:read", "matieres:read",
+    "notes:*", "evaluations:*", "absences:*",
+    "bulletins:read", "bulletins:write", "bulletins:publish",
+    "emploi-du-temps:read", "messages:*", "cours:*",
+    "vie-scolaire:*", "orientation:read", "orientation:write",
+    "analytics:read", "examens:read", "parents:read", "ai:teacher",
+    "cahier-texte:*",
+    "fournitures:read", "fournitures:write",
+  ],
+
+  // Conseiller / CPE — vie scolaire, orientation, cahier de texte & modification emploi du temps
+  COUNSELOR: [
+    "eleves:read", "absences:read", "vie-scolaire:*", "orientation:*",
+    "messages:*", "parents:read", "communication:read", "analytics:read",
+    "emploi-du-temps:read", "emploi-du-temps:write",
+    "cahier-texte:read",
+  ],
+
+  // Infirmier(e) — consultation santé/élèves
+  NURSE: [
+    "eleves:read", "absences:read", "messages:read", "messages:write",
+  ],
+
+  // Comptable — finance, paie, admissions & réinscription (bout-en-bout)
+  // Le comptable peut inscrire un nouvel élève, gérer le renouvellement,
+  // générer les factures et encaisser les paiements. La direction est notifiée
+  // automatiquement à chaque étape clé du flux.
+  ACCOUNTANT: [
+    "finance:*", "rh:*", "eleves:read", "eleves:write", "parents:read",
+    "inventaire:*", "analytics:read", "messages:*", "rapports:read",
+    "admissions:read", "admissions:write",
+    "parametres:read", "parametres:write",
+  ],
+
+  // Parent — consultation de son périmètre (lecture seule + messagerie)
+  PARENT: [
+    "bulletins:read", "absences:read", "notes:read", "messages:*",
+    "communication:read", "cours:read", "orientation:read",
+    "emploi-du-temps:read", "ai:parent",
+    "fournitures:read",
+  ],
+
+  // Élève — consultation de son périmètre (lecture seule + messagerie limitée)
+  // Un élève peut lire et répondre dans une conversation où il est déjà participant,
+  // mais ne peut pas initier de nouvelle conversation (règle École360).
+  STUDENT: [
+    "bulletins:read", "absences:read", "notes:read",
+    "messages:read", "messages:reply",
+    "communication:read", "cours:*", "emploi-du-temps:read",
+    "fournitures:read",
+  ],
+};
+
+// ------------------------------------------------------------
+// Vérification de permission
+// ------------------------------------------------------------
+export function roleHasPermission(role: Role, permission: Permission): boolean {
+  const perms = ROLE_PERMISSIONS[role] ?? [];
+  if (perms.includes("*")) return true;
+  if (perms.includes(permission)) return true;
+  const moduleName = permission.split(":")[0];
+  if (perms.includes(`${moduleName}:*`)) return true;
+  return false;
+}
 import { roleHasPermission, type Permission } from "./rbac-matrix";
 export { ROLE_PERMISSIONS, roleHasPermission } from "./rbac-matrix";
 export type { Permission };
 
+// ------------------------------------------------------------
+// Cache en mémoire des permissions personnalisées par utilisateur
+// (évite une requête DB à chaque check de permission)
+// ------------------------------------------------------------
+interface CachedPerms {
+  grants: Set<string>;
+  denies: Set<string>;
+  expiresAt: number;
+}
+const userPermsCache = new Map<string, CachedPerms>();
+const PERMS_CACHE_TTL = 30_000; // 30 secondes
 
+/**
+ * Récupère les permissions personnalisées d'un utilisateur depuis la base,
+ * avec un cache en mémoire de 30s pour éviter les requêtes répétées.
+ */
+async function getUserCustomPerms(userId: string, tenantId: string): Promise<{ grants: Set<string>; denies: Set<string> }> {
+  const cacheKey = `${userId}:${tenantId}`;
+  const cached = userPermsCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { grants: cached.grants, denies: cached.denies };
+  }
+
+  const rows = await prisma.userPermission.findMany({
+    where: { userId, tenantId },
+    select: { permission: true, mode: true },
+  });
+
+  const grants = new Set<string>();
+  const denies = new Set<string>();
+  for (const r of rows) {
+    if (r.mode === "deny") denies.add(r.permission);
+    else grants.add(r.permission);
+  }
+
+  userPermsCache.set(cacheKey, { grants, denies, expiresAt: Date.now() + PERMS_CACHE_TTL });
+  return { grants, denies };
+}
+
+/**
+ * Invalide le cache des permissions pour un utilisateur (à appeler après modification).
+ */
+export function invalidateUserPermsCache(userId: string, tenantId: string): void {
+  userPermsCache.delete(`${userId}:${tenantId}`);
+}
+
+/**
+ * Vérifie si un utilisateur a une permission, en tenant compte :
+ *   1. Des permissions de son rôle (ROLE_PERMISSIONS)
+ *   2. Des surcharges personnalisées (UserPermission : grant/deny)
+ *
+ * Logique :
+ *   - Si le rôle accorde la permission ET qu'il n'y a pas de deny → OK
+ *   - Si le rôle n'accorde pas la permission mais qu'il y a un grant → OK
+ *   - Si le rôle accorde la permission mais qu'il y a un deny → refusé
+ *   - SUPER_ADMIN : toujours OK (non surchargeable)
+ */
+export async function userHasPermission(
+  userId: string,
+  role: Role,
+  tenantId: string,
+  permission: Permission
+): Promise<boolean> {
+  // SUPER_ADMIN : accès total non surchargeable
+  if (role === "SUPER_ADMIN") return true;
+
+  const roleGrants = roleHasPermission(role, permission);
+  const { grants, denies } = await getUserCustomPerms(userId, tenantId);
+
+  // Un deny explicite l'emporte toujours
+  if (denies.has(permission)) return false;
+  // Un deny sur le module entier (module:*) bloque aussi
+  const moduleName = permission.split(":")[0];
+  if (denies.has(`${moduleName}:*`)) return false;
+
+  // Un grant explicite accorde même si le rôle ne l'a pas
+  if (grants.has(permission)) return true;
+  if (grants.has(`${moduleName}:*`)) return true;
+
+  // Sinon, fallback sur le rôle
+  return roleGrants;
+}
 
 // ------------------------------------------------------------
 // Garde d'autorisation pour les route handlers
@@ -99,7 +297,15 @@ export async function authorize(
     const needed = Array.isArray(opts.permission)
       ? opts.permission
       : [opts.permission];
-    const allowed = needed.some((p) => roleHasPermission(role, p));
+    // Utiliser userHasPermission pour tenir compte des surcharges personnalisées
+    const checks = await Promise.all(
+      needed.map((p) =>
+        tenantId
+          ? userHasPermission(session.user.id, role, tenantId, p)
+          : roleHasPermission(role, p)
+      )
+    );
+    const allowed = checks.some(Boolean);
     if (!allowed) {
       auditFire({
         userId: session.user.id,
@@ -135,6 +341,11 @@ export async function authorize(
  *
  *   const denied = checkPermission(session.user.role, "eleves:write");
  *   if (denied) return denied;
+ *
+ * Note : cette fonction est SYNCHRONE et ne vérifie que les permissions du
+ * rôle, sans tenir compte des surcharges personnalisées. Pour une vérification
+ * complète incluant les permissions personnalisées, utiliser
+ * `checkPermissionAsync()`.
  */
 export function checkPermission(
   role: Role,
@@ -157,35 +368,56 @@ export function checkPermission(
 }
 
 /**
+ * Garde ASYNCHRONE qui tient compte des permissions personnalisées.
+ * À utiliser dans les routes qui font déjà `await auth()` :
+ *
+ *   const denied = await checkPermissionAsync(session, "eleves:write");
+ *   if (denied) return denied;
+ */
+export async function checkPermissionAsync(
+  session: Session,
+  permission: Permission
+): Promise<NextResponse | null> {
+  const role = session.user.role as Role;
+  const tenantId = session.user.tenantId ?? "";
+
+  // SUPER_ADMIN : toujours OK
+  if (role === "SUPER_ADMIN") return null;
+
+  const allowed = tenantId
+    ? await userHasPermission(session.user.id, role, tenantId, permission)
+    : roleHasPermission(role, permission);
+
+  if (!allowed) {
+    auditFire({
+      userId: session.user.id,
+      tenantId: tenantId || null,
+      action: "auth:check",
+      verdict: "DENIED",
+      resource: permission,
+      reason: "Privilèges insuffisants",
+      metadata: { role },
+    });
+    return NextResponse.json(
+      { error: "Accès refusé : privilèges insuffisants" },
+      { status: 403 }
+    );
+  }
+  return null;
+}
+
+/** Réservé aux administrateurs de la plateforme École Miriam. */
  * Variante de {@link checkPermission} pour une action couverte par **plusieurs**
  * modules (OU logique) : générer un bulletin de paie, par exemple, que la
  * direction tient de `rh:write` et le comptable de `paie:write` — deux métiers,
  * deux permissions, une seule route.
- *
  *   const denied = checkAnyPermission(session.user.role, ["rh:write", "paie:write"]);
- *   if (denied) return denied;
- */
 export function checkAnyPermission(
   role: Role,
   permissions: Permission[]
 ): NextResponse | null {
   if (permissions.some((permission) => roleHasPermission(role, permission))) {
-    return null;
-  }
-  auditFire({
-    action: "auth:check",
-    verdict: "DENIED",
     resource: permissions.join(","),
-    reason: "Privilèges insuffisants",
-    metadata: { role },
-  });
-  return NextResponse.json(
-    { error: "Accès refusé : privilèges insuffisants" },
-    { status: 403 }
-  );
-}
-
-
 /** Réservé aux administrateurs de la plateforme EcolPro. */
 export async function authorizeSuperAdmin(): Promise<AuthSuccess | AuthFailure> {
   const session = await auth();

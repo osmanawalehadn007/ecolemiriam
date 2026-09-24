@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
       const eleves = await prisma.eleve.findMany({
         where: { tenantId, ...siteFilter, classeId: data.classeId },
         include: {
+          // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
           // Enfants d'un élève déjà borné au périmètre (site + classe) :
           // `EleveParent` n'a pas de chemin de site propre.
           // eslint-disable-next-line ecolpro/require-site-filter
@@ -53,11 +54,15 @@ export async function POST(request: NextRequest) {
         .flatMap((e) => e.parents.map((ep) => ep.parent.phone))
         .filter(Boolean);
     } else if (data.destinataires === "eleve" && data.eleveId) {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
+      const eleve = await prisma.eleve.findUnique({
+        where: { id: data.eleveId, tenantId },
+        include: {
+          // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
       // `eleveId` vient du corps de requête : sans filtre de site, on pouvait
       // déclencher l'envoi de SMS aux parents d'un élève d'un autre site.
       const eleve = await prisma.eleve.findFirst({
         where: { id: data.eleveId, tenantId, ...siteFilterForModel("eleve", session.user) },
-        include: {
           // eslint-disable-next-line ecolpro/require-site-filter
           parents: {
             include: { parent: { select: { phone: true } } },

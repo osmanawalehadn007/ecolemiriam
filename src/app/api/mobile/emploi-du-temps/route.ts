@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { withMobileScope } from "@/lib/mobile-auth";
+import { siteFilterForRelation } from "@/lib/site-filter";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
 import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
 import { siteFilterForRelation, mergeFilters } from "@/lib/site-filter";
 import { teacherEmploiTempsFilter } from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
-  const user = await verifyMobileScope(req);
-  if (!user) return mobileUnauthorized();
-  if (!user.tenantId) {
-    return NextResponse.json({ error: "Aucun établissement associé" }, { status: 403 });
-  }
-
+  return withMobileScope(req, async (user) => {
   // `EmploiTemps` n'a pas de colonne `siteId` : filtrage via la classe.
   // Pour un enseignant, on borne en plus sur SA propre fiche : `teacherClasseFilter`
   // ne suffirait pas — il montrerait les créneaux de ses collègues pour les
@@ -19,6 +19,10 @@ export async function GET(req: NextRequest) {
     where: mergeFilters(
       { tenantId: user.tenantId },
       siteFilterForRelation(user, "classe"),
+      anneeFilterForModel(
+        "emploiTemps",
+        await getAnneeCouranteLibelle(user.tenantId),
+      ),
       await teacherEmploiTempsFilter(user)
     ),
     select: {
@@ -40,4 +44,5 @@ export async function GET(req: NextRequest) {
   });
 
   return NextResponse.json({ emploi });
+  });
 }

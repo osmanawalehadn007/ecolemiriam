@@ -1,4 +1,5 @@
-import prisma from "@/lib/prisma";
+import { runWithRlsBatch } from "@/lib/prisma";
+import { cached, cacheDel, cacheKey } from "@/lib/redis";
 import type { Role } from "@prisma/client";
 
 const TEACHER_ROLES: Role[] = ["TEACHER", "CLASS_TEACHER"];
@@ -56,6 +57,8 @@ export async function resolveTeacherScope(claims: TeacherScopeClaims): Promise<{
  * (via l'emploi du temps et/ou le rôle de prof principal).
  *
  * Retourne également les IDs des matières qu'il enseigne.
+ *
+ * CACHE: Redis (2 minutes, partagé entre instances blue/green).
  */
 export async function getTeacherScope(
   tenantId: string,
@@ -70,42 +73,73 @@ export async function getTeacherScope(
     return { classeIds: [], matiereIds: [], isRestricted: false };
   }
 
-  // eslint-disable-next-line ecolpro/require-site-filter -- teacher lookup by userId+tenantId, site scoping is caller's responsibility
-  const enseignant = await prisma.enseignant.findFirst({
-    where: { userId, tenantId },
-    select: { id: true },
-  });
+  return cached(
+    cacheKey(tenantId, "teacher-scope", userId),
+    () => runWithRlsBatch(tenantId, null, async (tx) => {
+       
+      const enseignant = await tx.enseignant.findFirst({
+        where: { userId, tenantId },
+        select: { id: true },
+      });
 
-  if (!enseignant) {
-    return { classeIds: [], matiereIds: [], isRestricted: true };
-  }
+      if (!enseignant) {
+        return { classeIds: [], matiereIds: [], isRestricted: true };
+      }
 
-  /* eslint-disable ecolpro/require-site-filter -- teacher scope resolution, site scoping is caller's responsibility */
-  const [emploiEntries, principalClasses] = await Promise.all([
-    prisma.emploiTemps.findMany({
-      where: { enseignantId: enseignant.id, tenantId },
-      select: { classeId: true, matiereId: true },
-      distinct: ["classeId", "matiereId"],
+       
+      const [emploiEntries, principalClasses, affectations, matieres] = await Promise.all([
+        tx.emploiTemps.findMany({
+          where: { enseignantId: enseignant.id, tenantId },
+          select: { classeId: true, matiereId: true },
+          distinct: ["classeId", "matiereId"],
+        }),
+        tx.classe.findMany({
+          where: { profPrincipalId: enseignant.id, tenantId },
+          select: { id: true },
+        }),
+        // Nouveau : affectations explicites via EnseignantAffectation
+        tx.enseignantAffectation.findMany({
+          where: { enseignantId: enseignant.id, tenantId },
+          select: { classeId: true, matiereId: true },
+        }),
+        // Nouveau : matières liées via EnseignantMatiere
+        tx.enseignantMatiere.findMany({
+          where: { enseignantId: enseignant.id, tenantId },
+          select: { matiereId: true },
+        }),
+      ]);
+       
+
+      const classeIds = Array.from(
+        new Set([
+          ...emploiEntries.map((e) => e.classeId),
+          ...principalClasses.map((c) => c.id),
+          ...affectations.map((a) => a.classeId),
+        ])
+      );
+
+      const matiereIds = Array.from(
+        new Set([
+          ...emploiEntries.map((e) => e.matiereId).filter(Boolean) as string[],
+          ...affectations.map((a) => a.matiereId).filter(Boolean) as string[],
+          ...matieres.map((m) => m.matiereId),
+        ])
+      );
+
+      return { classeIds, matiereIds, isRestricted: true };
     }),
-    prisma.classe.findMany({
-      where: { profPrincipalId: enseignant.id, tenantId },
-      select: { id: true },
-    }),
-  ]);
-  /* eslint-enable ecolpro/require-site-filter */
-
-  const classeIds = Array.from(
-    new Set([
-      ...emploiEntries.map((e) => e.classeId),
-      ...principalClasses.map((c) => c.id),
-    ])
+    120 // 2 minutes
   );
+}
 
-  const matiereIds = Array.from(
-    new Set(emploiEntries.map((e) => e.matiereId).filter(Boolean) as string[])
-  );
-
-  return { classeIds, matiereIds, isRestricted: true };
+/**
+ * Invalide le cache du scope enseignant pour un utilisateur.
+ */
+export async function invalidateTeacherScope(
+  tenantId: string,
+  userId: string
+): Promise<void> {
+  await cacheDel(cacheKey(tenantId, "teacher-scope", userId));
 }
 
 // ------------------------------------------------------------

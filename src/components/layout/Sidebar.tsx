@@ -10,6 +10,7 @@ import {
   Users,
   ClipboardList,
   BookOpen,
+  BookMarked,
   Calendar,
   GraduationCap,
   MessageSquare,
@@ -31,6 +32,13 @@ import {
   Package,
   Crown,
   PlayCircle,
+  Banknote,
+  Backpack,
+  Tag,
+  RefreshCw,
+  IdCard,
+  FileCheck,
+  ArrowRightLeft,
   type LucideIcon,
 } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
@@ -62,16 +70,27 @@ const navGroups: NavGroup[] = [
   {
     groupKey: "groupPedagogie",
     items: [
-      { labelKey: "eleves", icon: Users, href: "/eleves", color: "text-violet-500" },
-      { labelKey: "notes", icon: BookOpen, href: "/notes", color: "text-green-500" },
-      { labelKey: "examens", icon: GraduationCap, href: "/evaluations", color: "text-yellow-500" },
-      { labelKey: "cours", icon: PlayCircle, href: "/cours", color: "text-indigo-500" },
-      { labelKey: "emploi", icon: Calendar, href: "/emploi-du-temps", color: "text-cyan-500" },
+      { labelKey: "eleves", icon: Users, href: "/eleves", color: "text-violet-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "TEACHER", "CLASS_TEACHER", "COUNSELOR", "NURSE", "ACCOUNTANT", "PARENT"] },
+      { labelKey: "transfertClasse", icon: ArrowRightLeft, href: "/eleves/transfert", color: "text-violet-400", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY"] },
+      { labelKey: "cartesScolaires", icon: IdCard, href: "/eleves/cartes", color: "text-violet-400", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY"] },
+      { labelKey: "attestations", icon: FileCheck, href: "/eleves/attestations", color: "text-violet-400", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY"] },
+      { labelKey: "notes", icon: BookOpen, href: "/notes", color: "text-green-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "TEACHER", "CLASS_TEACHER", "PARENT", "STUDENT"] },
+      { labelKey: "examens", icon: GraduationCap, href: "/examens", color: "text-yellow-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "TEACHER", "CLASS_TEACHER"] },
+      { labelKey: "cahierTexte", icon: BookOpen, href: "/cahier-de-texte", color: "text-teal-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "TEACHER", "CLASS_TEACHER"] },
+      { labelKey: "cours", icon: PlayCircle, href: "/cours", color: "text-indigo-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "TEACHER", "CLASS_TEACHER", "PARENT", "STUDENT"] },
+      { labelKey: "mesClasses", icon: Users, href: "/mes-classes", color: "text-pink-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "TEACHER", "CLASS_TEACHER"] },
+      { labelKey: "devoirs", icon: ClipboardList, href: "/devoirs", color: "text-amber-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "TEACHER", "CLASS_TEACHER"] },
+      { labelKey: "ressourcesPedagogiques", icon: BookMarked, href: "/ressources-pedagogiques", color: "text-emerald-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "TEACHER", "CLASS_TEACHER", "PARENT", "STUDENT"] },
+      { labelKey: "fournitures", icon: Backpack, href: "/fournitures", color: "text-rose-500" },
+      { labelKey: "emploi", icon: Calendar, href: "/emploi-du-temps", color: "text-cyan-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "TEACHER", "CLASS_TEACHER", "PARENT", "STUDENT"] },
     ],
   },
   {
     groupKey: "groupVieScolaire",
     items: [
+      { labelKey: "absences", icon: ClipboardList, href: "/absences", color: "text-orange-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "CLASS_TEACHER", "TEACHER", "COUNSELOR", "NURSE", "PARENT", "STUDENT"] },
+      { labelKey: "vieScolaire", icon: Shield, href: "/vie-scolaire", color: "text-red-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "CLASS_TEACHER"] },
+      { labelKey: "parents", icon: UserCheck, href: "/parents", color: "text-pink-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "CLASS_TEACHER"] },
       { labelKey: "absences", icon: ClipboardList, href: "/absences", color: "text-orange-500" },
       { labelKey: "vieScolaire", icon: Shield, href: "/vie-scolaire", color: "text-red-500" },
       { labelKey: "parents", icon: UserCheck, href: "/parents", color: "text-pink-500" },
@@ -83,6 +102,12 @@ const navGroups: NavGroup[] = [
   {
     groupKey: "groupGestion",
     items: [
+      { labelKey: "admissions", icon: UserPlus, href: "/admissions", color: "text-teal-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "ACCOUNTANT"] },
+      { labelKey: "reinscription", icon: RefreshCw, href: "/reinscription", color: "text-cyan-400", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "ACCOUNTANT"] },
+      { labelKey: "facturation", icon: Receipt, href: "/facturation", color: "text-emerald-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT", "SECRETARY"] },
+      { labelKey: "finances", icon: Banknote, href: "/finances", color: "text-emerald-600", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT", "SECRETARY"] },
+      { labelKey: "rh", icon: Briefcase, href: "/rh", color: "text-amber-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT", "SECRETARY"] },
+      { labelKey: "inventaire", icon: Package, href: "/inventaire", color: "text-stone-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT", "SECRETARY"] },
       { labelKey: "admissions", icon: UserPlus, href: "/admissions", color: "text-teal-500" },
       { labelKey: "facturation", icon: Receipt, href: "/facturation", color: "text-emerald-500" },
       { labelKey: "rh", icon: Briefcase, href: "/rh", color: "text-amber-500" },
@@ -93,12 +118,17 @@ const navGroups: NavGroup[] = [
     groupKey: "groupCommunication",
     items: [
       { labelKey: "messages", icon: MessageSquare, href: "/messages", color: "text-indigo-500" },
+      { labelKey: "communication", icon: Bell, href: "/communication", color: "text-sky-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR"] },
       { labelKey: "communication", icon: Bell, href: "/communication", color: "text-sky-500" },
     ],
   },
   {
     groupKey: "groupRapports",
     items: [
+      { labelKey: "rapports", icon: FileText, href: "/rapports", color: "text-slate-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "ACCOUNTANT"] },
+      { labelKey: "analytics", icon: BarChart3, href: "/analytics", color: "text-red-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT", "COUNSELOR", "TEACHER", "CLASS_TEACHER"] },
+      { labelKey: "orientation", icon: Compass, href: "/orientation", color: "text-lime-600", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "COUNSELOR", "CLASS_TEACHER", "PARENT"] },
+      { labelKey: "alumni", icon: Archive, href: "/alumni", color: "text-purple-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY"] },
       { labelKey: "rapports", icon: FileText, href: "/rapports", color: "text-slate-500" },
       { labelKey: "analytics", icon: BarChart3, href: "/analytics", color: "text-red-500" },
       { labelKey: "orientation", icon: Compass, href: "/orientation", color: "text-lime-600" },
@@ -190,7 +220,7 @@ export function Sidebar({ userName = "Admin", userRole = "Directeur", userAvatar
         {!collapsed && (
           <div className="overflow-visible animate-fade-in">
             <p className="text-base font-extrabold bg-gradient-to-r from-indigo-200 via-purple-200 to-pink-200 bg-clip-text text-transparent tracking-wide leading-none">
-              EcolPro
+              École Miriam
             </p>
             <TenantSwitcher currentTenantName={tenantName} currentTenantId={tenantId} availableTenants={availableTenants} />
             <SiteSwitcher currentSiteId={currentSiteId} sites={sites} isAdmin={isSiteAdmin} />
@@ -331,7 +361,8 @@ export function Sidebar({ userName = "Admin", userRole = "Directeur", userAvatar
         })}
       </nav>
 
-      {/* Paramètres */}
+      {/* Paramètres — masqué pour les rôles sans permission parametres:read */}
+      {(["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY"].includes(roleKey)) && (
       <div className="px-3 pb-4 border-t border-slate-800/40 pt-4">
         <Link
           href="/parametres"
@@ -344,6 +375,23 @@ export function Sidebar({ userName = "Admin", userRole = "Directeur", userAvatar
           {!collapsed && <span>{t("parametres")}</span>}
         </Link>
       </div>
+      )}
+
+      {/* Tarifs — accessible au comptable */}
+      {roleKey === "ACCOUNTANT" && (
+      <div className="px-3 pb-4 border-t border-slate-800/40 pt-4">
+        <Link
+          href="/parametres/tarifs"
+          className={cn(
+            "flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium transition-all duration-300 text-slate-400 hover:bg-slate-900/60 hover:text-slate-100 group relative",
+            pathname === "/parametres/tarifs" && "bg-gradient-to-r from-indigo-600/90 to-purple-600/90 text-white shadow-lg shadow-indigo-600/15"
+          )}
+        >
+          <Tag className="flex-shrink-0 w-5 h-5" />
+          {!collapsed && <span>{t("tarifs")}</span>}
+        </Link>
+      </div>
+      )}
 
       {/* Profil utilisateur */}
       {!collapsed && (

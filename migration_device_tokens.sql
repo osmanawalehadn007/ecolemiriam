@@ -1,5 +1,5 @@
 -- ============================================================
--- EcolPro — Migration : tokens push appareils mobiles (Capacitor)
+-- École Miriam — Migration : tokens push appareils mobiles (Capacitor)
 -- À exécuter sur la base Supabase/PostgreSQL.
 -- ============================================================
 

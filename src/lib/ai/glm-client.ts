@@ -1,4 +1,10 @@
 /**
+ * École Miriam — Client Assistant IA (GLM via OpenRouter, API compatible OpenAI)
+ * ============================================================
+ * Variables d'environnement :
+ *   GLM_API_KEY=...
+ *   GLM_API_BASE_URL=https://openrouter.ai/api/v1
+ *   GLM_MODEL=z-ai/glm-4.6   (identifiant exact affiché sur openrouter.ai/models)
  * EcolPro — Client Assistant IA
  * ==============================
  * Façade publique de l'abstraction IA. Point d'entrée inchangé pour tout le
@@ -33,6 +39,70 @@ export async function generateChat(
   messages: ChatMessage[],
   options?: ChatOptions
 ): Promise<ChatResult> {
+  const apiKey = process.env.GLM_API_KEY;
+  const model = process.env.GLM_MODEL;
+
+  if (!apiKey || !model) {
+    throw new AiConfigError(
+      "Assistant IA non configuré (GLM_API_KEY / GLM_MODEL manquants dans l'environnement)"
+    );
+  }
+
+  const baseUrl = process.env.GLM_API_BASE_URL ?? DEFAULT_BASE_URL;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://ecolemiriam.app";
+
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      // Recommandé par OpenRouter pour l'attribution des requêtes.
+      "HTTP-Referer": appUrl,
+      "X-Title": "École Miriam",
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: options?.temperature ?? 0.6,
+      max_tokens: options?.maxTokens ?? 400,
+      reasoning: { enabled: options?.reasoning ?? false },
+      ...(options?.tools ? { tools: options.tools, tool_choice: "auto" } : {}),
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Erreur API IA (${res.status}): ${text.slice(0, 300)}`);
+  }
+
+  const data = await res.json();
+  const message = data?.choices?.[0]?.message;
+  let toolCalls: ToolCall[] = (message?.tool_calls ?? []).map(
+    (tc: { id: string; function: { name: string; arguments: string } }) => ({
+      id: tc.id,
+      name: tc.function.name,
+      arguments: tc.function.arguments,
+    })
+  );
+  let content: string | null = message?.content ?? null;
+
+  if (toolCalls.length === 0 && typeof content === "string" && content.includes("<tool_call>")) {
+    // On ne convertit en toolCalls que si des outils étaient réellement
+    // proposés pour cet appel — sinon l'appelant (ex: generateCompletion,
+    // qui ignore les toolCalls) se retrouverait avec un contenu vidé sans
+    // rien à exécuter. Dans tous les cas, on nettoie la balise du texte.
+    if (options?.tools && options.tools.length > 0) {
+      const fallback = parseFallbackToolCalls(content);
+      if (fallback.length > 0) {
+        toolCalls = fallback;
+        content = null;
+      }
+    } else {
+      content = stripToolCallTags(content);
+    }
+  }
+
+  return { content, toolCalls };
   const provider = options?.tools?.length
     ? await getAiProviderForTools()
     : await getAiProvider();

@@ -9,6 +9,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    pool: "threads", // Évite le crash undici/jsdom sur Node 22+ (markAsUncloneable)
     coverage: {
       provider: "v8",
       reporter: ["text", "text-summary", "lcov"],

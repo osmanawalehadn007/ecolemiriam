@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getBulletinData } from "@/lib/pdf/bulletin-generator";
 import { checkPermission } from "@/lib/rbac";
+import { checkEleveAccess } from "@/lib/financial-guard";
 import { isEleveInTeacherScope } from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
@@ -21,6 +22,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 });
     }
 
+    // Vérifier la filiation pour PARENT/STUDENT : un parent ne doit voir
+    // que les bulletins de ses propres enfants.
+    const access = await checkEleveAccess(eleveId, session.user.tenantId, {
+      userId: session.user.id,
+      role: session.user.role,
+    });
+    if (!access.allowed) {
+      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     // Garde serveur : `eleveId` vient de l'URL — un enseignant ne prévisualise
     // le bulletin que d'un élève de ses classes.
     if (!(await isEleveInTeacherScope(session.user, eleveId))) {

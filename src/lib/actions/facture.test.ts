@@ -65,6 +65,7 @@ describe("facture actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAuth.mockResolvedValue({
+      user: { id: "user1", tenantId: "tenant1", name: "Admin", role: "TENANT_ADMIN" },
       // Rôle tenant-wide : `siteFilterForModel` renvoie alors `{}` et les
       // assertions peuvent porter sur un `where` exact (id + tenantId).
       user: {
@@ -176,13 +177,14 @@ describe("facture actions", () => {
 
     it("creates facture with correct data and returns success", async () => {
       mockPrisma.facture.count.mockResolvedValue(5);
+      mockPrisma.facture.findFirst.mockResolvedValue(null);
       mockPrisma.facture.create.mockResolvedValue({ id: "new-facture-id" });
       const result = await createFacture({
         eleveId: "e1",
         libelle: "Scolarité 2025",
         montant: 50000,
         devise: "DJF",
-        echeance: "2025-12-31",
+        type: "MENSUALITE",
       });
       expect(result).toEqual({ success: true, id: "new-facture-id" });
       expect(mockPrisma.facture.create).toHaveBeenCalledWith(
@@ -201,8 +203,9 @@ describe("facture actions", () => {
 
     it("generates correct invoice number", async () => {
       mockPrisma.facture.count.mockResolvedValue(0);
+      mockPrisma.facture.findFirst.mockResolvedValue(null);
       mockPrisma.facture.create.mockResolvedValue({ id: "f1" });
-      await createFacture({ eleveId: "e1", libelle: "Test", montant: 1000, devise: "DJF" });
+      await createFacture({ eleveId: "e1", libelle: "Test", montant: 1000, devise: "DJF", type: "MENSUALITE" });
       const call = mockPrisma.facture.create.mock.calls[0][0];
       expect(call.data.numero).toMatch(/^FAC-\d{4}-00001$/);
     });

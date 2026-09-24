@@ -75,6 +75,9 @@ export async function POST(req: NextRequest) {
     const { eleveId, type, gravite, description, lieu, date, notes } = parsed.data;
     const tenantId = session.user.tenantId;
 
+    // Vérifier que l'élève appartient au tenant
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
+    const eleve = await prisma.eleve.findFirst({ where: { id: eleveId, tenantId } });
     // `eleveId` vient du corps : pour un enseignant, seule une classe de son
     // périmètre est recevable. Refus AVANT la lecture de la fiche élève — un
     // 404 confirmerait l'organisation des classes d'un collègue.

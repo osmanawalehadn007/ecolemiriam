@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { getSchoolGroup } from "@/lib/school-groups";
 import type { StructureType, Sexe } from "@prisma/client";
+import { siteFilterForModel, requireSiteIdForCreate, mergeFilters, siteIdForCreate } from "@/lib/site-scope";
 import { siteFilterForModel, requireSiteIdForCreate, mergeFilters, resolveSiteScope } from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { revalidateTag, revalidatePath } from "next/cache";
@@ -11,6 +12,7 @@ import { matriculeGenerator, parseDate, type Action, type LignePlan } from "@/li
 import { identityKey } from "@/lib/eleve-identity";
 import { resoudreIdentiteKey } from "@/lib/eleve-identity-server";
 import { randomUUID } from "crypto";
+import { checkPermission } from "@/lib/rbac";
 
 // Mapping: nom du groupe scolaire → StructureType
 const GROUP_TO_STRUCTURE: Record<string, StructureType> = {
@@ -40,9 +42,8 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.tenantId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
-    if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Permissions insuffisantes" }, { status: 403 });
-    }
+    const denied = checkPermission(session.user.role, "eleves:write");
+    if (denied) return denied;
     const siteError = requireSiteIdForCreate(session.user);
     if (siteError) return NextResponse.json({ error: siteError }, { status: 400 });
 
@@ -54,6 +55,11 @@ export async function POST(req: NextRequest) {
     if (!file) return NextResponse.json({ error: "Aucun fichier fourni" }, { status: 400 });
 
     const formSiteId = formData.get("siteId") as string | null;
+    // Résolution robuste du site cible : formData > siteId de session > site
+    // unique déduit du périmètre (siteIdForCreate). Sans cela, un utilisateur
+    // ayant un seul site dans siteIds mais sans siteId explicite dans la session
+    // créait des classes/élèves orphelins (siteId null).
+    const targetSiteId = formSiteId || session.user.siteId || siteIdForCreate(session.user) || null;
 
     // `siteId` vient du FORMULAIRE : sans contrôle, un administrateur du site A
     // pouvait importer des élèves dans le site B — voire, la clé étrangère
@@ -214,14 +220,22 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Classes ─────────────────────────────────────────────────
+    // Filtrer les classes par site cible pour éviter de réutiliser une
+    // classe homonyme d'un autre site.
+    const classeFilter = targetSiteId
+      ? { AND: [{ siteId: targetSiteId }] }
+      : siteFilterForModel("classe", session.user);
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
+    const existingClasses = await prisma.classe.findMany({
+      // Bornées à l'année de l'import : une classe homonyme d'une année
+      // révolue ne doit pas être réutilisée comme structure d'accueil.
+      where: mergeFilters({ tenantId, annee }, classeFilter),
     // Classes du site cible uniquement (jamais une classe homonyme d'un autre
     // site). Le filtre de site de la session est TOUJOURS appliqué : le site
     // cible ne peut être qu'un site autorisé (vérifié ci-dessus).
     const classeScopeFilter = siteFilterForModel("classe", session.user);
-    const classeFilter = targetSiteId
       ? mergeFilters(classeScopeFilter, { AND: [{ siteId: targetSiteId }] })
       : classeScopeFilter;
-    const existingClasses = await prisma.classe.findMany({
       where: mergeFilters({ tenantId }, classeFilter),
       select: { id: true, nom: true, siteId: true },
     });
@@ -246,7 +260,7 @@ export async function POST(req: NextRequest) {
       });
       const created = await prisma.classe.findMany({
         where: mergeFilters(
-          { tenantId, nom: { in: classesToCreate } },
+          { tenantId, annee, nom: { in: classesToCreate } },
           siteFilterForModel("classe", session.user)
         ),
         select: { id: true, nom: true, siteId: true },
@@ -367,10 +381,13 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    revalidateTag("eleves-stats");
+    revalidateTag("eleves-stats", "max");
     // Les effectifs par classe affichés dans Paramètres → Pédagogie.
     revalidatePath("/parametres");
     revalidatePath("/eleves");
+    revalidateTag("dashboard-data", "max");
+    revalidateTag("classes-list", "max");
+    revalidateTag("eleves-stats");
     revalidateTag("dashboard-data");
     revalidateTag("classes-list");
 

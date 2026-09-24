@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getSchoolGroup, SCHOOL_GROUP_ORDER, type SchoolGroup } from "@/lib/school-groups";
+import { niveauToLabel } from "@/lib/niveau";
 import { useTranslations } from "next-intl";
 import type { SiteColor } from "@/lib/site-colors";
 
@@ -401,6 +402,7 @@ export function ElevesTable({ eleves, total, effectifs, classes, siteColors, ini
                           {niveauEntries.map(([niveau, classes]) => (
                             <div key={niveau} className="flex items-center gap-2">
                               <span className="text-xs font-semibold text-muted-foreground min-w-[60px] flex-shrink-0">
+                                {niveauToLabel(niveau)}
                                 {niveau}
                               </span>
                               <div className="flex flex-wrap gap-1.5">
@@ -603,6 +605,26 @@ export function ElevesTable({ eleves, total, effectifs, classes, siteColors, ini
           {!activeGroup && (
             <div className="text-center py-10 text-muted-foreground text-sm">
               {t("selectLevelForClasses")}
+            </div>
+          )}
+
+          {/* Bouton "charger plus" si tous les élèves ne sont pas chargés */}
+          {eleves.length < total && (
+            <div className="px-4 py-3 border-t text-center">
+              <p className="text-xs text-muted-foreground mb-2">
+                {eleves.length} / {total} {t("title").toLowerCase()}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const params = new URLSearchParams(searchParams.toString());
+                  params.set("limit", String(Math.max(eleves.length + 200, 200)));
+                  router.push(`?${params.toString()}`);
+                }}
+              >
+                Charger plus
+              </Button>
             </div>
           )}
         </>

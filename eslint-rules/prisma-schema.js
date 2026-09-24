@@ -1,5 +1,5 @@
 /**
- * Lecture de `prisma/schema.prisma` pour les règles ecolpro.
+ * Lecture de `prisma/schema.prisma` pour les règles ecolemiriam.
  *
  * POURQUOI
  * --------

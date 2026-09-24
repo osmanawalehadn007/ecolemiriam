@@ -1,5 +1,5 @@
 /**
- * EcolPro — Moteur de suggestion de créneaux d'emploi du temps
+ * École Miriam — Moteur de suggestion de créneaux d'emploi du temps
  * ============================================================
  * Extrait de GET /api/emploi-du-temps/suggest pour être partagé avec l'outil
  * IA (src/lib/ai/schedule-tool.ts) sans dupliquer la logique de scoring.
@@ -67,16 +67,17 @@ export async function suggestSlots(opts: {
   const annee = await getAnneeCouranteLibelle(tenantId);
   if (!annee) throw new Error("Aucune année scolaire active pour ce tenant");
 
-  /* eslint-disable ecolpro/require-site-filter -- library function, caller passes tenantId and is responsible for site scoping */
-  const [classCreneaux, allCreneaux, allEnseignants, salles, disponibilites, matiere] = await Promise.all([
+  /* eslint-disable ecolemiriam/require-site-filter -- library function, caller passes tenantId and is responsible for site scoping */
+  const [classCreneaux, allCreneaux, allEnseignants, salles, disponibilites, indisponibilites, matiere] = await Promise.all([
     prisma.emploiTemps.findMany({ where: { tenantId, classeId, annee } }),
     prisma.emploiTemps.findMany({ where: { tenantId, annee } }),
     prisma.enseignant.findMany({ where: { tenantId }, include: { user: { select: { name: true } } } }),
     prisma.salle.findMany({ where: { tenantId } }),
     prisma.disponibiliteEnseignant.findMany({ where: { tenantId } }),
+    prisma.indisponibiliteEnseignant.findMany({ where: { tenantId } }),
     prisma.matiere.findFirst({ where: { id: matiereId, tenantId }, select: { nom: true } }),
   ]);
-  /* eslint-enable ecolpro/require-site-filter */
+  /* eslint-enable ecolemiriam/require-site-filter */
 
   // Il n'existe pas de relation Enseignant <-> Matiere en base : on se base
   // sur le champ libre `specialite`. Si aucun prof ne correspond à la
@@ -128,6 +129,15 @@ export async function suggestSlots(opts: {
     dayMap.get(d.jour)!.push({ debut: d.heureDebut, fin: d.heureFin });
   }
 
+  // Indisponibilités : créneaux à éviter (autre établissement, jour off…).
+  const indispoMap = new Map<string, Map<string, Array<{ debut: string; fin: string }>>>();
+  for (const ind of indisponibilites) {
+    if (!indispoMap.has(ind.enseignantId)) indispoMap.set(ind.enseignantId, new Map());
+    const dayMap = indispoMap.get(ind.enseignantId)!;
+    if (!dayMap.has(ind.jour)) dayMap.set(ind.jour, []);
+    dayMap.get(ind.jour)!.push({ debut: ind.heureDebut, fin: ind.heureFin });
+  }
+
   const suggestions: CreneauSuggestion[] = [];
   const roomNames = salles.length > 0 ? salles.map((s) => s.nom) : ["Salle 01", "Salle 02", "Salle 03"];
 
@@ -146,9 +156,10 @@ export async function suggestSlots(opts: {
         const ens = enseignants.find((e) => e.id === enseignantId);
         if (ens) {
           const isBusy = (teacherBusy.get(enseignantId)?.get(jour) || []).some((s) => overlaps(debut, fin, s.debut, s.fin));
+          const isIndispo = (indispoMap.get(enseignantId)?.get(jour) || []).some((s) => overlaps(debut, fin, s.debut, s.fin));
           const dispo = dispoMap.get(enseignantId)?.get(jour) || [];
           const hasDispo = dispo.length === 0 || dispo.some((s) => overlaps(debut, fin, s.debut, s.fin));
-          if (!isBusy && hasDispo) {
+          if (!isBusy && !isIndispo && hasDispo) {
             availableTeachers = [{ id: enseignantId, nom: ens.user.name ?? "Enseignant" }];
           }
         }
@@ -156,6 +167,8 @@ export async function suggestSlots(opts: {
         for (const ens of enseignants) {
           const isBusy = (teacherBusy.get(ens.id)?.get(jour) || []).some((s) => overlaps(debut, fin, s.debut, s.fin));
           if (isBusy) continue;
+          const isIndispo = (indispoMap.get(ens.id)?.get(jour) || []).some((s) => overlaps(debut, fin, s.debut, s.fin));
+          if (isIndispo) continue;
           const dispo = dispoMap.get(ens.id)?.get(jour) || [];
           const hasDispo = dispo.length === 0 || dispo.some((s) => overlaps(debut, fin, s.debut, s.fin));
           if (hasDispo) {

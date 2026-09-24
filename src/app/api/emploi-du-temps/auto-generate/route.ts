@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel, siteFilterForRelation } from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { mergeFilters } from "@/lib/site-scope";
 
 type Jour = "DIMANCHE" | "LUNDI" | "MARDI" | "MERCREDI" | "JEUDI" | "VENDREDI" | "SAMEDI";
 
@@ -103,6 +105,18 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch all data needed
+    const [classe, allMatieres, enseignants, allSalles, existingCreneaux, disponibilites, indisponibilites] = await Promise.all([
+      prisma.classe.findFirst({
+        where: mergeFilters(
+          { id: classeId, tenantId },
+          classeFilter,
+          anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+        ),
+        select: { id: true, nom: true, siteId: true },
+      }),
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
+      prisma.matiere.findMany({ where: { tenantId }, orderBy: { coefficient: "desc" } }),
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
     const [classe, allMatieres, enseignants, allSalles, existingCreneaux, disponibilites] = await Promise.all([
       prisma.classe.findFirst({ where: { id: classeId, tenantId, ...classeFilter }, select: { id: true, nom: true, siteId: true } }),
       prisma.matiere.findMany({ where: { tenantId, ...matiereFilter }, orderBy: { coefficient: "desc" } }),
@@ -112,6 +126,10 @@ export async function POST(req: NextRequest) {
       }),
       prisma.salle.findMany({ where: { tenantId, ...salleFilter } }),
       prisma.emploiTemps.findMany({ where: { tenantId, ...emploiFilter, annee } }),
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
+      prisma.disponibiliteEnseignant.findMany({ where: { tenantId } }),
+       
+      prisma.indisponibiliteEnseignant.findMany({ where: { tenantId } }),
       prisma.disponibiliteEnseignant.findMany({ where: { tenantId, ...dispoFilter } }),
     ]);
 
@@ -232,6 +250,15 @@ export async function POST(req: NextRequest) {
       const dm = dispoMap.get(d.enseignantId)!;
       if (!dm.has(d.jour)) dm.set(d.jour, []);
       dm.get(d.jour)!.push({ debut: d.heureDebut, fin: d.heureFin });
+    }
+
+    // Indisponibilités : créneaux à éviter (autre établissement, jour off…).
+    const indispoMap = new Map<string, Map<string, Array<{ debut: string; fin: string }>>>();
+    for (const ind of indisponibilites) {
+      if (!indispoMap.has(ind.enseignantId)) indispoMap.set(ind.enseignantId, new Map());
+      const dm = indispoMap.get(ind.enseignantId)!;
+      if (!dm.has(ind.jour)) dm.set(ind.jour, []);
+      dm.get(ind.jour)!.push({ debut: ind.heureDebut, fin: ind.heureFin });
     }
 
     // Determine matiere-teacher associations from existing data
@@ -367,6 +394,9 @@ export async function POST(req: NextRequest) {
                 if ((teacherBusy.get(ens.id)?.get(jour) || []).some((s) => overlaps(sStart, sEnd, s.debut, s.fin))) {
                   isBusy = true; break;
                 }
+                if ((indispoMap.get(ens.id)?.get(jour) || []).some((s) => overlaps(sStart, sEnd, s.debut, s.fin))) {
+                  isBusy = true; break;
+                }
                 const dispo = dispoMap.get(ens.id)?.get(jour) || [];
                 const hasDispo = dispo.length === 0 || dispo.some((s) => overlaps(sStart, sEnd, s.debut, s.fin));
                 if (!hasDispo) { isBusy = true; break; }
@@ -481,6 +511,9 @@ export async function POST(req: NextRequest) {
             if ((teacherBusy.get(cand.enseignantId)?.get(cand.jour) || []).some((s) => overlaps(sStart, sEnd, s.debut, s.fin))) {
               teacherConf = true; break;
             }
+            if ((indispoMap.get(cand.enseignantId)?.get(cand.jour) || []).some((s) => overlaps(sStart, sEnd, s.debut, s.fin))) {
+              teacherConf = true; break;
+            }
           }
           if (teacherConf) continue;
         }
@@ -574,6 +607,8 @@ export async function POST(req: NextRequest) {
               for (const ens of enseignants) {
                 const isBusy = (teacherBusy.get(ens.id)?.get(cand.jour) || []).some((s) => overlaps(cand.heureDebut, cand.heureFin, s.debut, s.fin));
                 if (isBusy) continue;
+                const isIndispo = (indispoMap.get(ens.id)?.get(cand.jour) || []).some((s) => overlaps(cand.heureDebut, cand.heureFin, s.debut, s.fin));
+                if (isIndispo) continue;
                 const dispo = dispoMap.get(ens.id)?.get(cand.jour) || [];
                 const hasDispo = dispo.length === 0 || dispo.some((s) => overlaps(cand.heureDebut, cand.heureFin, s.debut, s.fin));
                 if (!hasDispo) continue;

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
+import { withMobileScope } from "@/lib/mobile-auth";
 import { siteFilterForModel, siteFilterForRelation, mergeFilters } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
 import {
   teacherClasseFilter,
   teacherEleveFilter,
@@ -11,12 +14,7 @@ import {
 } from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
-  const user = await verifyMobileScope(req);
-  if (!user) return mobileUnauthorized();
-  if (!user.tenantId) {
-    return NextResponse.json({ error: "Aucun établissement associé" }, { status: 403 });
-  }
-
+  return withMobileScope(req, async (user) => {
   // Les statistiques agrégées ne doivent pas trahir les volumes des sites
   // auxquels l'utilisateur n'a pas accès.
   if (user.role === "PARENT" || user.role === "STUDENT") {
@@ -54,25 +52,31 @@ export async function GET(req: NextRequest) {
     totalAbsences,
     totalIncidents,
   ] = await Promise.all([
-    prisma.eleve.count({
-      where: mergeFilters({ tenantId, statut: "ACTIF" }, eleveFilter, teacherEleveScope),
-    }),
+    prisma.eleve.count({ where: { tenantId, statut: "ACTIF", ...eleveFilter } }),
     prisma.classe.count({
-      where: mergeFilters({ tenantId }, eleveFilter, teacherClasseScope),
+      where: mergeFilters({ tenantId }, eleveFilter, anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId))),
     }),
     prisma.enseignant.count({ where: { tenantId, ...siteFilterForModel("enseignant", user) } }),
-    prisma.note.count({
-      where: mergeFilters({ tenantId }, eleveRelFilter, teacherNoteScope),
-    }),
-    prisma.absence.count({
-      where: mergeFilters({ tenantId }, eleveRelFilter, teacherEleveRelScope),
-    }),
-    prisma.incident.count({
-      where: mergeFilters({ tenantId }, eleveRelFilter, teacherEleveRelScope),
-    }),
+    prisma.note.count({ where: { tenantId, ...eleveRelFilter } }),
+    prisma.absence.count({ where: { tenantId, ...eleveRelFilter } }),
+    prisma.incident.count({ where: { tenantId, ...eleveRelFilter } }),
   ]);
 
   const classes = await prisma.classe.findMany({
+    where: mergeFilters(
+      { tenantId },
+      eleveFilter,
+      anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+    ),
+    prisma.eleve.count({
+      where: mergeFilters({ tenantId, statut: "ACTIF" }, eleveFilter, teacherEleveScope),
+      where: mergeFilters({ tenantId }, eleveFilter, teacherClasseScope),
+    prisma.note.count({
+      where: mergeFilters({ tenantId }, eleveRelFilter, teacherNoteScope),
+    prisma.absence.count({
+      where: mergeFilters({ tenantId }, eleveRelFilter, teacherEleveRelScope),
+    prisma.incident.count({
+      where: mergeFilters({ tenantId }, eleveRelFilter, teacherEleveRelScope),
     where: mergeFilters({ tenantId }, eleveFilter, teacherClasseScope),
     select: { id: true, nom: true, niveau: true },
     orderBy: { nom: "asc" },
@@ -92,6 +96,7 @@ export async function GET(req: NextRequest) {
   );
 
   const matieres = await prisma.matiere.findMany({
+    where: { tenantId, ...siteFilterForModel("matiere", user) },
     where: mergeFilters(
       { tenantId },
       siteFilterForModel("matiere", user),
@@ -139,5 +144,6 @@ export async function GET(req: NextRequest) {
     notesParMatiere,
     moyennesParClasse,
     absencesParMois: totalAbsences,
+  });
   });
 }

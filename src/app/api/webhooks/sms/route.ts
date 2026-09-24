@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
       // est inter-tenants par nécessité.
       // Limite connue : si deux établissements enregistrent le même numéro,
       // le message est rattaché arbitrairement au premier trouvé.
+      // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- webhook entrant : aucune session, le tenant est déterminé par le numéro de téléphone
       // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter -- webhook entrant sans session : le numéro est le seul discriminant (il détermine le tenant ET donc le site)
       const parent = await prisma.parent.findFirst({
         where: { phone: body.from },
@@ -77,5 +78,5 @@ export async function POST(request: NextRequest) {
  * Endpoint de vérification Africa's Talking
  */
 export async function GET() {
-  return NextResponse.json({ status: "EcolPro SMS webhook actif" });
+  return NextResponse.json({ status: "École Miriam SMS webhook actif" });
 }

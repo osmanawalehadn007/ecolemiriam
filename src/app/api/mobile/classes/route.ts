@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
+import { withMobileScope } from "@/lib/mobile-auth";
 import prisma from "@/lib/prisma";
 import { eleveScopeFilter, siteFilterForModel, mergeFilters } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { teacherClasseFilter, teacherEleveFilter } from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await verifyMobileScope(req);
-    if (!user) return mobileUnauthorized();
-    if (!user.tenantId) {
-      return NextResponse.json({ error: "Aucun établissement associé" }, { status: 403 });
-    }
+    return await withMobileScope(req, async (user) => {
     const eleveFilter = eleveScopeFilter(user, null);
     const classeFilter = siteFilterForModel("classe", user);
 
@@ -25,7 +23,13 @@ export async function GET(req: NextRequest) {
     // `Classe` porte `siteId` ; les élèves imbriqués sont filtrés séparément
     // pour qu'un parent ne récupère pas la liste complète de la classe.
 
+    const anneeFilter = anneeFilterForModel(
+      "classe",
+      await getAnneeCouranteLibelle(user.tenantId),
+    );
+
     const classes = await prisma.classe.findMany({
+      where: mergeFilters({ tenantId: user.tenantId }, classeFilter, anneeFilter),
       where: mergeFilters({ tenantId: user.tenantId }, classeFilter, teacherClasseScope),
       include: {
         eleves: {
@@ -45,6 +49,7 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json({ classes });
+    });
   } catch (error) {
     console.error("[API/mobile/classes]", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });

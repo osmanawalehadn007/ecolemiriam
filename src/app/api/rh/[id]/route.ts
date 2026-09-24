@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
+import { checkPermission } from "@/lib/rbac";
+import { siteFilterForModel } from "@/lib/site-scope";
 import { checkAnyPermission, checkPermission } from "@/lib/rbac";
 import { siteFilterForRelation, siteFilterForModel } from "@/lib/site-filter";
 
@@ -37,7 +39,7 @@ export async function PATCH(
   const body = await req.json();
   const data = FicheRHSchema.parse(body);
 
-  const siteFilter = siteFilterForRelation(session.user, "user");
+  const siteFilter = siteFilterForModel("enseignant", session.user);
 
   // Vérifier que l'enseignant appartient au tenant et au site
   const enseignant = await prisma.enseignant.findFirst({
@@ -48,20 +50,23 @@ export async function PATCH(
     return NextResponse.json({ error: "Enseignant introuvable" }, { status: 404 });
   }
 
+  // Construire les données sans les champs date (traités séparément)
+  const { dateEntree, dateSortie, ...rest } = data;
+
   // Upsert fiche RH
   const ficheRH = await prisma.ficheRH.upsert({
     where: { enseignantId: id },
     create: {
       enseignantId: id,
       tenantId: session.user.tenantId,
-      ...data,
-      dateEntree: data.dateEntree ? new Date(data.dateEntree) : null,
-      dateSortie: data.dateSortie ? new Date(data.dateSortie) : null,
+      ...rest,
+      dateEntree: dateEntree ? new Date(dateEntree) : null,
+      dateSortie: dateSortie ? new Date(dateSortie) : null,
     },
     update: {
-      ...data,
-      dateEntree: data.dateEntree ? new Date(data.dateEntree) : undefined,
-      dateSortie: data.dateSortie ? new Date(data.dateSortie) : undefined,
+      ...rest,
+      dateEntree: dateEntree ? new Date(dateEntree) : dateEntree === null ? null : undefined,
+      dateSortie: dateSortie ? new Date(dateSortie) : dateSortie === null ? null : undefined,
     },
   });
 
@@ -88,8 +93,16 @@ export async function POST(
   const body = await req.json();
   const { mois, annee } = z.object({ mois: z.number(), annee: z.number() }).parse(body);
 
-  const siteFilter2 = siteFilterForRelation(session.user, "user");
+  const siteFilter = siteFilterForModel("enseignant", session.user);
 
+  // Vérifier que l'enseignant appartient au tenant et au site
+   
+  const enseignant = await prisma.enseignant.findFirst({
+    where: { id, tenantId: session.user.tenantId, ...siteFilter },
+    include: {
+      ficheRH: true,
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
+      emploiTemps: { select: { heureDebut: true, heureFin: true } },
   const ficheRH = await prisma.ficheRH.findFirst({
     // Périmètre canonique du modèle `ficheRH` (rattachement ficheRH → enseignant
     // → sites) : la construction manuelle précédente ne couvrait pas
@@ -100,24 +113,33 @@ export async function POST(
       ...siteFilterForModel("ficheRH", session.user),
       ...siteFilter2,
     },
-    include: {
       enseignant: {
-        include: {
           // L'emploi du temps suit l'enseignant déjà borné au périmètre
           // ci-dessus : il ne peut appartenir qu'à un enseignant autorisé.
           // eslint-disable-next-line ecolpro/require-site-filter
-          emploiTemps: { select: { heureDebut: true, heureFin: true } },
         },
       },
     },
   });
 
+  if (!enseignant) {
+    return NextResponse.json({ error: "Enseignant introuvable" }, { status: 404 });
+  }
+
+  // Auto-créer la fiche RH si elle n'existe pas
+  let ficheRH = enseignant.ficheRH;
   if (!ficheRH) {
-    return NextResponse.json({ error: "Fiche RH introuvable" }, { status: 404 });
+    ficheRH = await prisma.ficheRH.create({
+      data: {
+        enseignantId: id,
+        tenantId: session.user.tenantId,
+        typeContrat: (enseignant.typeContrat as "CDI" | "CDD" | "VACATAIRE" | "FONCTIONNAIRE" | "STAGIAIRE" | undefined) ?? "CDI",
+      },
+    });
   }
 
   // Calcul des heures hebdo depuis l'emploi du temps
-  const totalMinutesHebdo = ficheRH.enseignant.emploiTemps.reduce((sum, et) => {
+  const totalMinutesHebdo = enseignant.emploiTemps.reduce((sum, et) => {
     const [hd, md] = et.heureDebut.split(":").map(Number);
     const [hf, mf] = et.heureFin.split(":").map(Number);
     return sum + (hf * 60 + mf) - (hd * 60 + md);

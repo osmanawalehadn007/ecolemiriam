@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "EcolPro",
-    "slug": "ecolpro-mobile",
+    "name": "École Miriam",
+    "slug": "ecolemiriam-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "ecolpro",
+    "scheme": "ecolemiriam",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "splash": {
@@ -15,10 +15,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.ecolpro.mobile",
+      "bundleIdentifier": "app.ecolemiriam.mobile",
       "infoPlist": {
-        "NSCameraUsageDescription": "EcolPro utilise la caméra pour les photos d'élèves et les QR codes.",
-        "NSFaceIDUsageDescription": "EcolPro utilise Face ID pour sécuriser votre connexion."
+        "NSCameraUsageDescription": "École Miriam utilise la caméra pour les photos d'élèves et les QR codes.",
+        "NSFaceIDUsageDescription": "École Miriam utilise Face ID pour sécuriser votre connexion."
       }
     },
     "android": {
@@ -26,7 +26,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#4f46e5"
       },
-      "package": "app.ecolpro.mobile"
+      "package": "app.ecolemiriam.mobile"
     },
     "web": {
       "bundler": "metro",
@@ -71,7 +71,7 @@
         "projectId": "4a75d071-5164-465a-ba1c-185797ef7d6c"
       },
       "router": {
-        "origin": "ecolpro://"
+        "origin": "ecolemiriam://"
       }
     },
     "updates": {

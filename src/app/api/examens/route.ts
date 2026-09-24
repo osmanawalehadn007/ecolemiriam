@@ -5,6 +5,7 @@ import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel, requireSiteIdForCreate } from "@/lib/site-scope";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 import { revalidateTag } from "next/cache";
 
 const CreateSchema = z.object({
@@ -26,6 +27,16 @@ export async function GET(req: NextRequest) {
     const statut = searchParams.get("statut");
     const tenantId = session.user.tenantId;
 
+    // Filtrer par classes de l'enseignant si applicable
+    const scope = isTeacherRole(session.user.role as Role)
+      ? await getTeacherScope(tenantId!, session.user.id, session.user.role as Role)
+      : undefined;
+
+    const teacherFilter = scope?.isRestricted && scope.classeIds.length > 0
+      ? { sessions: { some: { classeId: { in: scope.classeIds } } } }
+      : scope?.isRestricted
+        ? { id: "__none__" as const }
+        : {};
     // Restriction enseignant : ses sessions ne concernent que les matières qu'il
     // dispense et les niveaux de SES classes. Les sessions sans niveau restent
     // visibles (niveau optionnel à la création).
@@ -65,9 +76,11 @@ export async function GET(req: NextRequest) {
     }
 
     const examens = await prisma.examen.findMany({
-      where: { tenantId, ...siteFilter,
+      where: { tenantId, ...siteFilter, ...teacherFilter,
         ...(statut ? { statut: statut as never } : {}),
       },
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
+      include: { sessions: { orderBy: { date: "asc" } } },
       include: {
         sessions: {
           where: { ...siteFilterForModel("sessionExamen", session.user), ...teacherSessionFilter },
@@ -90,6 +103,14 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.tenantId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     const denied = checkPermission(session.user.role, "examens:write");
     if (denied) return denied;
+
+    // Pour les enseignants : vérifier qu'ils ont au moins une classe assignée
+    if (isTeacherRole(session.user.role as Role)) {
+      const scope = await getTeacherScope(session.user.tenantId!, session.user.id, session.user.role as Role);
+      if (scope.isRestricted && scope.classeIds.length === 0) {
+        return NextResponse.json({ error: "Vous n'avez aucune classe assignée" }, { status: 403 });
+      }
+    }
 
     const siteError = requireSiteIdForCreate(session.user);
     if (siteError) return NextResponse.json({ error: siteError }, { status: 400 });
@@ -122,7 +143,7 @@ export async function POST(req: NextRequest) {
       include: { sessions: true },
     });
 
-    revalidateTag("dashboard-data");
+    revalidateTag("dashboard-data", "max");
 
     return NextResponse.json(examen, { status: 201 });
   } catch (error) {

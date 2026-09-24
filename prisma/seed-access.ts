@@ -10,10 +10,10 @@ async function main() {
 
   // --- Super Admin (global, non lié à un tenant) ---
   const superAdmin = await prisma.user.upsert({
-    where: { email: "superadmin@ecolpro.app" },
+    where: { email: "superadmin@ecolemiriam.app" },
     update: {},
     create: {
-      email: "superadmin@ecolpro.app",
+      email: "superadmin@ecolemiriam.app",
       password: passwordHash,
       name: "Mariam",
       firstName: "Mariam",
@@ -30,7 +30,7 @@ async function main() {
     where: { slug: "lycee-demo" },
     update: {},
     create: {
-      name: "Lycée de Démonstration EcolPro",
+      name: "Lycée de Démonstration École Miriam",
       slug: "lycee-demo",
       plan: PlanType.PRO,
       country: "SN",
@@ -48,11 +48,11 @@ async function main() {
 
   // --- Directeur (TENANT_ADMIN) ---
   const directeur = await prisma.user.upsert({
-    where: { email: "admin@lycee-demo.ecolpro.app" },
+    where: { email: "admin@lycee-demo.ecolemiriam.app" },
     update: {},
     create: {
       tenantId: tenant.id,
-      email: "admin@lycee-demo.ecolpro.app",
+      email: "admin@lycee-demo.ecolemiriam.app",
       password: passwordHash,
       name: "Ilyas Aden",
       firstName: "Ilyas",
@@ -81,8 +81,8 @@ async function main() {
 
   console.log("\n🎉 Comptes d'accès créés avec succès !");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log("📧 Super Admin:  superadmin@ecolpro.app");
-  console.log("📧 Directeur:    admin@lycee-demo.ecolpro.app");
+  console.log("📧 Super Admin:  superadmin@ecolemiriam.app");
+  console.log("📧 Directeur:    admin@lycee-demo.ecolemiriam.app");
   console.log("🔑 Mot de passe: Demo@2026!");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 }

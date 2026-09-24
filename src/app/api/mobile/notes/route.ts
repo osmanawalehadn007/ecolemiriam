@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
+import { withMobileScope } from "@/lib/mobile-auth";
 import { eleveScopeFilter, siteFilterForModel, mergeFilters } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import {
   teacherClasseFilter,
   teacherMatiereFilter,
@@ -9,12 +11,7 @@ import {
 } from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
-  const user = await verifyMobileScope(req);
-  if (!user) return mobileUnauthorized();
-  if (!user.tenantId) {
-    return NextResponse.json({ error: "Aucun établissement associé" }, { status: 403 });
-  }
-
+  return withMobileScope(req, async (user) => {
   const { searchParams } = new URL(req.url);
   const eleveId = searchParams.get("eleveId");
   const matiereId = searchParams.get("matiereId");
@@ -63,6 +60,7 @@ export async function GET(req: NextRequest) {
       take: 50,
     }),
     prisma.matiere.findMany({
+      where: { tenantId: user.tenantId, ...siteFilterForModel("matiere", user) },
       where: mergeFilters(
         { tenantId: user.tenantId, ...siteFilterForModel("matiere", user) },
         teacherMatiereScope
@@ -71,6 +69,14 @@ export async function GET(req: NextRequest) {
       orderBy: { nom: "asc" },
     }),
     prisma.classe.findMany({
+      where: mergeFilters(
+        { tenantId: user.tenantId },
+        classeFilter,
+        anneeFilterForModel(
+          "classe",
+          await getAnneeCouranteLibelle(user.tenantId),
+        ),
+      ),
       where: mergeFilters({ tenantId: user.tenantId, ...classeFilter }, teacherClasseScope),
       select: { id: true, nom: true, niveau: true },
       orderBy: { nom: "asc" },
@@ -78,4 +84,5 @@ export async function GET(req: NextRequest) {
   ]);
 
   return NextResponse.json({ notes, matieres, classes });
+  });
 }

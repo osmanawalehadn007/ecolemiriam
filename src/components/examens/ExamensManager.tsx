@@ -1,19 +1,21 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Plus, Calendar, Clock, MapPin, Users, BookOpen,
   CheckCircle2, PlayCircle, XCircle, Loader2,
-  ChevronDown, ChevronUp, Edit2, Trash2,
+  ChevronDown, ChevronUp, Edit2, Trash2, FileBarChart,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { ClassSelector } from "@/components/sites/ClassSelector";
 import type { SiteColor } from "@/lib/site-colors";
+import { niveauToLabel } from "@/lib/niveau";
 
 type StatutExamen = "PROGRAMME" | "EN_COURS" | "TERMINE" | "ANNULE";
 
@@ -25,6 +27,8 @@ interface SessionExamen {
   heureFin: string;
   salle: string | null;
   niveau: string | null;
+  classeId: string | null;
+  matiereId: string | null;
 }
 
 interface Examen {
@@ -170,12 +174,14 @@ function CreateExamenModal({
 function AddSessionModal({
   examId,
   matieres,
+  classes,
   classes = [],
   onClose,
   onAdded,
 }: {
   examId: string;
   matieres: Matiere[];
+  classes: Classe[];
   classes?: Classe[];
   onClose: () => void;
   onAdded: (session: SessionExamen) => void;
@@ -186,11 +192,13 @@ function AddSessionModal({
   const niveauxSuggeres = Array.from(new Set(classes.map((c) => c.niveau).filter(Boolean)));
   const [form, setForm] = useState({
     matiereNom: matieres[0]?.nom ?? "",
+    matiereId: matieres[0]?.id ?? "",
+    classeId: classes[0]?.id ?? "",
     date: "",
     heureDebut: "08:00",
     heureFin: "11:00",
     salle: "",
-    niveau: "",
+    niveau: classes[0]?.niveau ?? "",
   });
   const [isPending, startTransition] = useTransition();
 
@@ -198,10 +206,21 @@ function AddSessionModal({
     e.preventDefault();
     startTransition(async () => {
       try {
+        // Envoyer classeId et matiereId pour le filtrage enseignant
+        const payload = {
+          matiereNom: form.matiereNom,
+          date: form.date,
+          heureDebut: form.heureDebut,
+          heureFin: form.heureFin,
+          salle: form.salle || undefined,
+          niveau: form.niveau || undefined,
+          classeId: form.classeId || undefined,
+          matiereId: form.matiereId || undefined,
+        };
         const res = await fetch(`/api/examens/${examId}/sessions`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
+          body: JSON.stringify(payload),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
@@ -222,17 +241,39 @@ function AddSessionModal({
         </div>
         <form onSubmit={submit} className="p-6 space-y-4">
           <div>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">Classe</label>
+            <select
+              required
+              value={form.classeId}
+              onChange={(e) => {
+                const c = classes.find((cl) => cl.id === e.target.value);
+                setForm({ ...form, classeId: e.target.value, niveau: c?.niveau ?? "" });
+              }}
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              {classes.length === 0 && (
+                <option value="">Aucune classe disponible</option>
+              )}
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>{c.nom}</option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t("matiere")}</label>
             <select
               required
-              value={form.matiereNom}
-              onChange={(e) => setForm({ ...form, matiereNom: e.target.value })}
+              value={form.matiereId}
+              onChange={(e) => {
+                const m = matieres.find((mt) => mt.id === e.target.value);
+                setForm({ ...form, matiereId: e.target.value, matiereNom: m?.nom ?? "" });
+              }}
               className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               {matieres.map((m) => (
-                <option key={m.id} value={m.nom}>{m.nom} (coeff. {m.coefficient})</option>
+                <option key={m.id} value={m.id}>{m.nom} (coeff. {m.coefficient})</option>
               ))}
-              <option value="Autre">{t("otherSubject")}</option>
+              <option value="">{t("otherSubject")}</option>
             </select>
           </div>
           <div>
@@ -310,10 +351,12 @@ function AddSessionModal({
 function ExamenCard({
   examen,
   matieres,
+  classes,
   onUpdate,
 }: {
   examen: Examen;
   matieres: Matiere[];
+  classes: Classe[];
   onUpdate: (updated: Examen) => void;
 }) {
   const t = useTranslations("examens");
@@ -488,7 +531,7 @@ function ExamenCard({
                           {s.niveau && (
                             <span className="flex items-center gap-1">
                               <Users className="w-3 h-3" />
-                              {s.niveau}
+                              {niveauToLabel(s.niveau)}
                             </span>
                           )}
                         </div>
@@ -516,6 +559,7 @@ function ExamenCard({
         <AddSessionModal
           examId={examen.id}
           matieres={matieres}
+          classes={classes}
           onClose={() => setShowAddSession(false)}
           onAdded={addSession}
         />
@@ -605,7 +649,9 @@ export function ExamensManager({
 
   const filtered = filterStatut === "ALL" ? examens : examens.filter((e) => e.statut === filterStatut);
   const selectedClasse = classes.find((c) => c.id === selectedClasseId);
+  // Filtrer par classeId des sessions (pas par niveau)
   const displayed = selectedClasse
+    ? filtered.filter((e) => e.sessions.some((s) => s.classeId === selectedClasse.id))
     ? filtered.filter((e) => e.sessions.some((s) => s.niveau === selectedClasse.niveau))
     : filtered;
 
@@ -652,13 +698,21 @@ export function ExamensManager({
             </button>
           ))}
         </div>
-        <Button
-          onClick={() => setShowCreate(true)}
-          className="gap-2 bg-green-600 hover:bg-green-700 text-white"
-        >
-          <Plus className="w-4 h-4" />
-          {t("newExam")}
-        </Button>
+        <div className="flex gap-2">
+          <Link href="/examens/rapport-classe">
+            <Button variant="outline" className="gap-2">
+              <FileBarChart className="w-4 h-4" />
+              {t("classReport")}
+            </Button>
+          </Link>
+          <Button
+            onClick={() => setShowCreate(true)}
+            className="gap-2 bg-green-600 hover:bg-green-700 text-white"
+          >
+            <Plus className="w-4 h-4" />
+            {t("newExam")}
+          </Button>
+        </div>
       </div>
 
       {/* Filtre par classes coloré */}
@@ -689,6 +743,7 @@ export function ExamensManager({
               key={exam.id}
               examen={exam}
               matieres={matieres}
+              classes={classes}
               onUpdate={updateExamen}
             />
           ))}

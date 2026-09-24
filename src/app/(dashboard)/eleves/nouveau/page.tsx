@@ -1,10 +1,18 @@
 import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { Header } from "@/components/layout/Header";
-import { EleveForm } from "@/components/eleves/EleveForm";
-import { getClassesForTenant, getSitesForUser, createEleve } from "@/lib/actions/eleve";
 
+/**
+ * Source unique d'inscription.
+ *
+ * L'inscription d'un élève passe désormais exclusivement par le workflow
+ * d'admissions (candidature → dossier → admission → facture → paiement →
+ * création automatique de la fiche élève). L'ancienne saisie directe est
+ * conservée uniquement comme redirection pour ne pas casser les liens/URL
+ * existants.
+ */
+export default function NouveauElevePage() {
+  redirect("/admissions");
 export default async function NouveauElevePage() {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");

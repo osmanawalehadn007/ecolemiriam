@@ -5,7 +5,7 @@ description: Directives et meilleures pratiques pour la modélisation de donnée
 
 # Directives Prisma DB Expert
 
-Ce skill garantit des opérations de base de données ultra-performantes et sécurisées au sein du SaaS multi-tenant EcolPro.
+Ce skill garantit des opérations de base de données ultra-performantes et sécurisées au sein du SaaS multi-tenant École Miriam.
 
 ## 1. Isolation multi-tenant stricte
 * Chaque requête affectant ou lisant des données spécifiques à un établissement doit inclure le filtre `tenantId`.

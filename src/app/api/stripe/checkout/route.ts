@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import Stripe from "stripe";
 import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Facture non payable" }, { status: 400 });
     }
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- paiement n'a pas de siteId, scopé via factureId déjà validé par site ci-dessus
     // eslint-disable-next-line ecolpro/require-site-filter -- paiement n'a pas de siteId, scopé via factureId déjà validé par site ci-dessus
     const totalPaye = await prisma.paiement.aggregate({
       where: { factureId },
@@ -79,8 +81,8 @@ export async function POST(req: NextRequest) {
           price_data: {
             currency: facture.devise.toLowerCase(),
             product_data: {
-              name: `${facture.libelle} — ${facture.eleve.prenom} ${facture.eleve.nom}`,
-              description: `Facture ${facture.numero} | Matricule: ${facture.eleve.matricule}`,
+              name: `${facture.libelle} — ${facture.eleve?.prenom ?? ""} ${facture.eleve?.nom ?? ""}`,
+              description: `Facture ${facture.numero} | Matricule: ${facture.eleve?.matricule ?? ""}`,
             },
             unit_amount: Math.round(restant * 100),
           },

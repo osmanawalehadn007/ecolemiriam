@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth, unstable_update } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import prismaBase from "@/lib/prisma-base";
 import { z } from "zod";
 import { deriveClaims } from "@/lib/tenant-claims";
 import { auditFire } from "@/lib/audit";
@@ -57,6 +58,7 @@ export async function POST(req: Request) {
     }
 
     await prisma.$transaction([
+      // eslint-disable-next-line ecolemiriam/require-tenant-id -- self-lookup de l'utilisateur connecté, reset des flags isDefault sur ses propres adhésions
       // eslint-disable-next-line ecolpro/require-tenant-id -- self-lookup de l'utilisateur connecté, reset des flags isDefault sur ses propres adhésions
       prisma.userTenant.updateMany({
         where: { userId, isDefault: true },
@@ -74,6 +76,18 @@ export async function POST(req: Request) {
         data: { tenantId, role: userTenant.role, siteId: null },
       }),
     ]);
+
+    // `user.update` hors transaction RLS : on change intentionnellement le
+    // tenantId de l'utilisateur vers le nouveau tenant. La policy WITH CHECK
+    // de users (tenant_isolation) vérifierait "tenantId = app_tenant_id()" avec
+    // le contexte du tenant COURANT, pas le nouveau → rejet. prismaBase
+    // contourne RLS ; l'accès au nouveau tenant a déjà été vérifié ci-dessus
+    // via userTenant.findFirst.
+     
+    await prismaBase.user.update({
+      where: { id: userId },
+      data: { tenantId, role: userTenant.role, siteId: null },
+    });
 
     // Régénérer le JWT : le callback `jwt` relit le périmètre complet depuis la
     // base pour le tenant demandé (sites autorisés, rôle, drapeau multi-sites).

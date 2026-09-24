@@ -9,17 +9,19 @@ import {
   Bell, Plus, Send, Mail, MessageSquare, Smartphone,
   Users, GraduationCap, UserCheck, BookOpen, School,
   Clock, CheckCircle2, Loader2, Eye, Trash2, CalendarClock,
-  Megaphone, BarChart2,
+  Megaphone, BarChart2, Briefcase,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate, timeAgo } from "@/lib/utils";
+import { hasPermission } from "@/lib/client-permissions";
 import { useTranslations } from "next-intl";
+import { niveauToLabel } from "@/lib/niveau";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Canal = "EMAIL" | "SMS" | "PUSH" | "IN_APP";
 type Statut = "BROUILLON" | "PLANIFIEE" | "EN_ENVOI" | "ENVOYEE" | "ECHEC";
-type Cible = "TOUS" | "PARENTS" | "ENSEIGNANTS" | "ELEVES" | "CLASSE" | "NIVEAU";
+type Cible = "TOUS" | "PARENTS" | "ENSEIGNANTS" | "ELEVES" | "CLASSE" | "NIVEAU" | "DIRECTION";
 
 interface Classe { id: string; nom: string; niveau: string }
 
@@ -65,6 +67,7 @@ const CIBLE_CONFIG: Record<Cible, { labelKey: string; icon: React.ReactNode }> =
   ELEVES:      { labelKey: "cibleStudents",          icon: <Users className="w-3.5 h-3.5" /> },
   CLASSE:      { labelKey: "cibleClass",      icon: <BookOpen className="w-3.5 h-3.5" /> },
   NIVEAU:      { labelKey: "cibleLevel",       icon: <BarChart2 className="w-3.5 h-3.5" /> },
+  DIRECTION:   { labelKey: "cibleDirection",   icon: <Briefcase className="w-3.5 h-3.5" /> },
 };
 
 // ─── Formulaire de création ───────────────────────────────────────────────────
@@ -214,7 +217,7 @@ function ComposeModal({
               >
                 <option value="">{t("chooseLevel")}</option>
                 {niveaux.map((n) => (
-                  <option key={n} value={n}>{n}</option>
+                  <option key={n} value={n}>{niveauToLabel(n)}</option>
                 ))}
               </select>
             </div>
@@ -260,10 +263,11 @@ function ComposeModal({
 
 // ─── Carte notification ───────────────────────────────────────────────────────
 
-function NotifCard({ notif, onSend, onDelete }: {
+function NotifCard({ notif, onSend, onDelete, canSend }: {
   notif: Notification;
   onSend: (id: string) => void;
   onDelete: (id: string) => void;
+  canSend: boolean;
 }) {
   const t = useTranslations("communication");
   const [expanded, setExpanded] = useState(false);
@@ -335,7 +339,7 @@ function NotifCard({ notif, onSend, onDelete }: {
               <span className="text-xs text-gray-400">
                 {t("byAuthor", { name: notif.envoyePar?.name ?? t("system"), date: formatDate(notif.createdAt) })}
               </span>
-              {notif.statut === "BROUILLON" && (
+              {notif.statut === "BROUILLON" && canSend && (
                 <div className="flex gap-1.5">
                   <Button size="sm" className="h-6 text-xs gap-1 px-2" onClick={() => onSend(notif.id)}>
                     <Send className="w-3 h-3" /> {t("sendBtn")}
@@ -358,10 +362,12 @@ function NotifCard({ notif, onSend, onDelete }: {
 interface CommunicationViewProps {
   notifications: Notification[];
   classes: Classe[];
+  userRole?: string;
 }
 
-export function CommunicationView({ notifications: initial, classes }: CommunicationViewProps) {
+export function CommunicationView({ notifications: initial, classes, userRole }: CommunicationViewProps) {
   const t = useTranslations("communication");
+  const canSend = hasPermission(userRole, "communication:send");
   const [notifs, setNotifs] = useState<Notification[]>(initial);
   const [showCompose, setShowCompose] = useState(false);
   const [filtreStatut, setFiltreStatut] = useState<Statut | "TOUS">("TOUS");
@@ -430,9 +436,11 @@ export function CommunicationView({ notifications: initial, classes }: Communica
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{t("schoolCommunication")}</h2>
           <p className="text-sm text-gray-500">{t("notificationsSent", { count: stats.envoyees })}</p>
         </div>
+        {canSend && (
         <Button onClick={() => setShowCompose(true)} className="gap-2">
           <Plus className="w-4 h-4" /> {t("newMessageBtn")}
         </Button>
+        )}
       </div>
 
       {/* Stats */}
@@ -499,15 +507,17 @@ export function CommunicationView({ notifications: initial, classes }: Communica
           <CardContent className="py-16 text-center">
             <Megaphone className="w-10 h-10 text-gray-300 mx-auto mb-3" />
             <p className="text-sm text-gray-500">{t("noNotifications")}</p>
+            {canSend && (
             <Button onClick={() => setShowCompose(true)} className="mt-3 gap-2" size="sm">
               <Plus className="w-3.5 h-3.5" /> {t("createFirst")}
             </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
           {filtered.map((n) => (
-            <NotifCard key={n.id} notif={n} onSend={handleSend} onDelete={handleDelete} />
+            <NotifCard key={n.id} notif={n} onSend={handleSend} onDelete={handleDelete} canSend={canSend} />
           ))}
         </div>
       )}

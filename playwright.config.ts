@@ -1,26 +1,16 @@
 import { defineConfig, devices } from "@playwright/test";
-import { existsSync } from "fs";
 
-/**
- * URL de base : surchargeable par `E2E_BASE_URL`.
- *
- * Le port 3001 par défaut est aussi utilisé par d'autres projets ouverts en
- * parallèle sur la machine (un serveur déjà en écoute serait « réutilisé » par
- * `reuseExistingServer` et la suite frapperait alors la mauvaise application —
- * écritures incluses). Le paramètre permet de viser explicitement l'instance
- * EcolPro à tester.
- */
-const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3001";
+// Si PLAYWRIGHT_BASE_URL est défini (ex: tests contre une app déjà déployée),
+// on cible cette URL et on ne démarre AUCUN serveur local.
+// Sinon on démarre un serveur sur le port 3001.
+const externalBaseURL = process.env.PLAYWRIGHT_BASE_URL;
+const baseURL = externalBaseURL ?? "http://localhost:3001";
 
-/**
- * Serveur de PRODUCTION si un build existe (démarrage instantané, tests
- * stables) ; sinon serveur de développement (compilation à la demande).
- * Les timeouts de la suite sont calibrés pour la prod : en dev, les
- * recompilations dépassent régulièrement 15 s et font échouer des tests sains.
- */
-const hasBuild = existsSync(".next/BUILD_ID");
-const webServerCommand = hasBuild ? "npm run start" : "npm run dev";
-const webServerTimeout = hasBuild ? 30000 : 120000;
+// next dev : le serveur dev compile à la demande mais fonctionne avec
+// output: standalone (next start ne le supporte pas). L'hydratation React
+// peut prendre un instant après networkidle — le fixture attend que le
+// handler onSubmit soit attaché avant de soumettre.
+const webServerCommand = "AUTH_URL=http://localhost:3001 npm run dev -- --port 3001";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -29,10 +19,7 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   reporter: "html",
-  // 30 s suffisent sur un serveur de prod (build chaud) ; en développement à
-  // froid, la première compilation d'une route peut dépasser 15 s :
-  // `E2E_TIMEOUT=120000` absorbe cette latence sans masquer un vrai blocage.
-  timeout: Number(process.env.E2E_TIMEOUT ?? 30000),
+  timeout: 60000,
   use: {
     baseURL,
     trace: "on-first-retry",
@@ -41,19 +28,21 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: {
-        ...devices["Desktop Chrome"],
-        // `E2E_CHANNEL=chrome` rejoue la suite sur le Chrome installé sur la
-        // machine, sans télécharger le binaire Playwright (utile en local quand
-        // la révision attendue n'est pas encore dans le cache).
-        ...(process.env.E2E_CHANNEL ? { channel: process.env.E2E_CHANNEL } : {}),
-      },
+      use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: {
-    command: webServerCommand,
-    url: baseURL,
-    reuseExistingServer: true,
-    timeout: webServerTimeout,
-  },
+  ...(externalBaseURL
+    ? {}
+    : {
+        webServer: {
+          command: webServerCommand,
+          url: baseURL,
+          reuseExistingServer: !process.env.CI,
+          // Le build de prod en CI prend plusieurs minutes : 60s était très
+          // largement insuffisant.
+          timeout: process.env.CI ? 600_000 : 180_000,
+          stdout: "pipe" as const,
+          stderr: "pipe" as const,
+        },
+      }),
 });

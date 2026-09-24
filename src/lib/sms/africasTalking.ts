@@ -1,11 +1,11 @@
 /**
- * EcolPro — Intégration Africa's Talking SMS
+ * École Miriam — Intégration Africa's Talking SMS
  * Docs: https://developers.africastalking.com/docs/sms
  *
  * Variables d'environnement requises :
  *   AT_API_KEY=your_api_key
  *   AT_USERNAME=your_username
- *   AT_SENDER_ID=EcolPro   (optionnel, selon pays)
+ *   AT_SENDER_ID=École Miriam   (optionnel, selon pays)
  */
 
 const AT_BASE = "https://api.africastalking.com/version1";
@@ -88,7 +88,7 @@ export async function sendAbsenceAlert(
   date: string,
   ecoleNom: string
 ): Promise<SMSResult> {
-  const message = `[${ecoleNom}] Absence signalée pour ${eleveNom} le ${date}. Veuillez contacter l'établissement pour régulariser. EcolPro`;
+  const message = `[${ecoleNom}] Absence signalée pour ${eleveNom} le ${date}. Veuillez contacter l'établissement pour régulariser. École Miriam`;
   return sendSMS(parentPhone, message, process.env.AT_SENDER_ID);
 }
 
@@ -101,6 +101,6 @@ export async function sendBulletinNotif(
   moyenne: number,
   ecoleNom: string
 ): Promise<SMSResult> {
-  const message = `[${ecoleNom}] Les résultats de ${eleveNom} sont disponibles sur EcolPro. Moyenne : ${moyenne.toFixed(2)}/20. Connectez-vous pour les consulter.`;
+  const message = `[${ecoleNom}] Les résultats de ${eleveNom} sont disponibles sur École Miriam. Moyenne : ${moyenne.toFixed(2)}/20. Connectez-vous pour les consulter.`;
   return sendSMS(parentPhone, message, process.env.AT_SENDER_ID);
 }

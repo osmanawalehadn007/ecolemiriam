@@ -1,0 +1,61 @@
+{
+  "name": "École Miriam Monitoring",
+  "description": "Configuration Uptime Kuma pour École Miriam VPS",
+  "monitors": [
+    {
+      "name": "App Health",
+      "type": "http",
+      "url": "https://ecolemiriam.com/api/health",
+      "interval": 60,
+      "timeout": 10,
+      "retryInterval": 30,
+      "maxretries": 3,
+      "notification": {
+        "type": "telegram",
+        "botToken": "${TELEGRAM_BOT_TOKEN}",
+        "chatID": "${TELEGRAM_CHAT_ID}",
+        "message": "🔴 App École Miriam DOWN — {{ msg }}"
+      }
+    },
+    {
+      "name": "Postgres Health",
+      "type": "tcp",
+      "hostname": "postgres",
+      "port": 5432,
+      "interval": 60,
+      "notification": {
+        "type": "telegram",
+        "message": "🔴 Postgres École Miriam DOWN"
+      }
+    },
+    {
+      "name": "Cloudflare Tunnel",
+      "type": "http",
+      "url": "https://ecolemiriam.com",
+      "interval": 120,
+      "timeout": 15,
+      "notification": {
+        "type": "telegram",
+        "message": "🔴 Cloudflare Tunnel École Miriam DOWN"
+      }
+    },
+    {
+      "name": "pgBackRest Backup",
+      "type": "push",
+      "interval": 86400,
+      "notification": {
+        "type": "telegram",
+        "message": "🔴 pgBackRest backup École Miriam manquant depuis 24h"
+      }
+    }
+  ],
+  "notifications": [
+    {
+      "name": "Telegram Admin",
+      "type": "telegram",
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "chatID": "${TELEGRAM_CHAT_ID}",
+      "isDefault": true
+    }
+  ]
+}

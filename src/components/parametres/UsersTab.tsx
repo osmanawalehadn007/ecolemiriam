@@ -1,29 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Trash2, Power, Phone, Edit3, Check, X, Building2, MapPin, AlertTriangle, Search, Shield, GraduationCap, Briefcase, Users as UsersIcon } from "lucide-react";
-import { createUser, toggleUserActive, deleteUser, updateUserPhone, assignUserSites, getUserSites, type UserFormData } from "@/lib/actions/parametres";
+import { Loader2, Plus, Trash2, Power, Phone, Edit3, Check, X, Building2, MapPin, AlertTriangle, Search, Shield, GraduationCap, Briefcase, Users as UsersIcon, BookOpen, Users as UsersClass, Upload, Mail } from "lucide-react";
+import { createUser, toggleUserActive, deleteUser, updateUserPhone, assignUserSites, getUserSites, getMatieresForAffectation, getClassesForAffectation, resendVerificationEmail, type UserFormData } from "@/lib/actions/parametres";
 import { addUserToTenant } from "@/lib/actions/user-tenant";
 import { useTranslations } from "next-intl";
+import Link from "next/link";
 import type { AvailableTenant } from "@/auth.config";
 import type { Role } from "@prisma/client";
 import { cn } from "@/lib/utils";
+import { ImportEnseignantsDialog } from "./ImportEnseignantsDialog";
+import { ImportPersonnelDialog } from "./ImportPersonnelDialog";
 
 interface UserItem {
   id: string;
   name: string;
   email: string;
+  emailVerified: Date | null;
   role: string;
   phone: string | null;
   isActive: boolean;
   lastLoginAt: Date | null;
   createdAt: Date;
+  emailLogs?: {
+    id: string;
+    status: string;
+    type: string;
+    createdAt: Date;
+    errorMessage: string | null;
+  }[];
 }
 
 const roleKeys: Record<string, string> = {
@@ -57,14 +68,47 @@ interface SiteItem {
   code: string | null;
 }
 
-export function UsersTab({ users, canManage, availableTenants = [], sites = [] }: { users: UserItem[]; canManage: boolean; availableTenants?: AvailableTenant[]; sites?: SiteItem[] }) {
+interface MatiereOption {
+  id: string;
+  nom: string;
+  code: string;
+  couleur?: string | null;
+}
+
+interface ClasseOption {
+  id: string;
+  nom: string;
+  niveau: string;
+  structure?: { id: string; type: string; nom: string } | null;
+  site?: { id: string; nom: string } | null;
+}
+
+const isTeacherRole = (role: string) => role === "TEACHER";
+
+// Rôles proposés à l'étape 1 du wizard (CLASS_TEACHER exclu — défini au niveau de la classe)
+const roleCards: { role: string; labelKey: string; icon: typeof Shield; color: string }[] = [
+  { role: "TEACHER", labelKey: "roleTeacher", icon: GraduationCap, color: "text-violet-500" },
+  { role: "SECRETARY", labelKey: "roleSecretary", icon: Briefcase, color: "text-blue-500" },
+  { role: "COUNSELOR", labelKey: "roleCounselor", icon: Shield, color: "text-teal-500" },
+  { role: "NURSE", labelKey: "roleNurse", icon: Shield, color: "text-pink-500" },
+  { role: "ACCOUNTANT", labelKey: "roleAccountant", icon: Briefcase, color: "text-green-500" },
+  { role: "PRINCIPAL", labelKey: "rolePrincipal", icon: Shield, color: "text-amber-500" },
+  { role: "TENANT_ADMIN", labelKey: "roleTenantAdmin", icon: Shield, color: "text-red-500" },
+  { role: "PARENT", labelKey: "roleParent", icon: UsersIcon, color: "text-indigo-500" },
+];
+
+export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availableTenants = [], sites = [] }: { users: UserItem[]; canManage: boolean; sessionRole?: string; sessionSiteId?: string; availableTenants?: AvailableTenant[]; sites?: SiteItem[] }) {
   const t = useTranslations("parametres");
   const [showForm, setShowForm] = useState(false);
+  const [formStep, setFormStep] = useState<1 | 2>(1); // 1 = choix du rôle, 2 = formulaire
   const [isPending, setIsPending] = useState(false);
   const [editingPhoneId, setEditingPhoneId] = useState<string | null>(null);
   const [phoneValue, setPhoneValue] = useState("");
   const [activeCategory, setActiveCategory] = useState<UserCategory>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showImportEnseignants, setShowImportEnseignants] = useState(false);
+  const [showImportPersonnel, setShowImportPersonnel] = useState(false);
+  const [resendingEmailId, setResendingEmailId] = useState<string | null>(null);
 
   const filteredUsers = users.filter((u) => {
     const matchesCategory =
@@ -151,6 +195,64 @@ export function UsersTab({ users, canManage, availableTenants = [], sites = [] }
   });
   const [formSiteIds, setFormSiteIds] = useState<string[]>([]);
 
+  // ── Affectation matières + classes pour les enseignants ──
+  const [matieres, setMatieres] = useState<MatiereOption[]>([]);
+  const [classes, setClasses] = useState<ClasseOption[]>([]);
+  const [formMatiereIds, setFormMatiereIds] = useState<string[]>([]);
+  const [formClasseIds, setFormClasseIds] = useState<string[]>([]);
+  const [affectationLoaded, setAffectationLoaded] = useState(false);
+
+  const loadAffectationData = useCallback(async () => {
+    if (affectationLoaded) return;
+    try {
+      const [mat, cls] = await Promise.all([
+        getMatieresForAffectation(),
+        getClassesForAffectation(),
+      ]);
+      setMatieres(mat as MatiereOption[]);
+      setClasses(cls as ClasseOption[]);
+      setAffectationLoaded(true);
+    } catch {
+      // silent
+    }
+  }, [affectationLoaded]);
+
+  // Charger les matières/classes quand l'utilisateur ouvre le formulaire
+  // ou sélectionne un rôle enseignant
+  useEffect(() => {
+    if (showForm && isTeacherRole(form.role)) {
+      loadAffectationData();
+    }
+  }, [showForm, form.role, loadAffectationData]);
+
+  // Déduire le site automatiquement à partir des classes sélectionnées
+  const deducedSite = (() => {
+    if (formClasseIds.length === 0) return null;
+    const selectedClasses = classes.filter((c) => formClasseIds.includes(c.id));
+    const siteIds = [...new Set(selectedClasses.map((c) => c.site?.id).filter(Boolean))];
+    if (siteIds.length === 1) {
+      const site = sites.find((s) => s.id === siteIds[0]);
+      return site ? site.nom : null;
+    }
+    return null; // multi-site ou sans site
+  })();
+
+  function toggleFormMatiere(matiereId: string) {
+    setFormMatiereIds((prev) =>
+      prev.includes(matiereId)
+        ? prev.filter((id) => id !== matiereId)
+        : [...prev, matiereId]
+    );
+  }
+
+  function toggleFormClasse(classeId: string) {
+    setFormClasseIds((prev) =>
+      prev.includes(classeId)
+        ? prev.filter((id) => id !== classeId)
+        : [...prev, classeId]
+    );
+  }
+
   function toggleFormSite(siteId: string) {
     setFormSiteIds((prev) =>
       prev.includes(siteId)
@@ -165,28 +267,78 @@ export function UsersTab({ users, canManage, availableTenants = [], sites = [] }
     );
   }
 
+  // Ouvrir le wizard : étape 1 (choix du rôle)
+  function openWizard() {
+    setFormStep(1);
+    setShowForm(true);
+  }
+
+  // Choisir un rôle et passer à l'étape 2
+  function selectRole(role: string) {
+    setForm({ ...form, role: role as UserFormData["role"] });
+    setFormStep(2);
+    // Auto-sélectionner le site si l'utilisateur connecté a déjà un site
+    if (sessionSiteId && !formSiteIds.includes(sessionSiteId)) {
+      setFormSiteIds([sessionSiteId]);
+    }
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setIsPending(true);
     try {
-      const result = await createUser(form);
+      // Inclure matiereIds et classeIds si le rôle est enseignant
+      const payload: UserFormData = {
+        ...form,
+        ...(isTeacherRole(form.role) ? {
+          matiereIds: formMatiereIds,
+          classeIds: formClasseIds,
+        } : {}),
+      };
+      const result = await createUser(payload);
       // Assigner les sites si des sites sont sélectionnés
       if (formSiteIds.length > 0 && result?.success) {
-        // Récupérer l'ID du nouvel utilisateur via la liste rafraîchie
-        // Pour l'instant, on assigne après création en cherchant par email
         const newUserId = (result as { userId?: string }).userId;
         if (newUserId) {
           await assignUserSites(newUserId, formSiteIds.map((sid) => ({ siteId: sid, role: null })));
         }
       }
-      toast.success(t("userCreated"));
+      // Feedback différencié selon le statut de l'email
+      const emailSent = (result as { emailSent?: boolean }).emailSent;
+      const emailError = (result as { emailError?: string }).emailError;
+      if (emailSent) {
+        toast.success(t("userCreatedEmailSent"));
+      } else if (emailError) {
+        toast.error(t("userCreatedEmailFailed", { error: emailError }));
+      } else {
+        toast.success(t("userCreated"));
+      }
       setShowForm(false);
+      setFormStep(1);
       setForm({ name: "", email: "", role: "TEACHER", phone: "", password: "", isActive: true });
       setFormSiteIds([]);
+      setFormMatiereIds([]);
+      setFormClasseIds([]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("genericError"));
     } finally {
       setIsPending(false);
+    }
+  }
+
+  async function handleResendEmail(userId: string) {
+    setResendingEmailId(userId);
+    try {
+      const result = await resendVerificationEmail(userId);
+      if (result.success) {
+        toast.success(t("emailResent"));
+      } else {
+        toast.error(result.error ?? t("emailResentFailed"));
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("emailResentFailed"));
+    } finally {
+      setResendingEmailId(null);
     }
   }
 
@@ -275,11 +427,44 @@ export function UsersTab({ users, canManage, availableTenants = [], sites = [] }
               {t("addToTenant")}
             </Button>
           )}
-          <Button size="sm" className="gap-2" onClick={() => setShowForm(!showForm)}>
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowImportEnseignants(true)}>
+            <Upload className="h-4 w-4" />
+            {t("importEnseignants")}
+          </Button>
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowImportPersonnel(true)}>
+            <Upload className="h-4 w-4" />
+            {t("importPersonnel")}
+          </Button>
+          <Link href="/parametres/journal-emails">
+            <Button size="sm" variant="outline" className="gap-2">
+              <Mail className="h-4 w-4" />
+              {t("emailJournal")}
+            </Button>
+          </Link>
+          <Button size="sm" className="gap-2" onClick={() => showForm ? setShowForm(false) : openWizard()}>
             <Plus className="h-4 w-4" />
             {t("addUser")}
           </Button>
         </div>
+      )}
+
+      {showImportEnseignants && canManage && (
+        <ImportEnseignantsDialog
+          onClose={() => setShowImportEnseignants(false)}
+          onImported={() => {
+            // Recharger la page pour récupérer les nouveaux utilisateurs
+            window.location.reload();
+          }}
+        />
+      )}
+
+      {showImportPersonnel && canManage && (
+        <ImportPersonnelDialog
+          onClose={() => setShowImportPersonnel(false)}
+          onImported={() => {
+            window.location.reload();
+          }}
+        />
       )}
 
       {/* Modal: Ajouter un user à un autre tenant */}
@@ -352,10 +537,45 @@ export function UsersTab({ users, canManage, availableTenants = [], sites = [] }
         </Card>
       )}
 
-      {showForm && canManage && (
+      {showForm && canManage && formStep === 1 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">{t("newUser")}</CardTitle>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              {t("addUser")} — {t("role")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">
+              Choisissez le rôle de l&apos;utilisateur à ajouter :
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {roleCards.map(({ role, labelKey, icon: Icon, color }) => (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => selectRole(role)}
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-border hover:border-primary hover:bg-primary/5 transition-all group"
+                >
+                  <Icon className={cn("h-8 w-8", color)} />
+                  <span className="text-sm font-medium text-center">{t(labelKey)}</span>
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowForm(false)}>{t("cancel")}</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {showForm && canManage && formStep === 2 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <GraduationCap className="h-4 w-4" />
+              {t("newUser")} — {t(roleKeys[form.role] ?? "roleTeacher")}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -368,42 +588,41 @@ export function UsersTab({ users, canManage, availableTenants = [], sites = [] }
                 <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="role">{t("role")}</Label>
-                <select id="role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as UserFormData["role"] })}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-                  {Object.entries(roleKeys).filter(([k]) => k !== "STUDENT" && !hiddenRoles.includes(k)).map(([key, labelKey]) => (
-                    <option key={key} value={key}>{t(labelKey)}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
                 <Label htmlFor="phone">{t("phone")}</Label>
                 <Input id="phone" value={form.phone ?? ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
               </div>
-              <div className="space-y-1.5 md:col-span-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="password">{t("password")}</Label>
                 <Input id="password" type="password" placeholder={t("passwordPlaceholder")} value={form.password ?? ""}
                   onChange={(e) => setForm({ ...form, password: e.target.value })} />
               </div>
 
-              {/* Sélection des sites */}
-              {sites.length > 0 && (
+              {/* ── Site : auto-sélectionné ou manuel ── */}
+              {sites.length > 0 && !isTeacherRole(form.role) && (
                 <div className="md:col-span-2 space-y-2">
-                  <Label>Accès aux sites</Label>
-                  <label
-                    className="flex items-center gap-3 p-3 rounded-lg border-2 border-primary/30 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formSiteIds.length === sites.length}
-                      onChange={toggleAllFormSites}
-                      className="h-4 w-4 rounded border-gray-300"
-                    />
-                    <div className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-primary" />
-                      <p className="text-sm font-semibold">Accès à tous les sites</p>
-                    </div>
-                  </label>
+                  <Label className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Site
+                    {sessionSiteId && formSiteIds.includes(sessionSiteId) && (
+                      <span className="text-xs text-green-600 font-normal">(sélectionné automatiquement depuis votre session)</span>
+                    )}
+                  </Label>
+                  {sessionSiteId && sites.length > 1 && (
+                    <label
+                      className="flex items-center gap-3 p-3 rounded-lg border-2 border-primary/30 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={formSiteIds.length === sites.length}
+                        onChange={toggleAllFormSites}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-primary" />
+                        <p className="text-sm font-semibold">Accès à tous les sites</p>
+                      </div>
+                    </label>
+                  )}
                   {sites.map((site) => (
                     <label
                       key={site.id}
@@ -431,11 +650,114 @@ export function UsersTab({ users, canManage, availableTenants = [], sites = [] }
                   )}
                 </div>
               )}
+
+              {/* ── Affectation matières + classes pour les enseignants ── */}
+              {isTeacherRole(form.role) && (
+                <div className="md:col-span-2 space-y-4 border-t pt-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                    <GraduationCap className="h-4 w-4" />
+                    Affectation pédagogique
+                  </div>
+
+                  {/* Matières */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <BookOpen className="h-4 w-4" />
+                      Matières enseignées
+                      <span className="text-xs text-muted-foreground font-normal">(collège/lycée — optionnel au primaire)</span>
+                    </Label>
+                    {matieres.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">Chargement des matières…</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {matieres.map((matiere) => (
+                          <button
+                            key={matiere.id}
+                            type="button"
+                            onClick={() => toggleFormMatiere(matiere.id)}
+                            className={cn(
+                              "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                              formMatiereIds.includes(matiere.id)
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background hover:bg-muted border-input"
+                            )}
+                            style={matiere.couleur && formMatiereIds.includes(matiere.id) ? { backgroundColor: matiere.couleur, borderColor: matiere.couleur } : undefined}
+                          >
+                            {matiere.nom}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {formMatiereIds.length === 0 && (
+                      <p className="text-xs text-muted-foreground italic">
+                        Aucune matière sélectionnée. L&apos;enseignant pourra être affecté plus tard.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Classes */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <UsersClass className="h-4 w-4" />
+                      Classes assignées
+                      <span className="text-xs text-muted-foreground font-normal">(déduit le site automatiquement)</span>
+                    </Label>
+                    {classes.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">Chargement des classes…</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {classes.map((classe) => (
+                          <button
+                            key={classe.id}
+                            type="button"
+                            onClick={() => toggleFormClasse(classe.id)}
+                            className={cn(
+                              "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                              formClasseIds.includes(classe.id)
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background hover:bg-muted border-input"
+                            )}
+                          >
+                            {classe.nom}
+                            {classe.structure && (
+                              <span className="ml-1 opacity-60">({classe.structure.type})</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {formClasseIds.length === 0 && (
+                      <p className="text-xs text-muted-foreground italic">
+                        Aucune classe sélectionnée. L&apos;enseignant pourra être affecté plus tard via l&apos;onglet « Affectations ».
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Site déduit */}
+                  {deducedSite && (
+                    <div className="flex items-center gap-2 p-3 rounded-lg border-2 border-green-500/30 bg-green-500/5">
+                      <MapPin className="h-4 w-4 text-green-600" />
+                      <p className="text-sm text-green-700">
+                        Site déduit automatiquement : <strong>{deducedSite}</strong>
+                      </p>
+                    </div>
+                  )}
+                  {formClasseIds.length > 0 && !deducedSite && sites.length > 1 && (
+                    <div className="flex items-center gap-2 p-3 rounded-lg border-2 border-amber-500/30 bg-amber-500/5">
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      <p className="text-sm text-amber-700">
+                        Les classes sélectionnées appartiennent à plusieurs sites. L&apos;enseignant sera multi-site.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="md:col-span-2 flex gap-2">
                 <Button type="submit" size="sm" className="gap-2" disabled={isPending}>
                   {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   {t("create")}
                 </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => setFormStep(1)}>← {t("role")}</Button>
                 <Button type="button" variant="outline" size="sm" onClick={() => setShowForm(false)}>{t("cancel")}</Button>
               </div>
             </form>
@@ -509,7 +831,64 @@ export function UsersTab({ users, canManage, availableTenants = [], sites = [] }
                   filteredUsers.map((u) => (
                     <tr key={u.id} className="border-b hover:bg-muted/30">
                       <td className="px-4 py-3 font-medium">{u.name}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-muted-foreground">{u.email}</span>
+                          {u.emailVerified ? (
+                            <Badge variant="success" className="w-fit text-[10px] py-0 px-1.5">
+                              <Check className="h-2.5 w-2.5 mr-0.5" />
+                              {t("emailVerified")}
+                            </Badge>
+                          ) : u.emailLogs && u.emailLogs.length > 0 ? (
+                            <div className="flex items-center gap-1.5">
+                              {(() => {
+                                const log = u.emailLogs[0];
+                                const badgeVariant =
+                                  log.status === "DELIVERED" || log.status === "OPENED" ? "success" :
+                                  log.status === "BOUNCED" || log.status === "FAILED" ? "destructive" :
+                                  log.status === "COMPLAINED" ? "destructive" :
+                                  log.status === "DELIVERY_DELAYED" ? "warning" :
+                                  "secondary";
+                                const labelKey =
+                                  log.status === "SENT" ? "emailStatusSent" :
+                                  log.status === "DELIVERED" ? "emailStatusDelivered" :
+                                  log.status === "BOUNCED" ? "emailStatusBounced" :
+                                  log.status === "FAILED" ? "emailStatusFailed" :
+                                  log.status === "COMPLAINED" ? "emailStatusComplained" :
+                                  log.status === "OPENED" ? "emailStatusOpened" :
+                                  log.status === "DELIVERY_DELAYED" ? "emailStatusDelayed" :
+                                  "emailStatusPending";
+                                return (
+                                  <>
+                                    <Badge variant={badgeVariant as "success" | "destructive" | "warning" | "secondary"} className="w-fit text-[10px] py-0 px-1.5">
+                                      {t(labelKey)}
+                                    </Badge>
+                                    {(log.status === "BOUNCED" || log.status === "FAILED") && canManage && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-5 px-1.5 text-[10px]"
+                                        onClick={() => handleResendEmail(u.id)}
+                                        disabled={resendingEmailId === u.id}
+                                      >
+                                        {resendingEmailId === u.id ? (
+                                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                        ) : (
+                                          t("resendEmail")
+                                        )}
+                                      </Button>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          ) : (
+                            <Badge variant="secondary" className="w-fit text-[10px] py-0 px-1.5">
+                              {t("emailNotSent")}
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         {editingPhoneId === u.id ? (
                           <div className="flex items-center gap-1">
@@ -547,7 +926,7 @@ export function UsersTab({ users, canManage, availableTenants = [], sites = [] }
                         <Badge variant="info">{t(roleKeys[u.role] ?? u.role)}</Badge>
                       </td>
                       <td className="px-4 py-3">
-                        {canManage ? (
+                        {canManage && sessionRole === "TENANT_ADMIN" ? (
                           <Button
                             variant="outline"
                             size="sm"

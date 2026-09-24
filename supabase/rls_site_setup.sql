@@ -1,5 +1,5 @@
 -- ============================================================
--- EcolPro — RLS Multi-Sites (Option 3)
+-- École Miriam — RLS Multi-Sites (Option 3)
 -- Isolation des données par site au sein d'un même tenant
 -- 
 -- Principe :

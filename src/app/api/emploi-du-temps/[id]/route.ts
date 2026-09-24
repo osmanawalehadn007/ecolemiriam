@@ -19,6 +19,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     // établissement restait supprimable en forgeant son identifiant.
     const emploiFilter = siteFilterForModel("emploiTemps", session.user);
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission ; lookup par id : le créneau porte sa propre année
+    const existing = await prisma.emploiTemps.findFirst({ where: { id, tenantId } });
     const existing = await prisma.emploiTemps.findFirst({
       where: { id, tenantId, ...emploiFilter },
     });
@@ -46,6 +48,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const body = await req.json();
     const emploiFilter = siteFilterForModel("emploiTemps", session.user);
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission ; lookup par id : le créneau porte sa propre année
+    const existing = await prisma.emploiTemps.findFirst({ where: { id, tenantId } });
     const existing = await prisma.emploiTemps.findFirst({
       where: { id, tenantId, ...emploiFilter },
     });
@@ -60,10 +64,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Check class overlap (excluding self)
     // Two creneaux with different groups (e.g. "Salle 101 (Groupe A)" vs "Salle 102 (Groupe B)")
     // can share the same time slot — only same-group or no-group overlaps are conflicts.
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
     const classOverlaps = await prisma.emploiTemps.findMany({
       where: {
         id: { not: id },
         tenantId,
+        annee: existing.annee,
         ...emploiFilter,
         classeId: existing.classeId,
         jour: newJour,
@@ -96,10 +102,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     // Check teacher conflict (if teacher assigned)
     if (newEnseignantId) {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
       const teacherConflict = await prisma.emploiTemps.findFirst({
         where: {
           id: { not: id },
           tenantId,
+          // Même année que le créneau modifié : sans cette borne, un créneau
+          // d'une année révolue déclenchait un faux conflit d'enseignant.
+          annee: existing.annee,
           ...emploiFilter,
           enseignantId: newEnseignantId,
           jour: newJour,
@@ -117,10 +127,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     // Check room conflict (if room assigned)
     if (newSalle) {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
       const roomConflict = await prisma.emploiTemps.findFirst({
         where: {
           id: { not: id },
           tenantId,
+          // Idem : un conflit de salle ne se juge qu'à l'intérieur d'une
+          // même année scolaire.
+          annee: existing.annee,
           ...emploiFilter,
           salle: newSalle,
           jour: newJour,

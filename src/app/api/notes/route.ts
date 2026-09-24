@@ -201,7 +201,7 @@ export async function POST(req: NextRequest) {
       )
     );
 
-    revalidateTag("dashboard-data");
+    revalidateTag("dashboard-data", "max");
 
     return NextResponse.json({ notes: created, count: created.length }, { status: 201 });
   } catch (error) {

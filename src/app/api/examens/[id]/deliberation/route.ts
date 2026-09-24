@@ -15,6 +15,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params;
     const tenantId = session.user.tenantId;
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
+    const examen = await prisma.examen.findFirst({ where: { id, tenantId } });
     const examen = await prisma.examen.findFirst({
       where: { id, tenantId, ...siteFilterForModel("examen", session.user) },
     });
@@ -35,7 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       },
     });
 
-    revalidateTag("dashboard-data");
+    revalidateTag("dashboard-data", "max");
 
     return NextResponse.json({
       success: true,

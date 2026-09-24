@@ -1,7 +1,9 @@
 import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
+import { runWithTenant, runWithRlsBatch } from "@/lib/prisma";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { CreateEvaluationForm } from "@/components/evaluations/CreateEvaluationForm";
@@ -10,24 +12,33 @@ import { Eye, Edit, Star, PenLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getTranslations } from "next-intl/server";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { getSitesForUserCached } from "@/lib/sites-cached";
+import { getSiteColorMap } from "@/lib/site-colors";
 import type { Role } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
+import { niveauToLabel } from "@/lib/niveau";
+import { siteFilterForModel } from "@/lib/site-scope";
 
 export const metadata = {
-  title: "Liste des examens | EcolPro",
+  title: "Liste des examens | École Miriam",
 };
 
-export default async function EvaluationsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ matiereId?: string }>;
-}) {
+export default async function EvaluationsPage(
+  props: {
+    searchParams: Promise<{ matiereId?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const [session, t, sp] = await Promise.all([
     auth(),
     getTranslations("evaluations"),
     searchParams,
   ]);
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   if (!session?.user?.tenantId) redirect("/login");
   guardPage(session, "evaluations:read");
 
@@ -42,30 +53,93 @@ export default async function EvaluationsPage({
     : undefined;
 
   const evalFilter = siteFilterForModel("evaluation", session.user);
-  const classeFilter = siteFilterForModel("classe", session.user);
   const matiereFilter = siteFilterForModel("matiere", session.user);
 
+  // Filtrer par classes de l'enseignant si applicable
+  const scope = isTeacherRole(session.user.role as Role)
+    ? await getTeacherScope(tenantId, session.user.id, session.user.role as Role)
+    : undefined;
+
+  const teacherClasseFilter = scope?.isRestricted && scope.classeIds.length > 0
+    ? { classeId: { in: scope.classeIds } }
+    : scope?.isRestricted
+      ? { id: "__none__" as const }
+      : {};
+
+  const teacherMatiereFilter = scope?.isRestricted && scope.matiereIds.length > 0
+    ? { id: { in: scope.matiereIds } }
+    : scope?.isRestricted
+      ? { id: "__none__" as const }
+      : {};
+
+  // Pour les enseignants restreints : filtrer les classes par scope (classeIds)
+  // SANS filtre de site, car un enseignant peut enseigner dans des classes
+  // situées sur des sites auxquels il n'est pas explicitement rattaché.
+  const anneeFilter = anneeFilterForModel(
+    "classe",
+    await getAnneeCouranteLibelle(tenantId),
+  );
+  const classeWhere = scope?.isRestricted && scope.classeIds.length > 0
+    ? mergeFilters({ tenantId, id: { in: scope.classeIds } }, anneeFilter)
+    : scope?.isRestricted
+      ? { tenantId, id: "__none__" as const }
+      : mergeFilters(
+          { tenantId },
+          siteFilterForModel("classe", session.user),
+          anneeFilter,
+        );
+
+  // OPTIMISATION: exécuter les 4 requêtes dans UNE SEULE transaction RLS
+  // au lieu de 4 séparées → 1 SET LOCAL + 4 queries = 5 round trips
+  // au lieu de 8 (2×4). Via le tunnel SSH (~100ms/round trip), on économise
+  // ~300ms.
+  const [evaluations, classes, matieres, periodes] = await runWithRlsBatch(
+    tenantId,
+    session.user.siteId ?? null,
+    async (tx: Prisma.TransactionClient) => {
+      return Promise.all([
+         
+        tx.evaluation.findMany({
+          where: {
+            tenantId,
+            ...evalFilter,
+            ...teacherClasseFilter,
+            ...(matiereId ? { matiereId } : {}),
+          },
+          include: {
+            classe: { select: { nom: true, niveau: true } },
+            matiere: { select: { nom: true, coefficient: true } },
+            periode: { select: { nom: true } },
+            _count: { select: { notes: true } }
+          },
+          orderBy: { date: "desc" }
+        }),
+         
+        tx.classe.findMany({
+          where: classeWhere,
+          select: { id: true, nom: true },
+        }),
+         
+        tx.matiere.findMany({
+          where: { tenantId, ...matiereFilter, ...teacherMatiereFilter },
+          select: { id: true, nom: true },
+        }),
+         
+        tx.periode.findMany({ where: { annee: { tenantId } }, select: { id: true, nom: true } }),
+      ]);
+    }
+  );
   // Restriction enseignant : la liste d'évaluations ne montre que celles de
   // SES classes et SES matières ; les listes de la modale sont pré-filtrées.
   const teacherClasseFilter =
     scope?.isRestricted && scope.classeIds.length > 0
       ? { id: { in: scope.classeIds } }
-      : scope?.isRestricted
         ? { id: "__none__" }
-        : {};
   const teacherMatiereFilter =
     scope?.isRestricted && scope.matiereIds.length > 0
-      ? { id: { in: scope.matiereIds } }
-      : scope?.isRestricted
         ? { id: "__none__" }
-        : {};
-
   const [evaluations, classes, matieres, periodes] = await Promise.all([
     prisma.evaluation.findMany({
-      where: {
-        tenantId,
-        ...evalFilter,
-        ...(matiereId ? { matiereId } : {}),
         ...(scope?.isRestricted
           ? {
               OR:
@@ -75,29 +149,13 @@ export default async function EvaluationsPage({
                       ...(scope.matiereIds.length > 0 ? [{ matiereId: { in: scope.matiereIds } }] : []),
                     ]
                   : [{ id: "__none__" }],
-            }
           : {}),
-      },
-      include: {
-        classe: { select: { nom: true, niveau: true } },
-        matiere: { select: { nom: true, coefficient: true } },
-        periode: { select: { nom: true } },
-        _count: { select: { notes: true } }
-      },
-      orderBy: { date: "desc" }
-    }),
     prisma.classe.findMany({
       where: { tenantId, ...classeFilter, ...teacherClasseFilter },
-      select: { id: true, nom: true },
       orderBy: { nom: "asc" },
-    }),
     prisma.matiere.findMany({
-      where: { tenantId, ...matiereFilter, ...teacherMatiereFilter },
-      select: { id: true, nom: true },
       orderBy: { nom: "asc" },
-    }),
     prisma.periode.findMany({ where: { annee: { tenantId } }, select: { id: true, nom: true } }),
-  ]);
 
   function getTypeColor(type: string) {
     switch (type) {
@@ -130,7 +188,7 @@ export default async function EvaluationsPage({
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">{t("title")}</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">{t("subtitle")}</p>
         </div>
-        <CreateEvaluationForm classes={classes} matieres={matieres} periodes={periodes} />
+        <CreateEvaluationForm classes={classes} matieres={matieres} periodes={periodes} userRole={session.user.role} />
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border overflow-hidden">
@@ -158,7 +216,7 @@ export default async function EvaluationsPage({
                   <td className="px-4 py-3 font-bold text-gray-800 dark:text-gray-100">{ev.titre}</td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{ev.classe.nom}</td>
                   <td className="px-4 py-3">
-                    <Badge className="bg-orange-500 hover:bg-orange-600">{ev.classe.niveau ?? "Collège"}</Badge>
+                    <Badge className="bg-orange-500 hover:bg-orange-600">{ev.classe.niveau ? niveauToLabel(ev.classe.niveau) : "Collège"}</Badge>
                   </td>
                   <td className="px-4 py-3">
                     <div className="font-semibold text-gray-800 dark:text-gray-100">{ev.matiere.nom}</div>

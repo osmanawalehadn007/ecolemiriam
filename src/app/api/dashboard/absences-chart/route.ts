@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { eleveScopeFilter, mergeFilters } from "@/lib/site-filter";
 import { teacherEleveRelationFilter } from "@/lib/teacher-classes";
@@ -9,6 +10,8 @@ export async function GET() {
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
+  const denied = checkPermission(session.user.role, "analytics:read");
+  if (denied) return denied;
 
   const tenantId = session.user.tenantId;
   // Périmètre personnel inclus : un parent ne voit, dans le graphique du

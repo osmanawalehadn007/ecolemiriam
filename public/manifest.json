@@ -1,6 +1,6 @@
 {
-  "name": "EcolPro — Gestion Scolaire",
-  "short_name": "EcolPro",
+  "name": "École Miriam — Gestion Scolaire",
+  "short_name": "École Miriam",
   "description": "Plateforme SaaS de gestion scolaire pour l'Afrique francophone",
   "start_url": "/dashboard",
   "display": "standalone",

@@ -1,5 +1,5 @@
 /**
- * EcolPro — Intégration Telegram Bot API
+ * École Miriam — Intégration Telegram Bot API
  * Docs: https://core.telegram.org/bots/api
  *
  * Variables d'environnement :
@@ -121,7 +121,7 @@ export async function sendAbsenceTelegram(
   date: string,
   ecoleNom: string
 ): Promise<TelegramResult> {
-  const message = `🎓 *${ecoleNom}*\n\nBonjour,\n\nNous vous informons que *${eleveNom}* a été signalé(e) absent(e) le ${date}.\n\nVeuillez contacter l'établissement pour régulariser cette absence.\n\n— EcolPro`;
+  const message = `🎓 *${ecoleNom}*\n\nBonjour,\n\nNous vous informons que *${eleveNom}* a été signalé(e) absent(e) le ${date}.\n\nVeuillez contacter l'établissement pour régulariser cette absence.\n\n— École Miriam`;
   return sendTelegramMessage(chatId, message);
 }
 
@@ -134,6 +134,6 @@ export async function sendRetardTelegram(
   date: string,
   ecoleNom: string
 ): Promise<TelegramResult> {
-  const message = `🎓 *${ecoleNom}*\n\nBonjour,\n\nNous vous informons que *${eleveNom}* a été signalé(e) en retard le ${date}.\n\nVeuillez contacter l'établissement pour plus d'informations.\n\n— EcolPro`;
+  const message = `🎓 *${ecoleNom}*\n\nBonjour,\n\nNous vous informons que *${eleveNom}* a été signalé(e) en retard le ${date}.\n\nVeuillez contacter l'établissement pour plus d'informations.\n\n— École Miriam`;
   return sendTelegramMessage(chatId, message);
 }

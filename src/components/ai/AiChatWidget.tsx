@@ -66,7 +66,7 @@ const JOUR_LABELS: Record<string, string> = {
   DIMANCHE: "Dimanche",
 };
 
-const STORAGE_KEY = "ecolpro-ai-chat-messages";
+const STORAGE_KEY = "ecolemiriam-ai-chat-messages";
 
 export function AiChatWidget({ greeting }: { greeting: string }) {
   const t = useTranslations("ai");

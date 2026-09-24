@@ -1,0 +1,41 @@
+name: Backup — test de restauration hebdomadaire
+
+on:
+  schedule:
+    # Dimanche à 04h00 UTC
+    - cron: "0 4 * * 0"
+  workflow_dispatch: {}
+
+jobs:
+  test-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install age + rclone
+        run: |
+          wget -qO- https://github.com/FiloSottile/age/releases/download/v1.2.1/age-v1.2.1-linux-amd64.tar.gz | tar xzf - -C /tmp
+          sudo mv /tmp/age/age /tmp/age/age-keygen /usr/local/bin/
+          curl https://rclone.org/install.sh | sudo bash
+
+      - name: Configure rclone
+        env:
+          RCLONE_CONFIG: ${{ secrets.BACKUP_RCLONE_CONFIG }}
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "$RCLONE_CONFIG" > ~/.config/rclone/rclone.conf
+
+      - name: Run restore test
+        env:
+          BACKUP_AGE_KEY_PRIVATE: ${{ secrets.BACKUP_AGE_KEY_PRIVATE }}
+          BACKUP_RCLONE_REMOTE: ecolemiriam-backup
+        run: |
+          chmod +x scripts/backups/test-restore.sh
+          ./scripts/backups/test-restore.sh
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Le test de restauration a échoué. Les backups pourraient être corrompus. Vérifiez immédiatement."
+          exit 1

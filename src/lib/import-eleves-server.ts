@@ -8,6 +8,8 @@
 
 import prisma from "@/lib/prisma";
 import { siteFilterForModel, mergeFilters, type SessionSiteClaims } from "@/lib/site-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
 import { normalizeName } from "@/lib/eleve-identity";
 import {
   analyzeImport,
@@ -46,15 +48,19 @@ export async function preparerPlan(
   // la recherche des élèves et classes existantes à ce site uniquement — sans
   // cela, un TENANT_ADMIN sans site sélectionné chargerait tous les élèves du
   // tenant et l'import « écraserait » les fiches des autres sites.
+  const siteFilter = targetSiteId
+    ? { AND: [{ siteId: targetSiteId }] }
+    : siteFilterForModel("eleve", acteur);
+  const classeSiteFilter = targetSiteId
+    ? { AND: [{ siteId: targetSiteId }] }
+    : siteFilterForModel("classe", acteur);
   // Le périmètre de site de la session est TOUJOURS appliqué ; un site cible
   // explicite le restreint davantage (il est validé par l'appelant). Sans le
   // filtre de session, un site cible non autorisé remplaçait le périmètre.
   const eleveScopeFilter = siteFilterForModel("eleve", acteur);
   const classeScopeFilter = siteFilterForModel("classe", acteur);
-  const siteFilter = targetSiteId
     ? mergeFilters(eleveScopeFilter, { AND: [{ siteId: targetSiteId }] })
     : eleveScopeFilter;
-  const classeSiteFilter = targetSiteId
     ? mergeFilters(classeScopeFilter, { AND: [{ siteId: targetSiteId }] })
     : classeScopeFilter;
 
@@ -71,7 +77,16 @@ export async function preparerPlan(
         classe: { select: { nom: true } },
       },
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- classeSiteFilter déjà appliqué via mergeFilters (le linter ne détecte pas le spread conditionnel)
     prisma.classe.findMany({
+      where: mergeFilters(
+        { tenantId: acteur.tenantId },
+        classeSiteFilter,
+        anneeFilterForModel(
+          "classe",
+          await getAnneeCouranteLibelle(acteur.tenantId),
+        ),
+      ),
       where: mergeFilters({ tenantId: acteur.tenantId }, classeSiteFilter),
       select: { nom: true },
     }),
@@ -103,6 +118,9 @@ export async function preparerPlan(
   if (importPrecedent) {
     let par: string | null = null;
     if (importPrecedent.userId) {
+      // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- lookup par userId pour affichage du nom seulement (pas de donnée sensible)
+      const auteur = await prisma.user.findUnique({
+        where: { id: importPrecedent.userId },
       // Auteur d'un import précédent : identifiant issu de NOTRE journal d'audit
       // (déjà borné au tenant). C'est un membre du personnel, qui peut n'être
       // rattaché à aucun site — d'où l'absence de filtre de site, assumée.
@@ -127,7 +145,7 @@ export async function preparerPlan(
  * milieu d'un lot.
  */
 export async function dernierMatricule(tenantId: string, annee: number): Promise<string | null> {
-  // eslint-disable-next-line ecolpro/require-site-filter -- unicité du matricule au niveau tenant, par construction
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- unicité du matricule au niveau tenant, par construction
   const dernier = await prisma.eleve.findFirst({
     where: { tenantId, matricule: { startsWith: `${annee}-` } },
     orderBy: { matricule: "desc" },

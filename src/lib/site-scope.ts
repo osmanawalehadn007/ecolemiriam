@@ -1,6 +1,6 @@
 
 /**
- * EcolPro — Isolation par site (multi-sites au sein d'un tenant)
+ * École Miriam — Isolation par site (multi-sites au sein d'un tenant)
  * ==============================================================
  * Source unique de vérité pour le filtrage par site.
  *
@@ -48,7 +48,7 @@ const RELATION_SCOPED_ROLES = new Set(["PARENT", "STUDENT"]);
 /**
  * Valeur impossible utilisée pour construire un prédicat toujours faux.
  */
-const IMPOSSIBLE_ID = "__ecolpro_no_site_access__";
+const IMPOSSIBLE_ID = "__ecolemiriam_no_site_access__";
 
 /**
  * Fragment `where` qui ne correspond à aucune ligne, quel que soit le modèle.
@@ -94,15 +94,6 @@ export function isTenantWideRole(role: string | undefined | null): boolean {
 
 export function isRelationScopedRole(role: string | undefined | null): boolean {
   return !!role && RELATION_SCOPED_ROLES.has(role);
-}
-
-/**
- * Conservé pour compatibilité : « ce rôle échappe-t-il au filtrage par site ? »
- * @deprecated Utiliser `resolveSiteScope` qui distingue périmètre tenant et
- * périmètre relationnel.
- */
-export function isSiteAdmin(role: string | undefined | null): boolean {
-  return isTenantWideRole(role) || isRelationScopedRole(role);
 }
 
 /**
@@ -298,6 +289,7 @@ export const SITE_PATHS: Record<string, SitePath> = {
   // --- colonne siteId directe ---
   alumni: "column",
   candidature: "column",
+  cahierTexte: "column",
   classe: "column",
   cours: "column",
   eleve: "column",
@@ -315,6 +307,9 @@ export const SITE_PATHS: Record<string, SitePath> = {
   matiere: "column",
   structure: "column",
   disponibiliteEnseignant: "column",
+  // Indisponibilités enseignants (créneaux à éviter) : `null` = partagé entre
+  // tous les sites du tenant.
+  indisponibiliteEnseignant: "column",
   // Journal de suppression d'un site : rattaché au site qu'il décrit.
   siteDeletionLog: "column",
   // Grille tarifaire : `null` = tarif commun à tous les sites du tenant.
@@ -322,6 +317,15 @@ export const SITE_PATHS: Record<string, SitePath> = {
   // Une conversation porte `siteId` (`null` = conversation hors site, par
   // exemple un échange direct entre deux personnes).
   conversation: "column",
+  depense: "column",
+  budget: "column",
+  remiseCaisse: "column",
+  // Liste de fournitures : `null` = partagée entre tous les sites.
+  fournitureListe: "column",
+  // Devoirs & chapitres portent `siteId` (`null` = non assigné / orphan
+  // après suppression du site) : filtrage strict, pas de shared-null.
+  devoir: "column",
+  chapitre: "column",
 
   // --- LearnOS : tous les modèles portent `siteId` ---
   // Le référentiel (curriculum, chapitre, compétence) comme les données
@@ -383,6 +387,11 @@ export const SITE_PATHS: Record<string, SitePath> = {
   absencePersonnel: { one: "enseignant" },
   congePersonnel: { one: "enseignant" },
   bulletinPaie: { one: "ficheRH" },
+  enseignantMatiere: { one: "enseignant" },
+  enseignantAffectation: { one: "enseignant" },
+  cahierTexteCommentaire: { one: "cahierTexte" },
+  // Ligne d'une liste de fournitures : rattachée au site via sa liste.
+  fournitureItem: { one: "liste" },
 
   // --- données de référence, partagées par tous les sites du tenant ---
   periode: "tenant",
@@ -399,6 +408,10 @@ export const SITE_PATHS: Record<string, SitePath> = {
   account: "tenant",
   session: "tenant",
   verificationToken: "tenant",
+  userPermission: "tenant",
+  // Le journal des emails est transverse : il trace les envois
+  // indépendamment du périmètre de site.
+  emailLog: "tenant",
 };
 
 /**
@@ -412,14 +425,16 @@ export const SITE_PATHS: Record<string, SitePath> = {
  */
 const SHARED_NULL_MODELS = new Set([
   "matiere",
-  "structure",
   "disponibiliteEnseignant",
+  "indisponibiliteEnseignant",
   // Tarif applicable à tous les sites faute de site précisé.
   "tarifNiveau",
   // Une conversation sans site n'est pas « non assignée » : c'est un échange
   // qui ne relève d'aucun site (message direct). L'exclure du filtre ferait
   // disparaître les conversations personnelles de tout compte site-scopé.
   "conversation",
+  // Fournitures scolaires : `null` = liste commune à tous les sites.
+  "fournitureListe",
 ]);
 
 /**
@@ -525,6 +540,21 @@ export function eleveScopeFilter(
     ? siteWhereForRelation(scope, relation)
     : siteWhere(scope);
   return mergeFilters(site, personalScopeFilter(claims, relation));
+}
+
+/**
+ * Filtre de périmètre personnel pour le modèle `Classe` : ne retient que les
+ * classes contenant au moins un enfant du parent (ou la classe de l'élève).
+ *
+ * Retourne `{}` pour les rôles non-relationnels (pas de filtrage supplémentaire).
+ * À combiner avec `siteFilterForModel("classe", …)` via `mergeFilters`.
+ */
+export function classeRelationScopeFilter(
+  claims: SessionSiteClaims & { userId?: string; id?: string }
+): Record<string, unknown> {
+  const personal = personalScopeFilter(claims, null);
+  if (Object.keys(personal).length === 0) return {};
+  return { eleves: { some: personal } };
 }
 
 /**

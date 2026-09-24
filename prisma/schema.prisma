@@ -1,5 +1,5 @@
 // ============================================================
-// EcolPro — Schéma Prisma Multi-Tenant
+// École Miriam — Schéma Prisma Multi-Tenant
 // Strategy: Row-level isolation via tenantId sur toutes les tables
 // ============================================================
 
@@ -84,6 +84,7 @@ model Tenant {
   // Relations
   users          User[]
   userTenants    UserTenant[]
+  userPermissions UserPermission[]
   annees         AnneesScolaires[]
   classes        Classe[]
   matieres       Matiere[]
@@ -102,17 +103,33 @@ model Tenant {
   inventaire     ItemInventaire[]
   evaluations    Evaluation[]
   disponibilites DisponibiliteEnseignant[]
+  indisponibilitesEnseignant IndisponibiliteEnseignant[]
   salles         Salle[]
   sites          Site[]
   structures     Structure[]
   reglesAppreciation ReglesAppreciation[]
   dispenses          DispenseMatiere[]
   absencesPersonnel  AbsencePersonnel[]
+  depenses           Depense[]
+  budgets            Budget[]
+  remisesCaisse      RemiseCaisse[]
   congesPersonnel    CongePersonnel[]
   conversations      Conversation[]
   tarifsNiveau       TarifNiveau[]
   relances           Relance[]
   exclusionsEleve    ExclusionEleve[]
+  enseignantMatieres    EnseignantMatiere[]
+  enseignantAffectations EnseignantAffectation[]
+  cahierTextes          CahierTexte[]
+  cahierTexteCommentaires CahierTexteCommentaire[]
+  devoirs               Devoir[]
+  chapitres             Chapitre[]
+
+  // Fournitures scolaires
+  fournitureListes FournitureListe[]
+
+  // Journal des emails transactionnels
+  emailLogs EmailLog[]
   learnosEvidence    LearnosEvidence[]
   learnosStudentTwin LearnosStudentTwin[]
   learnosAssessment  LearnosAssessment[]
@@ -162,6 +179,7 @@ model Site {
   matieres     Matiere[]
   structures   Structure[]
   disponibilitesEnseignant DisponibiliteEnseignant[]
+  indisponibilitesEnseignant IndisponibiliteEnseignant[]
   conversations Conversation[] @relation("ConversationSite")
 
   // Enseignants multi-sites
@@ -170,8 +188,19 @@ model Site {
   // Users multi-sites
   userSites UserSite[]
 
+  // Cahier de texte
+  cahierTextes CahierTexte[]
+  devoirs      Devoir[]
+  chapitres    Chapitre[]
+
   // Tarifs par niveau
   tarifsNiveau TarifNiveau[]
+  depenses     Depense[]
+  budgets      Budget[]
+  remisesCaisse RemiseCaisse[]
+
+  // Fournitures scolaires
+  fournitureListes FournitureListe[]
 
   learnosEvidence    LearnosEvidence[]
   learnosStudentTwin LearnosStudentTwin[]
@@ -297,6 +326,7 @@ model Periode {
   notes       Note[]
   bulletins   Bulletin[]
   evaluations Evaluation[]
+  chapitres   Chapitre[]
 
   @@index([anneeId])
   @@map("periodes")
@@ -307,7 +337,7 @@ model Periode {
 // ============================================================
 
 enum Role {
-  SUPER_ADMIN // Équipe EcolPro
+  SUPER_ADMIN // Équipe École Miriam
   TENANT_ADMIN // Directeur/Propriétaire
   PRINCIPAL // Chef d'établissement
   SECRETARY // Secrétariat
@@ -331,6 +361,8 @@ model User {
   email         String    @unique
   emailVerified DateTime?
   password      String? // hashé avec bcrypt
+  mfaSecret     String? // secret TOTP chiffré (base32) pour 2FA
+  mfaEnabled    Boolean   @default(false) // 2FA activée ?
   name          String
   firstName     String?
   lastName      String?
@@ -378,9 +410,26 @@ model User {
   // Multi-site: liste des sites accessibles
   userSites UserSite[]
 
+  // Permissions personnalisées (surcharge du rôle)
+  customPermissions UserPermission[]
+
   // Factures & paiements créés par cet utilisateur
   facturesCrees    Facture[]  @relation("FactureCreePar")
   paiementsEnregistres Paiement[] @relation("PaiementEnregistrePar")
+  paiementsDeposes Paiement[] @relation("PaiementDeposePar")
+  paiementsDirectorRecu Paiement[] @relation("PaiementDirectorRecuPar")
+  paiementsAnnulationDemandee Paiement[] @relation("PaiementDemandeAnnulationPar")
+  paiementsAnnulationApprouvee Paiement[] @relation("PaiementAnnulationApprouveePar")
+  paiementsAnnulationRefusee Paiement[] @relation("PaiementAnnulationRefuseePar")
+  depensesCrees    Depense[] @relation("DepenseCreePar")
+  depensesAutorisees Depense[] @relation("DepenseAutorisePar")
+  depensesPayees   Depense[] @relation("DepensePayePar")
+  budgetsCrees     Budget[]  @relation("BudgetCreePar")
+
+  // Remises de caisse: caissier et destinataire
+  remisesCaissier     RemiseCaisse[] @relation("RemiseCaissier")
+  remisesDestinataire RemiseCaisse[] @relation("RemiseDestinataire")
+  remisesRecues       RemiseCaisse[] @relation("RemiseRecuePar")
 
   // Relances envoyées et exclusions décidées/levées
   relancesEnvoyees   Relance[]       @relation("RelanceEnvoyeePar")
@@ -391,6 +440,19 @@ model User {
   absencesPersonnelSaisies AbsencePersonnel[] @relation("AbsencePersonnelSaisiePar")
   congesDemandes           CongePersonnel[]   @relation("CongeDemandePar")
   congesApprouves          CongePersonnel[]   @relation("CongeApprouvePar")
+
+  // Cahier de texte saisi par cet utilisateur
+  cahierTextesSaisis CahierTexte[] @relation("CahierTexteSaisiePar")
+  cahierTexteCommentaires CahierTexteCommentaire[] @relation("CahierTexteCommentaireAuteur")
+
+  // Devoirs donnés par cet utilisateur
+  devoirsDonnes Devoir[] @relation("DevoirDonnePar")
+
+  // Fournitures validées par cet utilisateur (secrétariat)
+  fournitureValideePar FournitureListe[] @relation("FournitureValideePar")
+
+  // Journal des emails transactionnels envoyés à cet utilisateur
+  emailLogs EmailLog[] @relation("EmailLogRecipient")
 
   @@index([tenantId])
   @@index([siteId])
@@ -418,6 +480,34 @@ model UserTenant {
   @@unique([userId, tenantId]) // Un user = une seule fois par tenant
   @@index([tenantId])
   @@map("user_tenants")
+}
+
+// ============================================================
+// USER PERMISSIONS — Permissions personnalisées par utilisateur
+// ============================================================
+// Permet au TENANT_ADMIN de surcharger les permissions du rôle
+// d'un utilisateur en cochant/décochant des actions spécifiques.
+// - mode "grant" : accorde une permission non incluse dans le rôle
+// - mode "deny"  : retire une permission normalement incluse dans le rôle
+// La vérification se fait dans rbac.ts → userHasPermission().
+
+model UserPermission {
+  id        String   @id @default(cuid())
+  userId    String
+  tenantId  String   // Scopé par tenant : un user peut avoir des perms différentes par établissement
+  permission String  // Format "module:action" (ex: "eleves:write")
+  mode      String   @default("grant") // "grant" ou "deny"
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, tenantId, permission]) // Une seule entrée par user/tenant/permission
+  @@index([tenantId])
+  @@index([userId])
+  @@map("user_permissions")
 }
 
 model Account {
@@ -490,7 +580,11 @@ model Structure {
 
   @@index([tenantId])
   @@index([siteId])
-  @@unique([tenantId, type])
+  // L'unicité (tenantId, siteId, type) est assurée par un index partiel créé
+  // via migration SQL. Les structures ne sont JAMAIS partagées entre sites :
+  // chaque site possède ses propres structures, et il est impossible d'avoir
+  // deux structures du même type sur le même site.
+  // Voir : prisma/migrations/fix_structure_unique_per_site.sql
   @@map("structures")
 }
 
@@ -519,10 +613,22 @@ model Classe {
   notes       Note[]
   evaluations Evaluation[]
   conversations Conversation[] @relation("ConversationClasse")
+  enseignantAffectations EnseignantAffectation[]
+  cahierTextes CahierTexte[]
+  devoirs      Devoir[]
+  chapitres    Chapitre[]
+  sessionsExamen SessionExamen[]
 
+  // Une classe est identifiée par son site ET son année scolaire : deux
+  // sites peuvent avoir une « 6ème1 », et la « 6ème1 » de 2025-2026 est une
+  // structure différente de celle de 2026-2027. Sans cette contrainte, des
+  // doublons se créaient et rendaient tout sélecteur de classe ambigu.
+  // Index créé par migration_classe_unicite_site_annee.sql.
+  @@unique([tenantId, siteId, annee, nom], map: "classes_tenant_site_annee_nom_key")
   @@index([tenantId])
   @@index([siteId])
   @@index([structureId])
+  @@index([siteId, annee])
   @@map("classes")
 }
 
@@ -545,6 +651,15 @@ model Matiere {
   bulletinMatieres BulletinMatiere[]
   evaluations      Evaluation[]
   dispenses        DispenseMatiere[]
+  enseignantMatieres    EnseignantMatiere[]
+  enseignantAffectations EnseignantAffectation[]
+  cahierTextes     CahierTexte[]
+  devoirs          Devoir[]
+  chapitres        Chapitre[]
+  sessionsExamen   SessionExamen[]
+
+  // Fournitures scolaires
+  fournitureListes FournitureListe[]
 
   @@index([tenantId])
   @@index([siteId])
@@ -719,14 +834,74 @@ model Enseignant {
   classesPrincipales Classe[]                  @relation("ProfPrincipal")
   emploiTemps        EmploiTemps[]
   disponibilites     DisponibiliteEnseignant[]
+  indisponibilites   IndisponibiliteEnseignant[]
   ficheRH            FicheRH?
   sites              EnseignantSite[]
   absencesPersonnel  AbsencePersonnel[]
   conges             CongePersonnel[]
+  matieres           EnseignantMatiere[]
+  affectations       EnseignantAffectation[]
+  cahierTextes       CahierTexte[]
+
+  // Fournitures scolaires
+  fournitureListes FournitureListe[]
 
   @@index([tenantId])
   @@index([userId])
   @@map("enseignants")
+}
+
+// ============================================================
+// AFFECTATION DES ENSEIGNANTS — matières & classes
+// ============================================================
+
+// Lien enseignant ↔ matière (obligatoire pour collège/lycée).
+// Au primaire, l'enseignant enseigne toutes les matières : pas de ligne ici.
+model EnseignantMatiere {
+  id           String @id @default(cuid())
+  tenantId     String
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  enseignantId String
+  enseignant   Enseignant @relation(fields: [enseignantId], references: [id], onDelete: Cascade)
+
+  matiereId String
+  matiere   Matiere  @relation(fields: [matiereId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([enseignantId, matiereId])
+  @@index([tenantId])
+  @@index([enseignantId])
+  @@index([matiereId])
+  @@map("enseignant_matieres")
+}
+
+// Affectation enseignant ↔ classe (+ matière optionnelle).
+// Primaire : 1 ligne par enseignant, matiereId null (enseigne tout).
+// Collège/Lycée : N lignes, matiereId obligatoire (une matière par classe).
+model EnseignantAffectation {
+  id           String @id @default(cuid())
+  tenantId     String
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  enseignantId String
+  enseignant   Enseignant @relation(fields: [enseignantId], references: [id], onDelete: Cascade)
+
+  classeId String
+  classe   Classe   @relation(fields: [classeId], references: [id], onDelete: Cascade)
+
+  matiereId String? // null = primaire (toutes matières) ; requis pour collège/lycée
+  matiere   Matiere? @relation(fields: [matiereId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([enseignantId, classeId, matiereId])
+  @@index([tenantId])
+  @@index([enseignantId])
+  @@index([classeId])
+  @@index([matiereId])
+  @@map("enseignant_affectations")
 }
 
 // ============================================================
@@ -765,6 +940,9 @@ model EmploiTemps {
   @@index([matiereId])
   @@index([enseignantId])
   @@map("emplois_temps")
+
+  // Back-relation : séances du cahier de texte générées depuis ce créneau
+  cahierTextes CahierTexte[]
 }
 
 model DisponibiliteEnseignant {
@@ -783,6 +961,31 @@ model DisponibiliteEnseignant {
   @@index([siteId])
   @@index([enseignantId])
   @@map("disponibilites_enseignants")
+}
+
+// Indisponibilités d'un enseignant : créneaux à ÉVITER lors de la génération
+// ou suggestion d'emploi du temps (autre établissement, rendez-vous, jour off…).
+// Une journée entière = 00:00 → 23:59. Importable via CSV/Excel depuis les
+// paramètres (source = "IMPORT") ou saisie manuelle (source = "MANUEL").
+model IndisponibiliteEnseignant {
+  id           String     @id @default(cuid())
+  tenantId     String
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  siteId       String?    // null = indisponibilité sur tous les sites
+  site         Site?      @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  enseignantId String
+  enseignant   Enseignant @relation(fields: [enseignantId], references: [id], onDelete: Cascade)
+  jour         Jour
+  heureDebut   String // "08:00"
+  heureFin     String // "12:00"
+  source       String   @default("MANUEL") // MANUEL | IMPORT
+  note         String?  // libellé optionnel (ex: "Autre établissement")
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([siteId])
+  @@index([enseignantId])
+  @@map("indisponibilites_enseignants")
 }
 
 model Salle {
@@ -890,6 +1093,7 @@ model Evaluation {
   statut      String   @default("PLANIFIE") // PLANIFIE, TERMINE
 
   notes Note[]
+  devoirs Devoir[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1051,7 +1255,15 @@ model SessionExamen {
   surveillants Json? // array of user IDs
   niveau       String?
 
+  // Lien direct classe + matière pour filtrage enseignant
+  classeId String?
+  classe   Classe? @relation(fields: [classeId], references: [id], onDelete: SetNull)
+  matiereId String?
+  matiere   Matiere? @relation(fields: [matiereId], references: [id], onDelete: SetNull)
+
   @@index([examId])
+  @@index([classeId])
+  @@index([matiereId])
   @@map("sessions_examen")
 }
 
@@ -1066,6 +1278,15 @@ enum StatutFacture {
   ANNULEE
 }
 
+enum TypeFacture {
+  MENSUALITE
+  INSCRIPTION
+  RENOUVELLEMENT
+  CANTINE
+  TRANSPORT
+  LIBRE
+}
+
 model Facture {
   id       String @id @default(cuid())
   tenantId String
@@ -1074,15 +1295,23 @@ model Facture {
   siteId String? // null = non rattaché à un site spécifique
   site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
 
-  eleveId String
-  eleve   Eleve  @relation(fields: [eleveId], references: [id], onDelete: Cascade)
+  // eleveId est optionnel : une facture d'admission est créée avant l'élève.
+  // Quand l'élève est créé (INSCRIT), on relie la facture à l'élève.
+  eleveId String?
+  eleve   Eleve?  @relation(fields: [eleveId], references: [id], onDelete: Cascade)
+
+  // Lien optionnel vers la candidature (facture d'inscription/admission)
+  candidatureId String?
+  candidature   Candidature? @relation(fields: [candidatureId], references: [id], onDelete: SetNull)
 
   numero   String
   libelle  String // "Scolarité 2025-2026", "Cantine Octobre"
   montant  Float
   devise   String        @default("DJF")
   statut   StatutFacture @default(EN_ATTENTE)
+  type     TypeFacture   @default(LIBRE) // type de facture pour le dédoublonnage
   echeance DateTime?
+  mois     String? // "2025-10" pour le classement mensuel des factures
 
   paiements Paiement[]
   relances  Relance[]
@@ -1095,8 +1324,11 @@ model Facture {
 
   @@index([tenantId])
   @@index([eleveId])
+  @@index([candidatureId])
   @@index([tenantId, statut])
+  @@index([tenantId, mois])
   @@index([siteId])
+  @@index([tenantId, eleveId, type, mois])
   @@map("factures")
 }
 
@@ -1115,8 +1347,151 @@ model Paiement {
   enregistreParId String? // User who recorded the payment
   enregistrePar   User?   @relation("PaiementEnregistrePar", fields: [enregistreParId], references: [id], onDelete: SetNull)
 
+  // Suivi du dépôt du cash à la banque
+  depotBanque    String?
+  depotDate      DateTime?
+  depotParId     String?
+  depotPar       User? @relation("PaiementDeposePar", fields: [depotParId], references: [id], onDelete: SetNull)
+
+  // Récupération par le directeur
+  directorRecu   Boolean  @default(false)
+  directorRecuAt DateTime?
+  directorRecuParId String?
+  directorRecuPar   User? @relation("PaiementDirectorRecuPar", fields: [directorRecuParId], references: [id], onDelete: SetNull)
+
+  // ── Contre-passation & workflow d'approbation ──
+  // Un paiement ne se supprime JAMAIS : on crée une contre-passation
+  // (paiement négatif lié à l'original). L'annulation d'un paiement
+  // requiert l'approbation d'un responsable (finance:approve).
+  estContrePassation  Boolean  @default(false)
+  paiementOriginalId  String?
+  paiementOriginal    Paiement? @relation("PaiementContrePassation", fields: [paiementOriginalId], references: [id], onDelete: SetNull)
+  contrePassations    Paiement[] @relation("PaiementContrePassation")
+
+  // Workflow d'annulation (sur le paiement ORIGINAL)
+  annulationStatut       String? // DEMANDEE | APPROUVEE | REFUSEE
+  motifAnnulation        String?
+  demandeAnnulationParId String?
+  demandeAnnulationPar   User? @relation("PaiementDemandeAnnulationPar", fields: [demandeAnnulationParId], references: [id], onDelete: SetNull)
+  demandeAnnulationLe    DateTime?
+  annulationApprouveeParId String?
+  annulationApprouveePar   User? @relation("PaiementAnnulationApprouveePar", fields: [annulationApprouveeParId], references: [id], onDelete: SetNull)
+  annulationApprouveeLe    DateTime?
+  annulationRefuseeParId String?
+  annulationRefuseePar   User? @relation("PaiementAnnulationRefuseePar", fields: [annulationRefuseeParId], references: [id], onDelete: SetNull)
+  annulationRefuseeLe    DateTime?
+
   @@index([factureId])
+  @@index([depotParId])
+  @@index([directorRecuParId])
+  @@index([paiementOriginalId])
+  @@index([annulationStatut])
   @@map("paiements")
+}
+
+model Depense {
+  id          String  @id @default(cuid())
+  tenantId    String
+  tenant      Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  siteId      String?
+  site        Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  categorie   String
+  description String?
+  fournisseur String?
+  justificatif String?
+  montant     Float
+  devise      String  @default("DJF")
+  date        DateTime @default(now())
+
+  // Traçabilité de l'engagement de dépense
+  typeEngagement String? // "bon_commande", "facture", "bon_livraison", "achat_comptant"
+  autoriseParId String?
+  autorisePar   User?   @relation("DepenseAutorisePar", fields: [autoriseParId], references: [id], onDelete: SetNull)
+  payeParId     String?
+  payePar       User?   @relation("DepensePayePar", fields: [payeParId], references: [id], onDelete: SetNull)
+
+  createdById String?
+  createdBy   User?   @relation("DepenseCreePar", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([siteId])
+  @@index([date])
+  @@map("depenses")
+}
+
+model Budget {
+  id            String  @id @default(cuid())
+  tenantId      String
+  tenant        Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  siteId        String?
+  site          Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  categorie     String
+  periode       String  // ex: "2025-09" ou "2025-S1"
+  montantPrevu  Float
+
+  createdById   String?
+  createdBy     User?   @relation("BudgetCreePar", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([tenantId, siteId, categorie, periode])
+  @@index([tenantId])
+  @@index([siteId])
+  @@map("budgets")
+}
+
+// ============================================================
+// REMISE DE CAISSE (handover of cash from cashier to recipient)
+// ============================================================
+
+enum StatutRemise {
+  EN_ATTENTE
+  CONFIRME
+  REJETE
+}
+
+model RemiseCaisse {
+  id          String  @id @default(cuid())
+  tenantId    String
+  tenant      Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  siteId      String?
+  site        Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  // Déclaration du caissier
+  caissierId      String
+  caissier        User    @relation("RemiseCaissier", fields: [caissierId], references: [id], onDelete: Cascade)
+  montantDeclare  Float
+  dateDeclaration DateTime @default(now())
+
+  // Destinataire prévu (ex: directeur, comptable)
+  destinataireId  String?
+  destinataire    User?   @relation("RemiseDestinataire", fields: [destinataireId], references: [id], onDelete: SetNull)
+
+  // Confirmation par le destinataire
+  montantRecu     Float?
+  dateReception   DateTime?
+  recuParId       String?
+  recuPar         User?   @relation("RemiseRecuePar", fields: [recuParId], references: [id], onDelete: SetNull)
+
+  statut          StatutRemise @default(EN_ATTENTE)
+
+  // Liste des paiements inclus dans cette remise (JSON array of paiement IDs)
+  paiementIds     String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([siteId])
+  @@index([caissierId])
+  @@index([statut])
+  @@map("remises_caisse")
 }
 
 // ============================================================
@@ -1402,6 +1777,7 @@ enum CibleNotification {
   ELEVES // Tous les élèves
   CLASSE // Une classe spécifique
   NIVEAU // Un niveau (ex: Terminale)
+  DIRECTION // Directeur (TENANT_ADMIN) + Chef d'établissement (PRINCIPAL)
 }
 
 model Notification {
@@ -1437,6 +1813,74 @@ model Notification {
   @@index([tenantId])
   @@index([siteId])
   @@map("notifications")
+}
+
+// ============================================================
+// JOURNAL DES EMAILS TRANSACTIONNELS
+// ============================================================
+
+enum TypeEmail {
+  VERIFICATION       // Email de vérification d'adresse (création de compte)
+  PASSWORD_RESET     // Réinitialisation de mot de passe
+  NOTIFICATION       // Notification diffusée (canal email)
+  ADMISSION          // Facture/lien d'admission
+  RELANCE            // Relance de facture
+  AUTRE              // Autre email transactionnel
+}
+
+enum StatutEmail {
+  PENDING     // En attente d'envoi
+  SENT        // Envoyé à Resend (ID reçu)
+  DELIVERED   // Délivré au serveur de messagerie (webhook)
+  BOUNCED     // Rejeté par le serveur de messagerie (webhook)
+  FAILED      // Échec d'envoi (erreur API Resend)
+  COMPLAINED  // Marqué comme spam par le destinataire (webhook)
+  OPENED      // Ouvert par le destinataire (webhook)
+  DELIVERY_DELAYED // Délai de livraison temporaire (webhook)
+}
+
+model EmailLog {
+  id        String      @id @default(cuid())
+  tenantId  String?
+  tenant    Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Destinataire
+  userId    String?
+  user      User?       @relation("EmailLogRecipient", fields: [userId], references: [id], onDelete: SetNull)
+  email     String      // adresse email du destinataire
+
+  // Contenu
+  type      TypeEmail
+  subject   String
+  status    StatutEmail @default(PENDING)
+
+  // Corrélation avec Resend
+  resendEmailId String? // ID retourné par l'API Resend pour les webhooks
+
+  // Détails d'erreur / diagnostic
+  errorMessage  String? @db.Text
+  bounceReason  String? @db.Text
+
+  // Horodatage des événements
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  bouncedAt     DateTime?
+  openedAt      DateTime?
+  complainedAt  DateTime?
+
+  // Métadonnées
+  createdBy String? // ID de l'utilisateur qui a déclenché l'envoi
+  tags      Json?   // tags Resend (ex: { category: "verification" })
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([email])
+  @@index([resendEmailId])
+  @@index([status])
+  @@map("email_logs")
 }
 
 // ============================================================
@@ -1623,6 +2067,7 @@ model CongePersonnel {
 
 enum StatutCandidature {
   SOUMISE // Candidature reçue, en attente de traitement
+  DOSSIER_COMPLET // Pièces justificatives reçues et vérifiées
   EN_EXAMEN // Dossier en cours d'examen
   ADMIS // Candidat admis
   REFUSE // Candidature refusée
@@ -1667,6 +2112,9 @@ model Candidature {
 
   // Documents joints (URLs)
   documents Json? // [{ nom: "Bulletin", url: "..." }]
+
+  // Factures liées (facture d'inscription générée à l'admission)
+  factures Facture[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2078,6 +2526,129 @@ enum AuditVerdict {
   DENIED
 }
 
+// ============================================================
+// CAHIER DE TEXTE — registre des séances de cours
+// ============================================================
+// L'enseignant y inscrit ce qui a été fait à chaque séance,
+// les devoirs donnés et ce qui est prévu pour le cours suivant.
+// Le conseiller (CPE) et la direction peuvent consulter.
+
+// Workflow d'une séance :
+//   PLANIFIEE  → créée depuis l'emploi du temps, pas encore renseignée
+//   EFFECTUEE  → l'enseignant a rempli le contenu (défaut pour saisie manuelle)
+//   CLOTUREE   → validée par l'enseignant ou la direction
+//   ANNULEE    → cours annulé (prof absent, grève, etc.)
+//   REMPLACEE  → remplacée par une autre séance (lien via seanceRemplacementId)
+enum StatutSeance {
+  PLANIFIEE
+  EFFECTUEE
+  CLOTUREE
+  ANNULEE
+  REMPLACEE
+}
+
+model CahierTexte {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  siteId String? // null = non rattaché à un site spécifique
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  classeId    String
+  classe      Classe      @relation(fields: [classeId], references: [id], onDelete: Cascade)
+  matiereId   String
+  matiere     Matiere     @relation(fields: [matiereId], references: [id])
+  enseignantId String?
+  enseignant   Enseignant? @relation(fields: [enseignantId], references: [id])
+
+  // Lien optionnel vers l'emploi du temps (séance auto-générée)
+  emploiTempsId String?
+  emploiTemps   EmploiTemps? @relation(fields: [emploiTempsId], references: [id], onDelete: SetNull)
+
+  // Lien optionnel vers un chapitre du programme
+  chapitreId String?
+  chapitre   Chapitre?   @relation(fields: [chapitreId], references: [id], onDelete: SetNull)
+
+  date       DateTime  // date de la séance
+  heureDebut String?   // "08:00"
+  heureFin   String?   // "09:00"
+
+  // Statut de la séance (workflow)
+  statut      StatutSeance @default(EFFECTUEE)
+
+  contenu      String  @db.Text // ce qui a été fait en classe
+  devoirs      String? @db.Text // devoirs / travail à faire à la maison (legacy — préférer le modèle Devoir)
+  prochainCours String? @db.Text // prévision pour la séance suivante
+  commentaire  String? @db.Text // remarques libres de l'enseignant
+
+  // Contenu structuré (JSON)
+  // objectifs: String[] — objectifs pédagogiques de la séance
+  // activites: [{ type: "COURS"|"EXERCICE"|"TP"|"EVALUATION"|"PROJET", description: string, dureeMin?: number }]
+  // supports: [{ type: "DOCUMENT"|"VIDEO"|"LIEN"|"COURS_EN_LIGNE", url: string, coursId?: string }]
+  // differentiation?: string — adaptations pour élèves à besoins spécifiques
+  contenuStructure  Json?
+
+  // Fichiers attachés (JSON array: [{nom, type, taille, dataUrl}])
+  // .doc, .docx, .pdf, .odt — stockés en base64 data URL
+  fichiers     Json?
+
+  saisieParId String? // userId de l'enseignant qui a saisi
+  saisiePar   User?   @relation("CahierTexteSaisiePar", fields: [saisieParId], references: [id], onDelete: SetNull)
+
+  // Horodatage des transitions de statut
+  effectueeAt   DateTime? // quand la séance a été renseignée
+  clotureeAt    DateTime? // quand la séance a été clôturée
+
+  // Commentaires (CPE / conseiller / direction)
+  commentaires CahierTexteCommentaire[]
+
+  // Devoirs liés à cette séance
+  devoirsLiees Devoir[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([siteId])
+  @@index([classeId])
+  @@index([matiereId])
+  @@index([enseignantId])
+  @@index([emploiTempsId])
+  @@index([chapitreId])
+  @@index([statut])
+  @@index([tenantId, date])
+  @@map("cahier_textes")
+}
+
+// ============================================================
+// COMMENTAIRES DU CAHIER DE TEXTE
+// ============================================================
+// Le conseiller (CPE), la direction ou tout rôle avec cahier-texte:read
+// peut ajouter des commentaires sur une séance — feedback pédagogique,
+// remarque de conformité, etc.
+
+model CahierTexteCommentaire {
+  id           String @id @default(cuid())
+  tenantId     String
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  cahierTexteId String
+  cahierTexte   CahierTexte @relation(fields: [cahierTexteId], references: [id], onDelete: Cascade)
+
+  auteurId   String
+  auteur     User   @relation("CahierTexteCommentaireAuteur", fields: [auteurId], references: [id], onDelete: Cascade)
+
+  contenu    String  @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([cahierTexteId])
+  @@index([auteurId])
+  @@map("cahier_texte_commentaires")
+}
+
 model AuditLog {
   id         String       @id @default(cuid())
   tenantId   String?
@@ -2102,12 +2673,59 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-
 // ============================================================
+// FOURNITURES SCOLAIRES
+// ============================================================
+// Flux : enseignant → secrétariat → publication → parents/élèves
+// L'enseignant saisit par niveau (ex: "6ème") pour sa matière.
+// Le secrétariat compile, complète et valide avant publication.
+
+enum FournitureType {
+  LIVRE
+  CAHIER
+  INSTRUMENT
+  AUTRE
+}
+
+enum FournitureStatut {
+  BROUILLON  // Saisie en cours par l'enseignant
+  SOUMISE    // Soumise au secrétariat pour validation
+  VALIDEE    // Validée par le secrétariat
+  PUBLIEE    // Publiée — visible par les parents/élèves
+  REJETEE    // Rejetée par le secrétariat
+}
+
+model FournitureListe {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  siteId String? // null = tous les sites
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  niveau    String  // "6ème", "CM2" — correspond à Classe.niveau
+  annee     String  // "2025-2026"
+  matiereId String? // null = fournitures générales (ajoutées par le secrétariat)
+  matiere   Matiere? @relation(fields: [matiereId], references: [id], onDelete: SetNull)
+
+  statut FournitureStatut @default(BROUILLON)
+
+  // Enseignant qui a créé/soumis cette liste
+  enseignantId String?
+  enseignant   Enseignant? @relation(fields: [enseignantId], references: [id], onDelete: SetNull)
+
+  // Validation par le secrétariat
+  valideeParId String?
+  valideePar   User? @relation("FournitureValideePar", fields: [valideeParId], references: [id], onDelete: SetNull)
+  valideeAt    DateTime?
+  publieeAt    DateTime?
+
+  commentaireEnseignant  String? // Notes de l'enseignant
+  commentaireSecretariat String? // Notes du secrétariat
+
+  items FournitureItem[]
 // LEARNOS — Couche IA pédagogique
 // Isolation multi-tenant via tenantId/siteId, liens métier par IDs.
-// ============================================================
-
 enum LearnosEvidenceType {
   EXERCICE
   DEVOIR
@@ -2117,36 +2735,27 @@ enum LearnosEvidenceType {
   ORAL
   PROJET
   PARTICIPATION
-}
-
 enum LearnosEvidenceSource {
   MANUEL
   DIGITAL
   OCR
   IMPORT
   SYNC
-}
-
 enum LearnosInterventionStatus {
   PROPOSED
   APPROVED
   REJECTED
   COMPLETED
-}
-
 enum LearnosInterventionType {
   REMEDIATION
   ENRICHMENT
   REVISION
-}
-
 model LearnosCurriculum {
   id        String @id @default(cuid())
   tenantId  String
   siteId    String?
   matiereId String
   anneeId   String
-
   nom        String
   niveau     String
   objectifs  String?
@@ -2156,60 +2765,127 @@ model LearnosCurriculum {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([tenantId, niveau, annee, matiereId]) // Une seule liste par niveau/année/matière
+  @@index([tenantId])
+  @@index([siteId])
+  @@index([matiereId])
+  @@index([enseignantId])
+  @@index([statut])
+  @@map("fourniture_listes")
+}
+
+model FournitureItem {
+  id      String @id @default(cuid())
+  listeId String
+  liste   FournitureListe @relation(fields: [listeId], references: [id], onDelete: Cascade)
+
+  nom         String        // "Cahier 200 pages"
+  type        FournitureType
+  quantite    Int           @default(1)
+  format      String?       // "A4", "17x22", "192 pages"
+  description String?
+  marque      String?       // Pour les livres : éditeur/auteur
+
+  ordre Int @default(0) // Ordre d'affichage
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
   @@unique([tenantId, siteId, matiereId, anneeId])
   @@index([tenantId, matiereId])
   @@map("learnos_curriculum")
-}
-
 model LearnosChapitre {
   id           String @id @default(cuid())
   tenantId     String
   siteId       String?
   curriculumId String
-
   nom        String
   ordre      Int    @default(0)
   objectifs  String?
   competences LearnosCompetence[]
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
   tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   site       Site?             @relation(fields: [siteId], references: [id], onDelete: Cascade)
   curriculum LearnosCurriculum @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
-
   @@index([tenantId, curriculumId])
   @@map("learnos_chapitre")
-}
-
 model LearnosCompetence {
   id          String @id @default(cuid())
   tenantId    String
   siteId      String?
   curriculumId String
   chapitreId  String?
-
   code        String
   nom         String
-  description String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([listeId])
+  @@map("fourniture_items")
+}
+
+// ============================================================
+// DEVOIRS — travail à faire à la maison, lié à une séance
+// ============================================================
+// Remplace le champ texte libre `devoirs` sur CahierTexte par un
+// objet traçable avec date de remise, type, et suivi des rendus.
+// Les élèves/parents voient les devoirs sur l'app mobile.
+
+enum TypeDevoir {
+  EXERCICE
+  LECTURE
+  RECHERCHE
+  REVISION
+  PROJET
+  DISSERTATION
+  AUTRE
+}
+
+enum StatutDevoir {
+  DONNE       // devoir donné, en attente de remise
+  RENDU       // élève a rendu le devoir
+  NON_RENDU   // date de remise dépassée sans rendu
+  CORRIGE     // corrigé par l'enseignant
+}
+
+model Devoir {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  // Séance qui a donné le devoir
+  seanceId   String
+  seance     CahierTexte @relation(fields: [seanceId], references: [id], onDelete: Cascade)
+
+  classeId  String
+  classe    Classe  @relation(fields: [classeId], references: [id], onDelete: Cascade)
+  matiereId String
+  matiere   Matiere @relation(fields: [matiereId], references: [id])
+
+  description  String  @db.Text
+  type         TypeDevoir @default(EXERCICE)
+  dateRemise   DateTime  // échéance
+  statut       StatutDevoir @default(DONNE)
+
+  // Lien optionnel vers une évaluation (si le devoir est noté)
+  evaluationId String?
+  evaluation   Evaluation? @relation(fields: [evaluationId], references: [id], onDelete: SetNull)
+
+  // Fichiers attachés (consigne, sujet)
+  fichiers Json?
+
+  donneParId String?
+  donnePar   User?   @relation("DevoirDonnePar", fields: [donneParId], references: [id], onDelete: SetNull)
   tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   site       Site?             @relation(fields: [siteId], references: [id], onDelete: Cascade)
   curriculum LearnosCurriculum @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
   chapitre   LearnosChapitre?  @relation(fields: [chapitreId], references: [id], onDelete: SetNull)
-
   @@unique([tenantId, siteId, code])
   @@index([tenantId, curriculumId])
   @@map("learnos_competence")
-}
-
 model LearnosEvidence {
   id           String @id @default(cuid())
   tenantId     String
@@ -2218,7 +2894,6 @@ model LearnosEvidence {
   matiereId    String
   chapitreId   String?
   competenceId String?
-
   type            LearnosEvidenceType
   source          LearnosEvidenceSource
   rawData         Json
@@ -2227,40 +2902,29 @@ model LearnosEvidence {
   confidence      Float   @default(0)
   noteId          String?
   examenId        String?
-
   createdAt DateTime @default(now())
-
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
   @@index([tenantId, siteId, eleveId])
   @@index([tenantId, matiereId])
   @@index([tenantId, competenceId])
   @@map("learnos_evidence")
-}
-
 model LearnosStudentTwin {
   id            String @id @default(cuid())
   tenantId      String
   siteId        String?
   eleveId       String
   matiereId     String
-
   masteryVector  Json
   trendSlope     Float    @default(0)
   decayFactor    Float    @default(0.95)
   lastEvidenceAt DateTime?
-
   updatedAt DateTime @updatedAt
-
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
   @@unique([tenantId, siteId, eleveId, matiereId])
   @@index([tenantId, eleveId])
   @@map("learnos_student_twin")
-}
-
 model LearnosAssessment {
   id          String @id @default(cuid())
   tenantId    String
@@ -2268,24 +2932,18 @@ model LearnosAssessment {
   createdById String
   matiereId   String
   chapitreId  String?
-
   difficulty           Float
   variantSeed          String
   antiCheatTag         String
   reasoningCheckpoints Json[]
   questions            Json[]
   competenceIds        String[]
-
   status      String   @default("DRAFT")
   createdAt   DateTime @default(now())
-
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
   @@index([tenantId, siteId, matiereId])
   @@map("learnos_assessment")
-}
-
 model LearnosAssignment {
   id          String @id @default(cuid())
   tenantId    String
@@ -2293,7 +2951,6 @@ model LearnosAssignment {
   assessmentId String?
   eleveId     String
   matiereId   String
-
   assignedById String
   payload      Json
   dueDate      DateTime?
@@ -2302,33 +2959,69 @@ model LearnosAssignment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId, siteId, eleveId])
-  @@map("learnos_assignment")
+  @@index([tenantId])
+  @@index([siteId])
+  @@index([seanceId])
+  @@index([classeId])
+  @@index([matiereId])
+  @@index([statut])
+  @@index([dateRemise])
+  @@map("devoirs")
 }
 
+// ============================================================
+// CHAPITRES — progression du programme par matière/classe
+// ============================================================
+// Permet de suivre l'avancement du programme : chaque chapitre
+// a un nombre d'heures prévues, et les séances rattachées
+// permettent de calculer le % réalisé.
+
+model Chapitre {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  matiereId String
+  matiere   Matiere @relation(fields: [matiereId], references: [id])
+
+  // Cible : niveau (ex: "6ème") ou classe spécifique
+  niveau  String?  // "6eme", "Terminale S", etc.
+  classeId String?
+  classe   Classe?  @relation(fields: [classeId], references: [id], onDelete: SetNull)
+
+  titre       String  // "Calcul différentiel"
+  description String? @db.Text
+  ordre       Int     @default(0) // ordre dans le programme
+  nbHeuresPrevues Int  @default(0) // durée estimée en heures
+
+  // Période (trimestre/semestre)
+  periodeId String?
+  periode   Periode? @relation(fields: [periodeId], references: [id], onDelete: SetNull)
+
+  // Séances rattachées à ce chapitre
+  seances CahierTexte[]
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  @@index([tenantId, siteId, eleveId])
+  @@map("learnos_assignment")
 model LearnosSubmission {
   id           String @id @default(cuid())
   tenantId     String
   siteId       String?
   assignmentId String
   eleveId      String
-
   answers      Json
   score        Float?
   feedback     String?
   errorTypes   String[]
   submittedAt  DateTime @default(now())
-
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
   @@index([tenantId, siteId, assignmentId])
   @@map("learnos_submission")
-}
-
 model LearnosDiagnostic {
   id           String @id @default(cuid())
   tenantId     String
@@ -2336,28 +3029,21 @@ model LearnosDiagnostic {
   eleveId      String
   matiereId    String
   competenceId String?
-
   errorType      String
   falseMastery   Boolean  @default(false)
   evidenceIds    String[]
   recommendation String?
-
   createdAt DateTime @default(now())
-
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
   @@index([tenantId, siteId, eleveId])
   @@index([tenantId, matiereId])
   @@map("learnos_diagnostic")
-}
-
 model LearnosIntervention {
   id         String @id @default(cuid())
   tenantId   String
   siteId     String?
   eleveId    String
-
   type       LearnosInterventionType
   proposedBy String // AI or TEACHER
   approvedById String?
@@ -2368,6 +3054,11 @@ model LearnosIntervention {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([tenantId])
+  @@index([matiereId])
+  @@index([classeId])
+  @@index([periodeId])
+  @@map("chapitres")
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   site   Site?  @relation(fields: [siteId], references: [id], onDelete: Cascade)
 

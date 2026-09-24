@@ -60,7 +60,7 @@ export function PWAEnhanced() {
                 <Download className="h-4 w-4 text-indigo-600" />
               </div>
               <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                Installer EcolPro
+                Installer École Miriam
               </p>
             </div>
             <button
@@ -71,6 +71,7 @@ export function PWAEnhanced() {
             </button>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            Accédez rapidement à École Miriam depuis votre écran d&apos;accueil.
             Accédez rapidement à EcolPro depuis votre écran d&apos;accueil.
           </p>
           <button

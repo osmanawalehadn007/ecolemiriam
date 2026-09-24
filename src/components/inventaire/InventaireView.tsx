@@ -8,6 +8,7 @@ import {
   Tv, Wind, Shield, MoreHorizontal
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { hasPermission } from "@/lib/client-permissions";
 
 type Categorie = "INFORMATIQUE" | "MOBILIER" | "SPORTIF" | "PEDAGOGIQUE" | "AUDIOVISUEL" | "ENTRETIEN" | "SECURITE" | "AUTRE";
 type Etat = "NEUF" | "BON" | "USE" | "ENDOMMAGE" | "HORS_SERVICE";
@@ -63,8 +64,9 @@ const EMPTY_FORM = {
   dateAchat: "", dateRevision: "", notes: "",
 };
 
-export function InventaireView() {
+export function InventaireView({ userRole }: { userRole?: string } = {}) {
   const t = useTranslations("inventaire");
+  const canWrite = hasPermission(userRole, "inventaire:write");
   const [items, setItems] = useState<Item[]>([]);
   const [stats, setStats] = useState<Stats>({
     total: 0, valeurTotale: 0, alertes: 0, horsService: 0, parCategorie: {}
@@ -158,12 +160,14 @@ export function InventaireView() {
           <h1 className="text-2xl font-bold text-gray-900">{t("title")}</h1>
           <p className="text-gray-500 text-sm mt-1">{t("subtitle")}</p>
         </div>
+        {canWrite && (
         <button
           onClick={openCreate}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors"
         >
           <Plus className="w-4 h-4" /> {t("addItem")}
         </button>
+        )}
       </div>
 
       {/* Stats */}
@@ -279,12 +283,16 @@ export function InventaireView() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 justify-end">
+                        {canWrite && (
                         <button onClick={() => openEdit(item)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
                           <Edit3 className="w-4 h-4" />
                         </button>
+                        )}
+                        {canWrite && (
                         <button onClick={() => handleDelete(item.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors">
                           <Trash2 className="w-4 h-4" />
                         </button>
+                        )}
                       </div>
                     </td>
                   </tr>

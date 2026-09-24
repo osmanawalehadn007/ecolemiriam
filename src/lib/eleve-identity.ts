@@ -1,5 +1,5 @@
 /**
- * EcolPro — Identité d'un élève et détection des doublons
+ * École Miriam — Identité d'un élève et détection des doublons
  * =======================================================
  *
  * Source unique de vérité pour répondre à « ces deux fiches désignent-elles

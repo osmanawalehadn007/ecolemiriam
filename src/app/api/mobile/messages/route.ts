@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
+import { withMobileScope } from "@/lib/mobile-auth";
 
 export async function GET(req: NextRequest) {
-  const user = await verifyMobileScope(req);
-  if (!user) return mobileUnauthorized();
-  if (!user.tenantId) {
-    return NextResponse.json({ error: "Aucun établissement associé" }, { status: 403 });
-  }
-
+  return withMobileScope(req, async (user) => {
   const { searchParams } = new URL(req.url);
   const limit = parseInt(searchParams.get("limit") ?? "50");
 
@@ -103,4 +98,5 @@ export async function GET(req: NextRequest) {
   const nonLus = conversationsWithUnread.reduce((acc, c) => acc + c.unreadCount, 0);
 
   return NextResponse.json({ conversations: conversationsWithUnread, nonLus });
+  });
 }

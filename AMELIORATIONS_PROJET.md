@@ -1,6 +1,6 @@
-# Améliorations du projet EcolPro
+# Améliorations du projet École Miriam
 
-Ce document résume les axes d'amélioration proposés pour enrichir EcolPro autour de trois fonctionnalités principales : la planification pédagogique, le mentorat des élèves et la planification des cours.
+Ce document résume les axes d'amélioration proposés pour enrichir École Miriam autour de trois fonctionnalités principales : la planification pédagogique, le mentorat des élèves et la planification des cours.
 
 ---
 

@@ -37,6 +37,10 @@ import {
 } from "@/lib/ai/schedule-tool";
 import type { BulkCreneauProposal } from "@/lib/emploi-du-temps/bulk-generate";
 import type { Role } from "@prisma/client";
+import { siteFilterForModel, siteFilterForRelation, type SessionSiteClaims } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
 import { siteFilterForModel, siteFilterForRelation } from "@/lib/site-scope";
 
 type PendingAction = CreneauProposal & { type: "create_emploi_du_temps" };
@@ -195,7 +199,7 @@ function scopeForRole(role: Role): AiScope | null {
 }
 
 async function buildSystemPrompt(scope: AiScope, tenantId: string, userId: string, ecoleNom: string, siteFilter: Record<string, unknown>, absenceFilter: Record<string, unknown>): Promise<string> {
-  const base = `Tu es l'assistant IA intégré à EcolPro, le logiciel de gestion scolaire de "${ecoleNom}". Réponds toujours en français, de façon concise, concrète et actionnable. Si tu n'as pas une information précise, dis-le clairement plutôt que d'inventer des chiffres ou des noms.`;
+  const base = `Tu es l'assistant IA intégré à École Miriam, le logiciel de gestion scolaire de "${ecoleNom}". Réponds toujours en français, de façon concise, concrète et actionnable. Si tu n'as pas une information précise, dis-le clairement plutôt que d'inventer des chiffres ou des noms.`;
 
   if (scope === "ai:admin") {
     const debutJour = new Date();
@@ -205,8 +209,10 @@ async function buildSystemPrompt(scope: AiScope, tenantId: string, userId: strin
 
     const [nbEleves, nbClasses, nbAbsencesAujourdhui] = await Promise.all([
       prisma.eleve.count({ where: { tenantId, ...siteFilter, statut: "ACTIF" } }),
-      prisma.classe.count({ where: { tenantId, ...siteFilter } }),
-      // eslint-disable-next-line ecolpro/require-site-filter -- absenceFilter = siteFilterForRelation(session.user, "eleve"), spread sous un nom de variable
+      prisma.classe.count({
+        where: mergeFilters({ tenantId }, siteFilter, anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId))),
+      }),
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- absenceFilter = siteFilterForRelation(session.user, "eleve"), spread sous un nom de variable
       prisma.absence.count({ where: { tenantId, ...absenceFilter, date: { gte: debutJour, lte: finJour } } }),
     ]);
 
@@ -236,7 +242,7 @@ Pour toute question sur l'emploi du temps, les classes, les enseignants ou les s
   }
 
   // ai:parent — grounded strictly on this parent's own linked children.
-  // eslint-disable-next-line ecolpro/require-site-filter -- parent scoping via userId (personal scope), not site-based access
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- parent scoping via userId (personal scope), not site-based access
   const parent = await prisma.parent.findFirst({
     where: { userId, tenantId },
     include: {
@@ -244,10 +250,11 @@ Pour toute question sur l'emploi du temps, les classes, les enseignants ou les s
       // `userId` : le périmètre est personnel, pas géographique. Un parent peut
       // d'ailleurs avoir des enfants sur plusieurs sites, filtrer par site serait
       // faux (voir RELATION_SCOPED_ROLES dans site-scope.ts).
+      // eslint-disable-next-line ecolemiriam/require-site-filter
       // eslint-disable-next-line ecolpro/require-site-filter
       enfants: {
         include: {
-          // eslint-disable-next-line ecolpro/require-site-filter -- eleve scoping via parent.userId (personal scope)
+           
           eleve: {
             select: {
               nom: true,

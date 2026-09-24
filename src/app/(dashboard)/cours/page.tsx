@@ -1,5 +1,6 @@
 import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { CoursView } from "@/components/cours/CoursView";
@@ -12,14 +13,20 @@ import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import type { Role } from "@prisma/client";
 import { siteFilterForModel } from "@/lib/site-scope";
 
-export const metadata = { title: "Cours en ligne — LMS | EcolPro" };
+export const metadata = { title: "Cours en ligne — LMS | École Miriam" };
 
+export default async function CoursPage(
+  props: {
+    searchParams: Promise<{ siteId?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const session = await auth();
+  if (!session?.user?.tenantId) redirect("/select-tenant");
 export default async function CoursPage({
   searchParams,
 }: {
-  searchParams: Promise<{ siteId?: string }>;
 }) {
-  const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
   guardPage(session, "cours:read");
 
@@ -117,6 +124,7 @@ export default async function CoursPage({
           activeSiteId={activeSite}
           className="mb-2"
         />
+        <CoursView siteColors={siteColors} activeSite={activeSite} userRole={session.user.role} />
         <CoursView
           siteColors={siteColors}
           activeSite={activeSite}

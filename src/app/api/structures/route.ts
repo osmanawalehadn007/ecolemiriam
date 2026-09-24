@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import type { StructureType } from "@prisma/client";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, siteIdForCreate, requireSiteIdForCreate } from "@/lib/site-scope";
 
 const STRUCTURE_TYPES: StructureType[] = ["MATERNELLE", "PRIMAIRE", "COLLEGE", "LYCEE"];
 
@@ -17,6 +18,8 @@ export async function GET() {
     if (!session?.user?.tenantId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
+    const denied = checkPermission(session.user.role, "structures:read");
+    if (denied) return denied;
 
     const structures = await prisma.structure.findMany({
       where: { tenantId: session.user.tenantId, ...siteFilterForModel("structure", session.user) },
@@ -40,16 +43,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
-    if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Permissions insuffisantes" }, { status: 403 });
-    }
+    const denied = checkPermission(session.user.role, "structures:write");
+    if (denied) return denied;
+
+    // Un site doit être sélectionné pour créer une structure : la structure
+    // sera rattachée à ce site spécifique (siteId non-null).
+    const siteError = requireSiteIdForCreate(session.user);
+    if (siteError) return NextResponse.json({ error: siteError }, { status: 400 });
 
     const json = await req.json();
     const { types } = CreateSchema.parse(json);
 
     const tenantId = session.user.tenantId;
+    const siteId = siteIdForCreate(session.user); // non-null grâce au check ci-dessus
 
-    // Récupérer les structures déjà existantes pour ne pas les recréer
+    // Récupérer les structures déjà existantes pour ce site (ou partagées)
+    // pour ne pas les recréer.
     const existing = await prisma.structure.findMany({
       where: { tenantId, ...siteFilterForModel("structure", session.user) },
       select: { type: true },
@@ -60,6 +69,7 @@ export async function POST(req: NextRequest) {
       .filter((type) => !existingTypes.has(type))
       .map((type) => ({
         tenantId,
+        siteId,
         type,
         nom: typeLabel(type),
         actif: true,
@@ -92,9 +102,8 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
-    if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Permissions insuffisantes" }, { status: 403 });
-    }
+    const denied = checkPermission(session.user.role, "structures:delete");
+    if (denied) return denied;
 
     const { searchParams } = new URL(req.url);
     const structureId = searchParams.get("id");
@@ -111,6 +120,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     // Vérifier qu'il n'y a pas de classes rattachées
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- toutes les années comptent : une structure conserve ses classes archivées, la supprimer les orphelinerait
     const classCount = await prisma.classe.count({
       where: { structureId, tenantId: session.user.tenantId, ...siteFilterForModel("classe", session.user) },
     });

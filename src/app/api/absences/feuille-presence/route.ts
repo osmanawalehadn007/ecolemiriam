@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+import { siteFilterForModel, eleveScopeFilter } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
+import { niveauToLabel } from "@/lib/niveau";
 import { siteFilterForModel, eleveScopeFilter, mergeFilters, isRelationScopedRole } from "@/lib/site-scope";
 import { teacherClasseFilter, teacherEleveFilter } from "@/lib/teacher-classes";
 import { checkPermission } from "@/lib/rbac";
@@ -30,6 +36,18 @@ export async function GET(req: NextRequest) {
 
 
   const classeFilter = siteFilterForModel("classe", session.user);
+  // eleveScopeFilter restreint aux enfants du parent / à soi-même pour STUDENT
+  const eleveFilter = eleveScopeFilter(session.user, null);
+  const [classe, eleves, tenant] = await Promise.all([
+    prisma.classe.findFirst({
+      where: mergeFilters(
+        { id: classeId, tenantId: session.user.tenantId },
+        classeFilter,
+        anneeFilterForModel(
+          "classe",
+          await getAnneeCouranteLibelle(session.user.tenantId),
+        ),
+      ),
   // Liste nominative : site **et** périmètre personnel (PARENT / STUDENT ne
   // voient que leurs enfants, un rôle de site neutre ne change rien).
   const eleveFilter = eleveScopeFilter(session.user, "eleve");
@@ -40,9 +58,6 @@ export async function GET(req: NextRequest) {
     teacherClasseFilter(session.user),
     teacherEleveFilter(session.user),
   ]);
-  const [classe, eleves, tenant] = await Promise.all([
-    prisma.classe.findFirst({
-      where: mergeFilters(
         { id: classeId, tenantId: session.user.tenantId, ...classeFilter },
         teacherClasseF
       ) as Prisma.ClasseWhereInput,
@@ -98,7 +113,7 @@ export async function GET(req: NextRequest) {
   </div>
   <div class="title">FEUILLE DE PRÉSENCE</div>
   <div class="info">
-    <strong>Classe :</strong> ${classe.nom} &nbsp;&nbsp; <strong>Niveau :</strong> ${classe.niveau} &nbsp;&nbsp; <strong>Prof. Principal :</strong> ${profNom} &nbsp;&nbsp; <strong>Effectif :</strong> ${eleves.length}
+    <strong>Classe :</strong> ${classe.nom} &nbsp;&nbsp; <strong>Niveau :</strong> ${niveauToLabel(classe.niveau)} &nbsp;&nbsp; <strong>Prof. Principal :</strong> ${profNom} &nbsp;&nbsp; <strong>Effectif :</strong> ${eleves.length}
   </div>
   <table>
     <thead>

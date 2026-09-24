@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
+import { withMobileScope } from "@/lib/mobile-auth";
 import { siteFilterForModel, personalScopeFilter, mergeFilters } from "@/lib/site-scope";
+import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
 import { isEleveInTeacherScope } from "@/lib/teacher-classes";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await verifyMobileScope(req);
-  if (!user) return mobileUnauthorized();
-  if (!user.tenantId) {
-    return NextResponse.json({ error: "Aucun établissement associé" }, { status: 403 });
-  }
-
+  return withMobileScope(req, async (user) => {
   const { id } = await params;
 
   // `id` vient de l'URL : le périmètre enseignant se décide AVANT toute lecture
@@ -68,6 +64,7 @@ export async function GET(
   // au périmètre de sites et — pour un parent — au foyer vient d'être vérifiée par
   // le `findFirst` ci-dessus, suivi d'un 404 : la portée est acquise en amont.
   const [parents, notes, absences, incidents] = await Promise.all([
+    // eslint-disable-next-line ecolemiriam/require-site-filter
     // eslint-disable-next-line ecolpro/require-site-filter
     prisma.eleveParent.findMany({
       where: { eleveId: id },
@@ -79,6 +76,7 @@ export async function GET(
         },
       },
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter
     // eslint-disable-next-line ecolpro/require-site-filter
     prisma.note.findMany({
       where: { eleveId: id, tenantId: user.tenantId },
@@ -94,6 +92,7 @@ export async function GET(
       orderBy: { date: "desc" },
       take: 20,
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter
     // eslint-disable-next-line ecolpro/require-site-filter
     prisma.absence.findMany({
       where: { eleveId: id, tenantId: user.tenantId },
@@ -101,6 +100,7 @@ export async function GET(
       orderBy: { date: "desc" },
       take: 10,
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter
     // eslint-disable-next-line ecolpro/require-site-filter
     prisma.incident.findMany({
       where: { eleveId: id, tenantId: user.tenantId },
@@ -118,5 +118,6 @@ export async function GET(
       absences,
       incidents,
     },
+  });
   });
 }

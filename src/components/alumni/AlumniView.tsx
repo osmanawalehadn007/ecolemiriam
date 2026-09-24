@@ -7,6 +7,7 @@ import {
   ExternalLink, Mail, Phone, Edit3, Trash2, X, Building2
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { hasPermission } from "@/lib/client-permissions";
 
 type StatutAlumni = "ETUDES_SUPERIEURES" | "EN_EMPLOI" | "RECHERCHE_EMPLOI" | "ENTREPRENEUR" | "INCONNU";
 
@@ -53,8 +54,9 @@ const EMPTY_FORM = {
   linkedin: "", accepteContact: true, notes: "",
 };
 
-export function AlumniView() {
+export function AlumniView({ userRole }: { userRole?: string } = {}) {
   const t = useTranslations("alumni");
+  const canWrite = hasPermission(userRole, "alumni:write");
   const [alumni, setAlumni] = useState<Alumni[]>([]);
   const [stats, setStats] = useState<Stats>({ total: 0, etudes: 0, emploi: 0, entrepreneurs: 0, annees: [] });
   const [loading, setLoading] = useState(true);
@@ -146,12 +148,14 @@ export function AlumniView() {
           <h1 className="text-2xl font-bold text-gray-900">{t("headerTitle")}</h1>
           <p className="text-gray-500 text-sm mt-1">{t("headerSubtitle")}</p>
         </div>
+        {canWrite && (
         <button
           onClick={openCreate}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors"
         >
           <Plus className="w-4 h-4" /> {t("addAlumni")}
         </button>
+        )}
       </div>
 
       {/* Stats */}

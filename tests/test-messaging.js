@@ -13,7 +13,7 @@ async function main() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      email: "admin@lycee-demo.ecolpro.app",
+      email: "admin@lycee-demo.ecolemiriam.app",
       password: "Demo@2026!",
     }),
   });
@@ -32,7 +32,7 @@ async function main() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      email: "enseignant@lycee-demo.ecolpro.app",
+      email: "enseignant@lycee-demo.ecolemiriam.app",
       password: "Demo@2026!",
     }),
   });
@@ -50,7 +50,7 @@ async function main() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      email: "parent@lycee-demo.ecolpro.app",
+      email: "parent@lycee-demo.ecolemiriam.app",
       password: "Demo@2026!",
     }),
   });

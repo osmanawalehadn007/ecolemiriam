@@ -33,6 +33,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const parsed = PatchSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Données invalides" }, { status: 400 });
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
+    const existing = await prisma.incident.findFirst({ where: { id, tenantId } });
     // `id` vient de l'URL : l'incident doit porter sur un élève du périmètre de
     // l'enseignant, sinon il est « introuvable » (404) — modifier le dossier
     // disciplinaire d'un élève d'une autre classe n'est pas dans ses droits.
@@ -80,6 +82,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const parsed = SanctionSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Données invalides" }, { status: 400 });
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
+    const existing = await prisma.incident.findFirst({ where: { id, tenantId } });
     // Même garde que ci-dessus : on ne sanctionne que dans son périmètre.
     const existing = await prisma.incident.findFirst({
       where: mergeFilters(

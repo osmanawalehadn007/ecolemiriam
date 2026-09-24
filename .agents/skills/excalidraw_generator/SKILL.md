@@ -9,4 +9,4 @@ Création de représentations visuelles des structures logicielles et flux d'ex�
 
 ## 1. Flux et schémas
 * Les diagrammes doivent être clairs et simplifiés.
-* Utiliser les codes couleurs du thème EcolPro pour assurer une uniformité graphique.
+* Utiliser les codes couleurs du thème École Miriam pour assurer une uniformité graphique.

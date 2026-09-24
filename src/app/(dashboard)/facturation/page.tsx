@@ -1,10 +1,11 @@
 import { auth } from "@/lib/auth";
 import { Header } from "@/components/layout/Header";
-import { FacturesTable } from "@/components/facturation/FacturesTable";
 import { FacturationActions } from "@/components/facturation/FacturationActions";
+import { FacturesViewToggleClient } from "@/components/facturation/FacturesViewToggleClient";
 import { getFacturesForTenant } from "@/lib/actions/facture";
 import { getTranslations } from "next-intl/server";
 import { guardPage } from "@/lib/guard-page";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 
 export default async function FacturationPage() {
   const [session, t] = await Promise.all([
@@ -14,13 +15,11 @@ export default async function FacturationPage() {
   guardPage(session, "finance:read");
 
   const factures = await getFacturesForTenant();
-
-  const stats = {
-    total: factures.length,
-    enAttente: factures.filter((f) => f.statut === "EN_ATTENTE").length,
-    payees: factures.filter((f) => f.statut === "PAYEE").length,
-    enRetard: factures.filter((f) => f.statut === "EN_RETARD").length,
-  };
+  // Année réelle du tenant : le libellé était écrit en dur (« 2025-2026 »),
+  // il désignait donc une année révolue depuis la rentrée.
+  const anneeCourante =
+    (await getAnneeCouranteLibelle(session!.user.tenantId!)) ??
+    `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -31,8 +30,8 @@ export default async function FacturationPage() {
         userAvatar={session!.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin space-y-4">
-        <FacturationActions currentYear="2025-2026" />
-        <FacturesTable factures={factures} />
+        <FacturationActions currentYear={anneeCourante} userRole={session!.user.role} />
+        <FacturesViewToggleClient factures={factures} userRole={session!.user.role} />
       </div>
     </div>
   );

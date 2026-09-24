@@ -13,6 +13,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { registerTenant, type RegisterFormData } from "@/lib/actions/register";
 import { useTranslations } from "next-intl";
+import { TurnstileWidget } from "@/components/security/TurnstileWidget";
 
 const FormSchema = z.object({
   schoolName: z.string().min(2, "Le nom de l'établissement est requis"),
@@ -63,6 +64,7 @@ export function RegisterForm() {
     plan: "STARTER",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   function updateField<K extends keyof RegisterFormData>(field: K, value: RegisterFormData[K]) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -86,7 +88,7 @@ export function RegisterForm() {
 
     setIsPending(true);
     try {
-      await registerTenant(form);
+      await registerTenant({ ...form, turnstileToken: turnstileToken ?? undefined });
       setSuccess(true);
       toast.success(t("createdSuccess"));
     } catch (err) {
@@ -321,6 +323,15 @@ export function RegisterForm() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Widget Turnstile (anti-bot) — invisible si pas de site key */}
+      <TurnstileWidget
+        action="register"
+        onToken={setTurnstileToken}
+        onExpire={() => setTurnstileToken(null)}
+        onError={() => setTurnstileToken(null)}
+        className="flex justify-center"
+      />
 
       <Button type="submit" size="lg" className="w-full gap-2" disabled={isPending}>
         {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <School className="h-4 w-4" />}

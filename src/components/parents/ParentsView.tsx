@@ -12,6 +12,7 @@ import {
   ChevronUp, TrendingUp, UserCheck, FileText,
 } from "lucide-react";
 import { cn, getInitials, calculerMoyenne, timeAgo } from "@/lib/utils";
+import { hasPermission } from "@/lib/client-permissions";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
@@ -52,6 +53,7 @@ interface ParentData {
 interface ParentsViewProps {
   parents: ParentData[];
   tenantId: string;
+  userRole?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -266,8 +268,9 @@ function ParentCard({ parent }: { parent: ParentData }) {
 
 // ─── Composant principal ──────────────────────────────────────────────────────
 
-export function ParentsView({ parents }: ParentsViewProps) {
+export function ParentsView({ parents, userRole }: ParentsViewProps) {
   const t = useTranslations("parents");
+  const canWrite = hasPermission(userRole, "parents:write");
   const [search, setSearch] = useState("");
   const [filtre, setFiltre] = useState<"tous" | "actif" | "inactif" | "sans_compte">("tous");
 
@@ -303,12 +306,14 @@ export function ParentsView({ parents }: ParentsViewProps) {
     <div className="space-y-6">
       {/* Header actions */}
       <div className="flex justify-end">
+        {canWrite && (
         <a href="/parametres">
           <Button size="sm" className="gap-2">
             <UserCheck className="h-4 w-4" />
             {t("pvAddParent")}
           </Button>
         </a>
+        )}
       </div>
 
       {/* Stats */}

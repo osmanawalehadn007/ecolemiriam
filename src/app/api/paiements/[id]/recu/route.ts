@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { canAccessSite } from "@/lib/site-filter";
+import { niveauToLabel } from "@/lib/niveau";
 import { checkPermission } from "@/lib/rbac";
 import { eleveScopeFilter, isRelationScopedRole } from "@/lib/site-scope";
 
@@ -14,14 +16,15 @@ export async function GET(
     if (!session?.user?.tenantId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
+    const denied = checkPermission(session.user.role, "finance:read");
+    if (denied) return denied;
+
+    const { id } = await params;
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- paiement n'a pas de siteId, contrôle de site via canAccessSite(facture.siteId) ligne 55
     // Reçu de paiement : réservé aux rôles finance. Une famille garde accès aux
     // reçus de SES enfants — contrôle d'appartenance ci-dessous.
     if (!isRelationScopedRole(session.user.role)) {
-      const denied = checkPermission(session.user.role, "finance:read");
-      if (denied) return denied;
     }
-
-    const { id } = await params;
     // eslint-disable-next-line ecolpro/require-site-filter -- paiement n'a pas de siteId, contrôle de site via canAccessSite(facture.siteId) ligne 55
     const paiement = await prisma.paiement.findUnique({
       where: { id },
@@ -84,7 +87,7 @@ export async function GET(
 
     const tenant = paiement.facture.tenant;
     const eleve = paiement.facture.eleve;
-    const tuteur = eleve.parents[0]?.parent;
+    const tuteur = eleve?.parents[0]?.parent;
     const recuNumber = `REC-${new Date(paiement.date).getFullYear()}-${paiement.id.slice(-6).toUpperCase()}`;
 
     function formatMoney(amount: number, devise: string) {
@@ -104,40 +107,55 @@ export async function GET(
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1a1a1a; background: #f5f5f5; padding: 20px; }
-  .receipt { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
-  .header { background: linear-gradient(135deg, #059669, #10b981); color: white; padding: 28px 32px; display: flex; justify-content: space-between; align-items: center; }
-  .header h1 { font-size: 22px; font-weight: 700; }
-  .header .recu-num { font-size: 14px; opacity: 0.9; }
-  .school-info { padding: 20px 32px; border-bottom: 1px solid #e5e7eb; }
-  .school-info h2 { font-size: 18px; font-weight: 700; color: #059669; }
-  .school-info p { font-size: 13px; color: #6b7280; margin-top: 2px; }
-  .body { padding: 24px 32px; }
-  .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f3f4f6; }
-  .row .label { font-size: 13px; color: #6b7280; font-weight: 500; }
-  .row .value { font-size: 13px; color: #111827; font-weight: 600; text-align: right; }
-  .amount-box { margin: 20px 0; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 10px; padding: 20px; text-align: center; }
-  .amount-box .label { font-size: 12px; color: #059669; text-transform: uppercase; letter-spacing: 0.5px; }
-  .amount-box .amount { font-size: 32px; font-weight: 800; color: #059669; margin-top: 4px; }
-  .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; margin: 20px 0 8px; font-weight: 600; }
-  .footer { padding: 20px 32px; border-top: 2px solid #e5e7eb; display: flex; justify-content: space-between; align-items: flex-end; }
-  .signature { font-size: 12px; color: #6b7280; }
-  .signature-line { margin-top: 40px; border-top: 1px dashed #9ca3af; width: 180px; text-align: center; padding-top: 4px; }
-  .stamp { font-size: 11px; color: #d1d5db; text-align: right; }
+  .receipt { max-width: 148mm; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+  .header { background: linear-gradient(135deg, #059669, #10b981); color: white; padding: 20px 24px; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { font-size: 18px; font-weight: 700; }
+  .header .recu-num { font-size: 12px; opacity: 0.9; }
+  .school-info { padding: 14px 24px; border-bottom: 1px solid #e5e7eb; }
+  .school-info h2 { font-size: 15px; font-weight: 700; color: #059669; }
+  .school-info p { font-size: 11px; color: #6b7280; margin-top: 2px; }
+  .body { padding: 16px 24px; }
+  .row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #f3f4f6; }
+  .row .label { font-size: 11px; color: #6b7280; font-weight: 500; }
+  .row .value { font-size: 11px; color: #111827; font-weight: 600; text-align: right; }
+  .amount-box { margin: 14px 0; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 14px; text-align: center; }
+  .amount-box .label { font-size: 10px; color: #059669; text-transform: uppercase; letter-spacing: 0.5px; }
+  .amount-box .amount { font-size: 26px; font-weight: 800; color: #059669; margin-top: 4px; }
+  .section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #9ca3af; margin: 14px 0 6px; font-weight: 600; }
+  .footer { padding: 14px 24px; border-top: 2px solid #e5e7eb; display: flex; justify-content: space-between; align-items: flex-end; }
+  .signature { font-size: 10px; color: #6b7280; }
+  .signature-line { margin-top: 28px; border-top: 1px dashed #9ca3af; width: 140px; text-align: center; padding-top: 4px; }
+  .stamp { font-size: 9px; color: #d1d5db; text-align: right; }
   .print-btn { display: block; margin: 16px auto; padding: 10px 24px; background: #059669; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
   .print-btn:hover { background: #047857; }
-  @media print { .print-btn { display: none; } body { padding: 0; background: white; } .receipt { box-shadow: none; } }
+  @page { size: A5 portrait; margin: 8mm; }
+  @media print {
+    .print-btn { display: none; }
+    body { padding: 0; background: white; }
+    .receipt { box-shadow: none; max-width: 100%; border-radius: 0; }
+    .header { padding: 12px 18px; }
+    .school-info { padding: 10px 18px; }
+    .body { padding: 12px 18px; }
+    .amount-box { padding: 10px; margin: 10px 0; }
+    .amount-box .amount { font-size: 22px; }
+    .footer { padding: 10px 18px; }
+    .signature-line { margin-top: 20px; }
+  }
 </style>
 </head>
 <body>
   <div class="receipt">
-    <div class="header">
-      <div>
-        <h1>REÇU DE PAIEMENT</h1>
-        <div class="recu-num">N° ${recuNumber}</div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:13px;opacity:0.9">${new Date(paiement.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}</div>
-        <div style="font-size:11px;opacity:0.7">${new Date(paiement.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>
+    <div class="header" style="flex-direction:column;align-items:stretch">
+      ${tenant.logoUrl ? `<img src="${tenant.logoUrl}" alt="Logo" style="max-width:100%;max-height:40mm;object-fit:contain;margin:0 auto 8px" />` : ""}
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <h1>REÇU DE PAIEMENT</h1>
+          <div class="recu-num">N° ${recuNumber}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:13px;opacity:0.9">${new Date(paiement.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}</div>
+          <div style="font-size:11px;opacity:0.7">${new Date(paiement.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>
+        </div>
       </div>
     </div>
 
@@ -150,9 +168,9 @@ export async function GET(
 
     <div class="body">
       <div class="section-title">Élève</div>
-      <div class="row"><span class="label">Nom & Prénom</span><span class="value">${eleve.prenom} ${eleve.nom}</span></div>
-      <div class="row"><span class="label">Matricule</span><span class="value">${eleve.matricule}</span></div>
-      <div class="row"><span class="label">Classe</span><span class="value">${eleve.classe?.nom ?? "N/A"} — ${eleve.classe?.niveau ?? ""}</span></div>
+      <div class="row"><span class="label">Nom & Prénom</span><span class="value">${eleve?.prenom ?? ""} ${eleve?.nom ?? ""}</span></div>
+      <div class="row"><span class="label">Matricule</span><span class="value">${eleve?.matricule ?? ""}</span></div>
+      <div class="row"><span class="label">Classe</span><span class="value">${eleve?.classe?.nom ?? "N/A"} — ${eleve?.classe?.niveau ? niveauToLabel(eleve.classe.niveau) : ""}</span></div>
 
       ${tuteur ? `
       <div class="section-title">Tuteur légal</div>
@@ -178,7 +196,7 @@ export async function GET(
         <div class="signature-line">Cachet & Signature</div>
       </div>
       <div class="stamp">
-        EcolPro — Reçu généré le ${new Date().toLocaleDateString("fr-FR")}
+        École Miriam — Reçu généré le ${new Date().toLocaleDateString("fr-FR")}
       </div>
     </div>
   </div>

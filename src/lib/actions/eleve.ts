@@ -5,6 +5,8 @@ import prisma from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { siteFilterForModel, requireSiteIdForCreate } from "@/lib/site-filter";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { mergeFilters } from "@/lib/site-scope";
 import { checkPermission } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
 import { trouverDoublon, resoudreIdentiteKey, cleDepuisFiche } from "@/lib/eleve-identity-server";
@@ -66,14 +68,25 @@ export interface Confirmations {
 
 export type ResultatEleve =
   | { success: true; id: string }
+  | { success: true; requiresPayment: true; candidatureId: string; factureId: string; factureNumero: string; montant: number; devise: string }
   | { success: false; confirmation: ConfirmationRequise };
 
 export async function getClassesForTenant() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
 
+  const denied = checkPermission(session.user.role, "classes:read");
+  if (denied) return [];
+
   return prisma.classe.findMany({
-    where: { tenantId: session.user.tenantId, ...siteFilterForModel("classe", session.user) },
+    where: mergeFilters(
+      { tenantId: session.user.tenantId },
+      siteFilterForModel("classe", session.user),
+      anneeFilterForModel(
+        "classe",
+        await getAnneeCouranteLibelle(session.user.tenantId),
+      ),
+    ),
     orderBy: { nom: "asc" },
   });
 }
@@ -81,6 +94,9 @@ export async function getClassesForTenant() {
 export async function getSitesForUser() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
+
+  const denied = checkPermission(session.user.role, "eleves:read");
+  if (denied) return [];
 
   const isSiteAdmin = session.user.role === "TENANT_ADMIN" || session.user.role === "SUPER_ADMIN";
   return prisma.site.findMany({
@@ -104,6 +120,9 @@ export async function getEleveForEdit(id: string) {
   const session = await auth();
   if (!session?.user?.tenantId) return null;
 
+  const denied = checkPermission(session.user.role, "eleves:read");
+  if (denied) return null;
+
   const eleve = await prisma.eleve.findFirst({
     where: { id, tenantId: session.user.tenantId, ...siteFilterForModel("eleve", session.user) },
     include: {
@@ -111,6 +130,7 @@ export async function getEleveForEdit(id: string) {
       // EleveParent n'a pas de colonne siteId propre : l'isolation passe par
       // l'élève parent qui est déjà filtré par tenantId et siteId. Un lien
       // eleveParent appartient forcément au même périmètre que son élève.
+      // eslint-disable-next-line ecolemiriam/require-site-filter
       // eslint-disable-next-line ecolpro/require-site-filter
       parents: {
         include: { parent: true },
@@ -155,6 +175,9 @@ export async function createEleve(
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
 
+  const denied = checkPermission(session.user.role, "eleves:write");
+  if (denied) throw new Error("Accès refusé");
+
   const tenantId = session.user.tenantId;
   const siteError = requireSiteIdForCreate(session.user);
   if (siteError) throw new Error(siteError);
@@ -168,21 +191,9 @@ export async function createEleve(
   const anneeInscription = await getAnneeCouranteLibelle(tenantId);
   if (!anneeInscription) throw new Error("Aucune année scolaire active pour ce tenant");
 
-  let matricule = values.matricule?.trim();
-  if (!matricule) {
-    const count = await prisma.eleve.count({ where: { tenantId, ...siteFilterForModel("eleve", session.user) } });
-    matricule = `ECL-${anneeInscription}-${String(count + 1).padStart(4, "0")}`;
-  }
-
-  // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter -- findUnique sur contrainte unique tenantId_matricule, le tenantId est dans la clé composite
-  const existing = await prisma.eleve.findUnique({
-    where: { tenantId_matricule: { tenantId, matricule } },
-  });
-  if (existing) throw new Error("Ce matricule existe déjà");
-
   const identite = {
-    nom: values.nom,
-    prenom: values.prenom,
+    nom: values.nom.trim().toUpperCase(),
+    prenom: values.prenom.trim().toUpperCase(),
     dateNaissance: new Date(values.dateNaissance),
   };
 
@@ -216,76 +227,135 @@ export async function createEleve(
       },
     };
   }
-  const identiteKey = await resoudreIdentiteKey(tenantId, identite, {
-    forcer: confirmations.doublon,
-  });
 
+  // ── Résoudre le site et le niveau depuis la classe choisie ──
   // L'élève hérite du site de sa classe, unique source de vérité.
   // S'il n'est rattaché à aucune classe, on conserve le site de la session.
   let resolvedSiteId = session.user.siteId ?? null;
+  let classeNiveau: string | null = null;
+  let classeNom: string | null = null;
   if (values.classeId) {
+    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-tenant-id, ecolemiriam/require-annee-filter -- findUnique pour récupérer le siteId et le niveau de la classe ; lookup par id : la classe visée est déjà validée par l'appelant
     // eslint-disable-next-line ecolpro/require-site-filter, ecolpro/require-tenant-id -- findUnique pour récupérer le siteId de la classe
     const classe = await prisma.classe.findUnique({
       where: { id: values.classeId },
-      select: { siteId: true },
+      select: { siteId: true, niveau: true, nom: true },
     });
     if (classe?.siteId) resolvedSiteId = classe.siteId;
+    if (classe?.niveau) classeNiveau = classe.niveau;
+    if (classe?.nom) classeNom = classe.nom;
   }
 
-  const eleve = await prisma.eleve.create({
+  // ── Créer une candidature au statut ADMIS ──
+  //    L'inscription directe passe par le même circuit que les admissions :
+  //    candidature ADMIS → facture générée → paiement → INSCRIT → élève créé.
+  //    Les champs supplémentaires du formulaire (groupeSanguin, allergies,
+  //    regime, etc.) sont stockés dans le JSON `documents` pour être appliqués
+  //    au moment de la création de l'élève (transition INSCRIT).
+  const extraFormData = {
+    _type: "extraForm",
+    classeId: values.classeId || null,
+    classeNom: classeNom,
+    statut: values.statut || "ACTIF",
+    groupeSanguin: values.groupeSanguin || null,
+    allergies: values.allergies || null,
+    besoinsSpeciaux: values.besoinsSpeciaux || null,
+    regime: values.regime || null,
+    transport: values.transport || null,
+    contactUrgenceNom: values.contactUrgenceNom || null,
+    contactUrgencePhone: values.contactUrgencePhone || null,
+    numeroBoursier: values.numeroBoursier || null,
+    parentProfession: values.parentProfession || null,
+    parentAdresse: values.parentAdresse || null,
+    parentIsGardien: values.parentIsGardien ?? true,
+    photoUrl: values.photoUrl || null,
+  };
+
+  const candidature = await prisma.candidature.create({
     data: {
       tenantId,
       siteId: resolvedSiteId,
-      matricule,
-      nom: values.nom,
-      prenom: values.prenom,
+      nom: values.nom.trim().toUpperCase(),
+      prenom: values.prenom.trim().toUpperCase(),
       dateNaissance: new Date(values.dateNaissance),
       lieuNaissance: values.lieuNaissance || null,
-      nationalite: values.nationalite || "SN",
       sexe: values.sexe,
-      classeId: values.classeId || null,
-      statut: values.statut || "ACTIF",
-      groupeSanguin: values.groupeSanguin || null,
-      allergies: values.allergies || null,
-      besoinsSpeciaux: values.besoinsSpeciaux || null,
-      regime: values.regime || null,
-      transport: values.transport || null,
-      contactUrgenceNom: values.contactUrgenceNom || null,
-      contactUrgencePhone: values.contactUrgencePhone || null,
-      numeroBoursier: values.numeroBoursier || null,
-      anneeInscription,
+      nationalite: values.nationalite || "SN",
       photoUrl: values.photoUrl || null,
-      identiteKey,
+      classeVoulue: classeNiveau ?? classeNom ?? "Non précisée",
+      annee: anneeInscription,
+      parentNom: values.parentNom?.trim().toUpperCase() || "",
+      parentPrenom: values.parentPrenom?.trim().toUpperCase() || "",
+      parentEmail: values.parentEmail || null,
+      parentPhone: values.parentPhone || "",
+      parentLien: (values.parentLien as "PERE" | "MERE" | "TUTEUR" | "AUTRE") || "PERE",
+      statut: "ADMIS" as const,
+      commentaire: `Inscription directe par ${session.user.name ?? "admin"} — en attente de paiement pour finaliser`,
+      documents: extraFormData as unknown as object,
     },
   });
 
-  if (values.parentNom && values.parentPrenom && values.parentPhone) {
-    const parent = await prisma.parent.create({
-      data: {
-        tenantId,
-        nom: values.parentNom,
-        prenom: values.parentPrenom,
-        phone: values.parentPhone,
-        email: values.parentEmail || null,
-        profession: values.parentProfession || null,
-        adresse: values.parentAdresse || null,
-      },
-    });
+  // ── Générer la facture d'inscription (frais inscription + mensualité septembre) ──
+  //    Même logique que le workflow d'admission : on cherche le TarifNiveau
+  //    pour le niveau/site/année, et on crée une facture liée à la candidature.
+   
+  const tarif = await prisma.tarifNiveau.findFirst({
+    where: {
+      tenantId,
+      niveau: classeNiveau ?? "",
+      annee: anneeInscription,
+      actif: true,
+      OR: [{ siteId: resolvedSiteId }, { siteId: null }],
+    },
+    orderBy: { siteId: { sort: "desc", nulls: "last" } }, // privilégier le tarif spécifique au site (NULLs en dernier sur Postgres)
+  });
 
-    await prisma.eleveParent.create({
-      data: {
-        eleveId: eleve.id,
-        parentId: parent.id,
-        lien: values.parentLien || "PERE",
-        isGardien: values.parentIsGardien ?? true,
-      },
-    });
-  }
+  const fraisInscription = tarif?.fraisInscription ?? 0;
+  const mensualite = tarif?.mensualite ?? 0;
+  const montantTotal = fraisInscription + mensualite;
+  const devise = tarif?.devise ?? "DJF";
+
+  // Générer un numéro de facture
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- count global pour numéro séquentiel
+  const factureCount = await prisma.facture.count({
+    where: { tenantId },
+  });
+  const numeroFacture = `FAC-${new Date().getFullYear()}-${String(factureCount + 1).padStart(5, "0")}`;
+
+  const facture = await prisma.facture.create({
+    data: {
+      tenantId,
+      siteId: resolvedSiteId,
+      candidatureId: candidature.id,
+      numero: numeroFacture,
+      libelle: `Frais d'inscription + Scolarité Septembre — ${values.prenom} ${values.nom} (${classeNom ?? classeNiveau ?? "N/A"}, ${anneeInscription})`,
+      montant: montantTotal,
+      devise,
+      statut: "EN_ATTENTE",
+      type: "INSCRIPTION",
+      // Rattacher au mois de septembre (mois de scolarité inclus dans la facture)
+      // pour la visibilité dans la vue mensuelle et le dédoublonnage de genererMensualites.
+      mois: `${anneeInscription.split("-")[0]}-09`,
+    },
+  });
 
   revalidatePath("/eleves");
+  revalidatePath("/admissions");
+  revalidatePath("/facturation");
+  revalidatePath("/parametres");
+  revalidateTag("eleves-stats", "max");
+  revalidateTag("dashboard-data", "max");
+  return {
+    success: true,
+    requiresPayment: true,
+    candidatureId: candidature.id,
+    factureId: facture.id,
+    factureNumero: facture.numero,
+    montant: montantTotal,
+    devise,
+  };
   // Les effectifs par classe sont aussi affichés dans Paramètres → Pédagogie :
   // sans cette invalidation, cet écran garde les chiffres d.avant.
-  revalidatePath("/parametres");
   revalidateTag("eleves-stats");
   revalidateTag("dashboard-data");
   return { success: true, id: eleve.id };
@@ -299,6 +369,9 @@ export async function updateEleve(
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
 
+  const denied = checkPermission(session.user.role, "eleves:write");
+  if (denied) throw new Error("Accès refusé");
+
   const tenantId = session.user.tenantId;
   const parsed = EleveFormSchema.safeParse(data);
   if (!parsed.success) {
@@ -310,6 +383,7 @@ export async function updateEleve(
   const existing = await prisma.eleve.findFirst({
     where: { id, tenantId, ...siteFilterForModel("eleve", session.user) },
     // Voir ci-dessus : eleveParent est isolé par son élève parent.
+    // eslint-disable-next-line ecolemiriam/require-site-filter
     // eslint-disable-next-line ecolpro/require-site-filter
     include: { parents: { include: { parent: true } } },
   });
@@ -319,8 +393,8 @@ export async function updateEleve(
   // quoi elle resterait figée sur l'ancienne valeur et ne protégerait plus
   // rien. Les mêmes points de contrôle qu'à la création s'appliquent.
   const identite = {
-    nom: values.nom,
-    prenom: values.prenom,
+    nom: values.nom.trim().toUpperCase(),
+    prenom: values.prenom.trim().toUpperCase(),
     dateNaissance: new Date(values.dateNaissance),
   };
 
@@ -357,6 +431,16 @@ export async function updateEleve(
   let resolvedSiteId = existing.siteId;
   if (values.classeId) {
     const classe = await prisma.classe.findFirst({
+      // Site ET année : réaffecter un élève à une classe d'une année révolue
+      // le sortait des écrans de l'année en cours.
+      where: mergeFilters(
+        { id: values.classeId, tenantId: session.user.tenantId },
+        siteFilterForModel("classe", session.user),
+        anneeFilterForModel(
+          "classe",
+          await getAnneeCouranteLibelle(session.user.tenantId),
+        ),
+      ),
       where: {
         id: values.classeId,
         tenantId: session.user.tenantId,
@@ -367,12 +451,13 @@ export async function updateEleve(
     if (classe?.siteId) resolvedSiteId = classe.siteId;
   }
 
+   
   // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter -- existing vérifié avec tenantId + siteFilter ci-dessus
   await prisma.eleve.update({
     where: { id },
     data: {
-      nom: values.nom,
-      prenom: values.prenom,
+      nom: values.nom.trim().toUpperCase(),
+      prenom: values.prenom.trim().toUpperCase(),
       dateNaissance: new Date(values.dateNaissance),
       identiteKey,
       lieuNaissance: values.lieuNaissance || null,
@@ -396,7 +481,7 @@ export async function updateEleve(
   const tuteurLink = existing.parents[0];
   if (values.parentNom && values.parentPrenom && values.parentPhone) {
     if (tuteurLink) {
-      // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter -- tuteurLink.parentId vérifié via existing (tenantId + siteFilter)
+      // eslint-disable-next-line ecolemiriam/require-tenant-id -- tuteurLink.parentId vérifié via existing (tenantId + siteFilter)
       await prisma.parent.update({
         where: { id: tuteurLink.parentId },
         data: {
@@ -440,8 +525,8 @@ export async function updateEleve(
   // sans cette invalidation, cet écran garde les chiffres d.avant.
   revalidatePath("/parametres");
   revalidatePath(`/eleves/${id}`);
-  revalidateTag("eleves-stats");
-  revalidateTag("dashboard-data");
+  revalidateTag("eleves-stats", "max");
+  revalidateTag("dashboard-data", "max");
   return { success: true, id };
 }
 
@@ -507,8 +592,8 @@ export async function deleteEleve(id: string, reason?: string) {
   // sans cette invalidation, cet écran garde les chiffres d.avant.
   revalidatePath("/parametres");
   revalidatePath(`/eleves/${id}`);
-  revalidateTag("eleves-stats");
-  revalidateTag("dashboard-data");
+  revalidateTag("eleves-stats", "max");
+  revalidateTag("dashboard-data", "max");
   return { success: true as boolean, id };
 }
 
@@ -575,7 +660,7 @@ export async function restoreEleve(id: string) {
   // sans cette invalidation, cet écran garde les chiffres d.avant.
   revalidatePath("/parametres");
   revalidatePath(`/eleves/${id}`);
-  revalidateTag("eleves-stats");
-  revalidateTag("dashboard-data");
+  revalidateTag("eleves-stats", "max");
+  revalidateTag("dashboard-data", "max");
   return { success: true as boolean, id };
 }

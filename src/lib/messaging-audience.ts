@@ -1,5 +1,5 @@
 /**
- * EcolPro — Ciblage des destinataires de la messagerie
+ * École Miriam — Ciblage des destinataires de la messagerie
  * ====================================================
  *
  * POURQUOI CE FICHIER
@@ -42,6 +42,8 @@ import {
   siteFilterForModel,
   type SessionSiteClaims,
 } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 
 // ------------------------------------------------------------
 // Modèle d'audience
@@ -240,6 +242,10 @@ async function classeIdsForScope(actor: Actor, scope: AudienceScope): Promise<st
   const base = mergeFilters(
     { tenantId: actor.tenantId },
     siteFilterForModel("classe", actor),
+    // On n'écrit qu'aux classes de l'année en cours : cibler « NIVEAU 6ème »
+    // ramenait aussi les classes homonymes des années révolues, donc des
+    // destinataires qui ne sont plus scolarisés là.
+    anneeFilterForModel("classe", await getAnneeCouranteLibelle(actor.tenantId)),
     await teacherClasseFilter(actor),
     await parentClasseFilter(actor)
   );
@@ -275,13 +281,14 @@ async function teacherClasseFilter(actor: Actor): Promise<Record<string, unknown
 
   // Fiche de l'émetteur lui-même, retrouvée par son propre `userId` :
   // aucun filtre de site à appliquer, la requête ne peut viser personne d'autre.
+  // eslint-disable-next-line ecolemiriam/require-site-filter
   // eslint-disable-next-line ecolpro/require-site-filter
   const enseignant = await prisma.enseignant.findFirst({
     where: { userId: actor.id, tenantId: actor.tenantId },
     select: { id: true },
   });
   // Fail-closed : un compte enseignant sans fiche n'a aucune classe.
-  if (!enseignant) return { AND: [{ id: "__ecolpro_no_classe__" }] };
+  if (!enseignant) return { AND: [{ id: "__ecolemiriam_no_classe__" }] };
 
   return {
     AND: [
@@ -304,17 +311,20 @@ async function parentClasseFilter(actor: Actor): Promise<Record<string, unknown>
   if (actor.role !== "PARENT") return {};
 
   // Fiche de l'émetteur lui-même : voir `teacherClasseFilter` ci-dessus.
+  // eslint-disable-next-line ecolemiriam/require-site-filter
   // eslint-disable-next-line ecolpro/require-site-filter
   const parent = await prisma.parent.findFirst({
     where: { userId: actor.id, tenantId: actor.tenantId },
     select: { id: true },
   });
   // Fail-closed : un compte parent sans fiche n'a aucune classe.
+  if (!parent) return { AND: [{ id: "__ecolemiriam_no_classe__" }] };
   if (!parent) return { AND: [{ id: "__ecolpro_no_classe__" }] };
 
   // Enfants de l'émetteur : c'est le lien de filiation qui borne la requête,
   // pas le site — un parent dont les enfants sont sur deux sites doit pouvoir
   // cibler les deux classes.
+  // eslint-disable-next-line ecolemiriam/require-site-filter
   // eslint-disable-next-line ecolpro/require-site-filter
   const enfants = await prisma.eleve.findMany({
     where: {
@@ -325,6 +335,7 @@ async function parentClasseFilter(actor: Actor): Promise<Record<string, unknown>
     select: { classeId: true },
   });
   const classeIds = [...new Set(enfants.map((e) => e.classeId).filter((id): id is string => !!id))];
+  if (classeIds.length === 0) return { AND: [{ id: "__ecolemiriam_no_classe__" }] };
   if (classeIds.length === 0) return { AND: [{ id: "__ecolpro_no_classe__" }] };
 
   // Encapsulé dans `AND` — impératif. `mergeFilters` ne concatène que la clé
@@ -350,6 +361,7 @@ async function siteIdsForScope(actor: Actor, scope: AudienceScope): Promise<stri
   if (classeIds.length === 0) return [];
   // `classeIds` sort de `classeIdsForScope`, qui applique déjà
   // `siteFilterForModel("classe", actor)` : la portée est acquise en amont.
+  // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- `classeIds` sort de classeIdsForScope, déjà borné à l'année en cours
   // eslint-disable-next-line ecolpro/require-site-filter
   const classes = await prisma.classe.findMany({
     where: { id: { in: classeIds }, tenantId: actor.tenantId },
@@ -400,6 +412,7 @@ async function resolveParents(actor: Actor, scope: AudienceScope) {
   // L'isolation passe par la relation : `eleveWhere` porte déjà
   // `siteFilterForModel("eleve", actor)`. Un lien élève↔parent n'a pas de
   // site propre à filtrer.
+  // eslint-disable-next-line ecolemiriam/require-site-filter
   // eslint-disable-next-line ecolpro/require-site-filter
   const liens = await prisma.eleveParent.findMany({
     where: { eleve: eleveWhere },
@@ -432,11 +445,13 @@ async function resolveEnseignants(actor: Actor, scope: AudienceScope) {
   // seule définition fidèle de « les enseignants de cette classe ».
   // `classeIds` sort de `classeIdsForScope`, déjà borné au périmètre de site.
   const [classes, creneaux] = await Promise.all([
+    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- `classeIds` déjà borné à l'année en cours
     // eslint-disable-next-line ecolpro/require-site-filter
     prisma.classe.findMany({
       where: { id: { in: classeIds }, tenantId: actor.tenantId },
       select: { profPrincipal: { select: { userId: true } } },
     }),
+    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- créneaux des classes ciblées, elles-mêmes bornées à l'année en cours
     // eslint-disable-next-line ecolpro/require-site-filter
     prisma.emploiTemps.findMany({
       where: {
@@ -607,6 +622,7 @@ export async function listTargetingOptions(actor: Actor): Promise<TargetingOptio
   const classeWhere = mergeFilters(
     { tenantId: actor.tenantId },
     siteFilterForModel("classe", actor),
+    anneeFilterForModel("classe", await getAnneeCouranteLibelle(actor.tenantId)),
     await teacherClasseFilter(actor),
     await parentClasseFilter(actor)
   );
@@ -681,6 +697,7 @@ export async function scopeLabel(actor: Actor, scope: AudienceScope): Promise<st
       return structure?.nom ?? "structure";
     }
     case "CLASSE": {
+      // eslint-disable-next-line ecolemiriam/require-annee-filter -- libellé d'une classe désignée par id (affichage du nom de l'audience)
       const classe = await prisma.classe.findFirst({
         where: mergeFilters(
           { id: scope.id, tenantId: actor.tenantId },

@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
+import { siteFilterForModel, eleveScopeFilter } from "@/lib/site-scope";
 import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
 import { teacherEleveFilter, resolveTeacherScope } from "@/lib/teacher-classes";
 
@@ -16,7 +17,10 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const eleveId = searchParams.get("eleveId");
+  const niveau = searchParams.get("niveau");
 
+  // eleveScopeFilter restreint aux enfants du parent / à soi-même pour STUDENT
+  const siteFilter = eleveScopeFilter(session.user, null);
   const siteFilter = siteFilterForModel("eleve", session.user);
   // Périmètre enseignant : un professeur principal n'instruit l'orientation que
   // des élèves de ses classes. `eleveId` venant de la requête HTTP, sans ce
@@ -35,6 +39,7 @@ export async function GET(req: NextRequest) {
           // Les liens parent-élève sont des enfants de l'élève retourné, lui-même
           // déjà borné au tenant et au périmètre de sites par le `where` ci-dessus :
           // l'isolation est portée par la relation.
+          // eslint-disable-next-line ecolemiriam/require-site-filter
           // eslint-disable-next-line ecolpro/require-site-filter
           parents: { include: { parent: { select: { nom: true, prenom: true, phone: true } } } },
         },
@@ -57,6 +62,7 @@ export async function GET(req: NextRequest) {
           isPubliee: true,
           ...siteFilterForModel("note", session.user),
         },
+        select: { valeur: true, noteMax: true, coefficient: true, matiere: { select: { nom: true, code: true } }, createdAt: true },
         select: { valeur: true, noteMax: true, coefficient: true, matiere: { select: { nom: true } }, createdAt: true },
         orderBy: { createdAt: "desc" },
       }),
@@ -87,8 +93,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ eleve, parcours, notes, absencesInjust: absences, incidents });
   }
 
-  // Liste élèves avec résumé parcours
+  // Liste élèves avec résumé parcours (par défaut niveau Seconde pour l'orientation)
+  const niveauFilter = niveau ? { classe: { niveau } } : { classe: { niveau: "Seconde" } };
   const eleves = await prisma.eleve.findMany({
+    where: { tenantId: session.user.tenantId, ...siteFilter, statut: "ACTIF", ...niveauFilter },
     where: mergeFilters(
       { tenantId: session.user.tenantId, ...siteFilter, statut: "ACTIF" },
       teacherFilter
@@ -99,8 +107,12 @@ export async function GET(req: NextRequest) {
       // déjà bornés au tenant et au périmètre de sites par le `where` ci-dessus :
       // l'isolation est portée par la relation, la répéter n'ajouterait qu'une
       // jointure vers le même élève.
-      // eslint-disable-next-line ecolpro/require-site-filter
+      // eslint-disable-next-line ecolemiriam/require-site-filter
       parcours: { orderBy: { annee: "desc" }, take: 1 },
+      // eslint-disable-next-line ecolemiriam/require-site-filter
+      notes: { where: { isPubliee: true }, select: { valeur: true, noteMax: true, coefficient: true, matiere: { select: { nom: true, code: true } } } },
+      // eslint-disable-next-line ecolemiriam/require-site-filter
+      // eslint-disable-next-line ecolpro/require-site-filter
       // eslint-disable-next-line ecolpro/require-site-filter
       notes: { where: { isPubliee: true }, select: { valeur: true, noteMax: true, coefficient: true } },
       // eslint-disable-next-line ecolpro/require-site-filter

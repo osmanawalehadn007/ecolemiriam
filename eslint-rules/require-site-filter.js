@@ -18,7 +18,7 @@
  *   → OK : le Proxy injecte automatiquement le filtre.
  *
  * @example .eslintrc.js
- * rules: { "ecolpro/require-site-filter": "error" }
+ * rules: { "ecolemiriam/require-site-filter": "error" }
  */
 
 "use strict";
@@ -364,6 +364,7 @@ module.exports = {
 
           // Portée du site d'appel : sert à remonter aux variables de filtre
           // (`const notifFilter = siteFilterForModel(...)`).
+          const scope = context.sourceCode.getScope(node);
           const scope = context.sourceCode
             ? context.sourceCode.getScope(node)
             : context.getScope();

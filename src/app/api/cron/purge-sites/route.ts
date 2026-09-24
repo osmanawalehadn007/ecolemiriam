@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
 
   // Tâche système authentifiée par CRON_SECRET, sans session : elle balaie
   // délibérément tous les tenants pour purger les sites arrivés à échéance.
+  // eslint-disable-next-line ecolemiriam/require-tenant-id
   // eslint-disable-next-line ecolpro/require-tenant-id
   const sitesToPurge = await prisma.site.findMany({
     where: {
@@ -60,6 +61,7 @@ export async function GET(req: NextRequest) {
           },
         }),
         // Le site vient de la requête ci-dessus, déjà bornée aux sites échus.
+        // eslint-disable-next-line ecolemiriam/require-tenant-id
         // eslint-disable-next-line ecolpro/require-tenant-id
         prisma.site.delete({ where: { id: site.id } }),
       ]);

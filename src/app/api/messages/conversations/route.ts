@@ -17,6 +17,8 @@ import {
   MAX_AUDIENCE,
 } from "@/lib/messaging-audience";
 import { canAccessSite, mergeFilters, siteFilterForModel } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import type { ConversationType, ParticipantRole } from "@prisma/client";
 
 const AudienceSchema = z.object({
@@ -242,6 +244,13 @@ export async function POST(req: NextRequest) {
       // de site de l'émetteur. Le contrôle de site manquait : un personnel du
       // site A pouvait ouvrir une conversation sur une classe du site B en
       // connaissant son identifiant.
+      const classe = await prisma.classe.findFirst({
+        where: mergeFilters(
+          { id: classeId, tenantId },
+          siteFilterForModel("classe", actor),
+          anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+        ),
+      });
       const classe = await prisma.classe.findFirst({ where: { id: classeId, tenantId, ...siteFilterForModel("classe", actor) } });
       if (!classe) {
         return NextResponse.json({ error: "Classe introuvable" }, { status: 404 });
@@ -256,6 +265,7 @@ export async function POST(req: NextRequest) {
         lastReadAt: p.userId === userId ? new Date() : null,
       }));
     } else if (type === "ADMIN_BROADCAST") {
+      const tenantParticipants = await getTenantParticipants(actor, userId);
       const tenantParticipants = await getTenantParticipants(session.user as SessionUser, userId);
       participantsToCreate = tenantParticipants.map((p) => ({
         userId: p.userId,

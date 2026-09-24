@@ -1,41 +1,118 @@
 import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
+import prisma, { runWithTenant } from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { ExamensManager } from "@/components/examens/ExamensManager";
 import { SiteTabs } from "@/components/sites/SiteTabs";
-import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-scope";
+import { siteFilterForModel, type SessionSiteClaims, mergeFilters } from "@/lib/site-scope";
 import { getSitesForUser } from "@/lib/actions/eleve";
 import { getSiteColorMap } from "@/lib/site-colors";
-import { getTranslations } from "next-intl/server";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import type { Role } from "@prisma/client";
+import { getTranslations } from "next-intl/server";
+import { unstable_cache } from "next/cache";
 
+// Cache des examens — sans ce cache, chaque navigation ré-exécute
+// getTeacherScope + getAnneeCouranteLibelle + 3 requêtes findMany en parallèle.
 // Les fragments d'isolation sont construits ici, au plus près des requêtes :
 // passés en paramètres, ils n'étaient plus rattachables à leur origine, ni par
 // un relecteur ni par l'analyse statique.
+const getExamensData = unstable_cache(
+  async (tenantId: string, claimsHash: string, scopeHash: string) => {
+    const claims = JSON.parse(claimsHash) as SessionSiteClaims;
+    const scope = scopeHash
+      ? (JSON.parse(scopeHash) as { classeIds: string[]; matiereIds: string[]; isRestricted: boolean })
+      : undefined;
+    const siteId = claims.siteId ?? null;
+
+    return runWithTenant(tenantId, siteId, async () => {
+      // Pour les enseignants : filtrer les classes, matières ET examens par classeId
+      const teacherClasseFilter =
+        scope?.isRestricted && scope.classeIds.length > 0
+          ? { id: { in: scope.classeIds } }
+          : scope?.isRestricted
+            ? { id: "__none__" as const }
+            : {};
+
+      // Filtrer les examens : un enseignant ne voit que les examens qui ont
+      // au moins une session liée à une de ses classes
+      const teacherExamenFilter =
+        scope?.isRestricted && scope.classeIds.length > 0
+          ? { sessions: { some: { classeId: { in: scope.classeIds } } } }
+          : scope?.isRestricted
+            ? { id: "__none__" as const }
+            : {};
+
+      const [examens, classes, matieres] = await Promise.all([
+        prisma.examen.findMany({
+          where: { tenantId, ...siteFilterForModel("examen", claims), ...teacherExamenFilter },
+          include: {
+            sessions: {
+              where: {
+                ...siteFilterForModel("sessionExamen", claims),
+                ...(scope?.isRestricted && scope.classeIds.length > 0
+                  ? { OR: [{ classeId: { in: scope.classeIds } }, { classeId: null }] }
+                  : {}),
+              },
+              orderBy: { date: "asc" },
+            },
+          },
+          orderBy: { dateDebut: "desc" },
+        }),
+        prisma.classe.findMany({
+          where: mergeFilters(
+            { tenantId, ...teacherClasseFilter },
+            siteFilterForModel("classe", claims),
+            anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+          ),
+          select: { id: true, nom: true, niveau: true, siteId: true, site: { select: { nom: true } } },
+          orderBy: { nom: "asc" },
+        }),
+        prisma.matiere.findMany({
+          where: {
+            tenantId,
+            ...siteFilterForModel("matiere", claims),
+            ...(scope?.isRestricted && scope.matiereIds.length > 0
+              ? { id: { in: scope.matiereIds } }
+              : scope?.isRestricted
+                ? { id: "__none__" }
+                : {}),
+          },
+          select: { id: true, nom: true, code: true, coefficient: true },
+          orderBy: { nom: "asc" },
+        }),
+      ]);
+      return { examens, classes, matieres };
+    });
+  },
+  ["examens-data"],
+  { revalidate: 30, tags: ["examens-data"] }
+);
+
+export default async function ExamensPage(
+  props: {
+    searchParams: Promise<{ siteId?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const session = await auth();
+  if (!session?.user?.tenantId) redirect("/select-tenant");
+import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-scope";
 async function getExamensData(
   tenantId: string,
   claims: SessionSiteClaims,
   scope?: { isRestricted: boolean; classeNiveaux: string[]; matiereNoms: string[] }
-) {
   // Restriction enseignant : les listes de la modale de session sont limitées
   // à SON périmètre (matières + niveaux de SES classes).
-  const teacherClasseFilter =
     scope?.isRestricted && scope.classeNiveaux.length > 0
       ? { niveau: { in: scope.classeNiveaux } }
-      : scope?.isRestricted
-        ? { id: "__none__" }
-        : {};
-
   const teacherMatiereFilter =
     scope?.isRestricted && scope.matiereNoms.length > 0
       ? { nom: { in: scope.matiereNoms } }
-      : scope?.isRestricted
-        ? { id: "__none__" }
-        : {};
-
   // Restriction enseignant sur les sessions affichées : uniquement les matières
   // qu'il dispense et les niveaux de SES classes. Les sessions sans niveau
   // restent visibles (le niveau est optionnel à la création).
@@ -44,41 +121,14 @@ async function getExamensData(
         matiereNom: { in: scope.matiereNoms },
         ...(scope.classeNiveaux.length > 0
           ? { OR: [{ niveau: { in: scope.classeNiveaux } }, { niveau: null }] }
-          : {}),
-      }
-    : {};
-
-  const [examens, classes, matieres] = await Promise.all([
-    prisma.examen.findMany({
       where: { tenantId, ...siteFilterForModel("examen", claims) },
-      include: {
-        sessions: {
           where: { ...siteFilterForModel("sessionExamen", claims), ...teacherSessionFilter },
-          orderBy: { date: "asc" },
-        },
-      },
-      orderBy: { dateDebut: "desc" },
-    }),
-    prisma.classe.findMany({
       where: { tenantId, ...siteFilterForModel("classe", claims), ...teacherClasseFilter },
-      select: { id: true, nom: true, niveau: true, siteId: true, site: { select: { nom: true } } },
-      orderBy: { nom: "asc" },
-    }),
-    prisma.matiere.findMany({
       where: { tenantId, ...siteFilterForModel("matiere", claims), ...teacherMatiereFilter },
-      select: { id: true, nom: true, code: true, coefficient: true },
-      orderBy: { nom: "asc" },
-    }),
-  ]);
-  return { examens, classes, matieres };
-}
-
 export default async function ExamensPage({
   searchParams,
 }: {
-  searchParams: Promise<{ siteId?: string }>;
 }) {
-  const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
   guardPage(session, "examens:read");
 
@@ -108,13 +158,19 @@ export default async function ExamensPage({
     tenantHasSites: (session.user as { tenantHasSites?: boolean }).tenantHasSites ?? false,
   };
 
+  // Filtrer par classes de l'enseignant si applicable
+  const scope = isTeacherRole(session.user.role as Role)
+    ? await getTeacherScope(session.user.tenantId!, session.user.id, session.user.role as Role)
+    : undefined;
+
+  const claimsHash = JSON.stringify(examenClaims);
+  const scopeHash = scope ? JSON.stringify(scope) : "";
+  const { examens, classes, matieres } = await getExamensData(session.user.tenantId, claimsHash, scopeHash);
   // Périmètre de l'enseignant connecté : converti en niveaux de classes et noms
   // de matières (car les sessions d'examen sont rattachées par nom, pas par ID).
   const role = session.user.role as Role;
   const rawScope = isTeacherRole(role)
     ? await getTeacherScope(session.user.tenantId, session.user.id, role)
-    : undefined;
-
   let teacherScope: { isRestricted: boolean; classeNiveaux: string[]; matiereNoms: string[] } | undefined;
   if (rawScope?.isRestricted) {
     // Mêmes bornes d'isolation que la liste des classes/matières de la modale :
@@ -150,7 +206,6 @@ export default async function ExamensPage({
       matiereNoms: scopeMatieres.map((m) => m.nom),
     };
   }
-
   const { examens, classes, matieres } = await getExamensData(
     session.user.tenantId,
     examenClaims,

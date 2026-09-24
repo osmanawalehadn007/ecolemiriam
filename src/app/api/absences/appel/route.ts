@@ -8,13 +8,20 @@ import { sendEmail, renderNotificationEmail } from "@/lib/notifications/email";
 import { sendAbsenceWhatsApp, sendRetardWhatsApp } from "@/lib/notifications/whatsapp";
 import { sendAbsenceTelegram, sendRetardTelegram } from "@/lib/notifications/telegram";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 import { revalidateTag } from "next/cache";
 
 const AppelSchema = z.object({
   classeId: z.string().min(1),
   date: z.string().datetime(),
+  heureDebut: z.string().regex(/^\d{2}:\d{2}$/),
+  heureFin: z.string().regex(/^\d{2}:\d{2}$/),
   presences: z.record(z.string(), z.enum(["present", "absent", "retard"])),
+  retardsHeureArrivee: z.record(z.string(), z.string().regex(/^\d{2}:\d{2}$/)).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -32,56 +39,105 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Données invalides", details: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { classeId, date, presences } = parsed.data;
+    const { classeId, date, heureDebut, heureFin, presences, retardsHeureArrivee } = parsed.data;
     const tenantId = session.user.tenantId;
     const appelDate = new Date(date);
+    const dateStr = appelDate.toISOString().split("T")[0];
 
-    // Vérifier que la classe appartient au tenant et au site
+    // Vérifier que la classe appartient au tenant, au site ET à l'année en
+    // cours : on ne fait pas l'appel dans une classe d'une année révolue.
     const classe = await prisma.classe.findFirst({
+      where: mergeFilters(
+        { id: classeId, tenantId },
+        siteFilterForModel("classe", session.user),
+        anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+      ),
+    // Vérifier que la classe appartient au tenant et au site
       where: { id: classeId, tenantId, ...siteFilterForModel("classe", session.user) },
     });
     if (!classe) {
-      return NextResponse.json({ error: "Classe introuvable" }, { status: 404 });
+      return NextResponse.json({ error: "Classe introuvable pour l'année en cours" }, { status: 404 });
     }
 
+    // Vérification du périmètre enseignant : un TEACHER/CLASS_TEACHER ne
+    // peut faire l'appel que dans une classe qui lui est assignée (emploi du
+    // temps, prof principal ou affectation explicite). Sans ce contrôle, un
+    // enseignant pouvait forger un classeId hors de son scope.
+    if (isTeacherRole(session.user.role as Role)) {
+      const scope = await getTeacherScope(tenantId!, session.user.id, session.user.role as Role);
+      if (scope.isRestricted && !scope.classeIds.includes(classeId)) {
+        return NextResponse.json({ error: "Vous n'êtes pas assigné à cette classe" }, { status: 403 });
+      }
+    }
+
+    // Validation que tous les élèves saisis appartiennent bien à la classe
+    // sélectionnée. Sans ce contrôle, un utilisateur pouvait passer des
+    // eleveId arbitraires et créer des absences pour des élèves d'autres
+    // classes/tenants.
+    const eleveIds = Object.keys(presences);
+    if (eleveIds.length > 0) {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- eleveId scoping via classeId + tenantId : la classe a déjà été vérifiée ci-dessus
+      const validEleves = await prisma.eleve.findMany({
+        where: {
+          id: { in: eleveIds },
+          tenantId,
+          classeId,
+          statut: "ACTIF",
+        },
+        select: { id: true },
+      });
+      const validIds = new Set(validEleves.map((e) => e.id));
+      const invalidIds = eleveIds.filter((id) => !validIds.has(id));
+      if (invalidIds.length > 0) {
+        return NextResponse.json(
+          { error: "Certains élèves n'appartiennent pas à cette classe", count: invalidIds.length },
+          { status: 400 },
     // Garde serveur : un enseignant ne fait l'appel que pour SES classes.
     // Sans cette vérification, un prof pouvait poster l'id d'une classe d'un
     // collègue (le seul filtre de site ne l'en empêchait pas).
     if (isTeacherRole(session.user.role)) {
       const scope = await getTeacherScope(tenantId, session.user.id, session.user.role);
-      if (scope.isRestricted && !scope.classeIds.includes(classeId)) {
-        return NextResponse.json(
           { error: "Vous ne pouvez faire l'appel que pour vos propres classes" },
           { status: 403 }
         );
       }
     }
 
+    // Créer les absences pour les absents et retards.
+    // L'ID inclut le créneau (heureDebut) pour qu'un même élève puisse avoir
+    // des absences distinctes sur plusieurs créneaux d'une même journée.
+    // Pour un retard, heureFin = heure d'arrivée de l'élève ; pour une
+    // absence, heureFin = fin du créneau.
     // Créer les absences pour les absents et retards
     const operations = Object.entries(presences)
       .filter(([, status]) => status !== "present")
-      .map(([eleveId, status]) =>
-        prisma.absence.upsert({
-          where: {
-            id: `appel-${classeId}-${eleveId}-${appelDate.toISOString().split("T")[0]}`,
-          },
+      .map(([eleveId, status]) => {
+        const isRetard = status === "retard";
+        const heureArrivee = isRetard ? (retardsHeureArrivee?.[eleveId] ?? heureFin) : heureFin;
+        const absenceId = `appel-${classeId}-${eleveId}-${dateStr}-${heureDebut}`;
+        return prisma.absence.upsert({
+          where: { id: absenceId },
           update: {
             motif: "INJUSTIFIE",
             statut: "EN_ATTENTE",
-            isRetard: status === "retard",
+            isRetard,
+            heureDebut,
+            heureFin: heureArrivee,
           },
           create: {
-            id: `appel-${classeId}-${eleveId}-${appelDate.toISOString().split("T")[0]}`,
+            id: absenceId,
             tenantId,
             eleveId,
             date: appelDate,
             motif: "INJUSTIFIE",
             statut: "EN_ATTENTE",
-            isRetard: status === "retard",
+            isRetard,
+            heureDebut,
+            heureFin: heureArrivee,
             saisieParId: session.user.id,
           },
-        })
-      );
+        });
+      });
 
     await prisma.$transaction(operations);
 
@@ -101,7 +157,7 @@ export async function POST(req: NextRequest) {
         where: { id: tenantId },
         select: { name: true },
       });
-      const ecoleNom = tenant?.name ?? "EcolPro";
+      const ecoleNom = tenant?.name ?? "École Miriam";
       const dateStr = appelDate.toLocaleDateString("fr-FR");
 
       // Récupérer les élèves signalés avec leurs parents (tous les parents liés, pas seulement le gardien)
@@ -224,7 +280,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    revalidateTag("dashboard-data");
+    revalidateTag("dashboard-data", "max");
 
     return NextResponse.json({
       success: true,

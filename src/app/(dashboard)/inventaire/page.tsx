@@ -4,7 +4,7 @@ import { InventaireView } from "@/components/inventaire/InventaireView";
 import { getTranslations } from "next-intl/server";
 import { guardPage } from "@/lib/guard-page";
 
-export const metadata = { title: "Inventaire — Matériel scolaire | EcolPro" };
+export const metadata = { title: "Inventaire — Matériel scolaire | École Miriam" };
 
 export default async function InventairePage() {
   const [session, t] = await Promise.all([
@@ -21,7 +21,7 @@ export default async function InventairePage() {
         userAvatar={session!.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <InventaireView />
+        <InventaireView userRole={session!.user.role} />
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyMetaSignature } from "@/lib/webhooks";
 
-const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN ?? "ecolpro_whatsapp_token";
+const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 
 /**
  * GET /api/webhooks/whatsapp
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+  if (VERIFY_TOKEN && mode === "subscribe" && token === VERIFY_TOKEN) {
     console.log("[WhatsApp Webhook] Vérification réussie");
     return new NextResponse(challenge, { status: 200 });
   }
@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
             // est inter-tenants par nécessité.
             // Limite connue : si deux établissements enregistrent le même
             // numéro, le message est rattaché au premier trouvé.
+            // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- webhook entrant : aucune session, le tenant est déterminé par le numéro de téléphone
             // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter -- webhook entrant sans session : le numéro est le seul discriminant (il détermine le tenant ET donc le site)
             const parent = await prisma.parent.findFirst({
               where: {

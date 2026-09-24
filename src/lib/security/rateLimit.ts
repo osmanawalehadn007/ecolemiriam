@@ -1,5 +1,5 @@
 /**
- * EcolPro — Rate Limiting (in-memory token bucket)
+ * École Miriam — Rate Limiting (in-memory token bucket)
  * ============================================================
  * Simple rate limiter pour les routes API sensibles (login, upload, etc.).
  * Utilise un Map en mémoire — suffisant pour un seul serveur.
@@ -68,12 +68,33 @@ export function rateLimit(opts: RateLimitOptions): RateLimitResult {
 
 /**
  * Récupère l'IP du client à partir de la requête.
+ *
+ * En production derrière Cloudflare Tunnel, CF-Connecting-IP est la source
+ * de vérité (non spoofable — Cloudflare l'écrase). X-Forwarded-For n'est
+ * utilisé qu'en dev car il est spoofable par le client.
  */
 export function getClientIP(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  const real = req.headers.get("x-real-ip");
-  if (real) return real;
+  // Cloudflare Tunnel : CF-Connecting-IP est positionné par Cloudflare
+  // et non par le client — c'est la source de vérité en production.
+  const cfIP = req.headers.get("cf-connecting-ip");
+  if (cfIP && process.env.NODE_ENV === "production") return cfIP.trim();
+
+  // En dev uniquement, X-Forwarded-For est acceptable
+  if (process.env.NODE_ENV !== "production") {
+    const forwarded = req.headers.get("x-forwarded-for");
+    if (forwarded) {
+      // Prendre la première IP et valider le format
+      const ip = forwarded.split(",")[0].trim();
+      if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip) || /^[a-f0-9:]+$/i.test(ip)) {
+        return ip;
+      }
+    }
+    const real = req.headers.get("x-real-ip");
+    if (real) return real.trim();
+  }
+
+  // En production, si pas de CF-Connecting-IP, on ne fait pas confiance
+  // à X-Forwarded-For — on retourne unknown pour éviter le bypass.
   return "unknown";
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Award, AlertTriangle, TrendingUp, CheckCircle2, Save, Loader2, Star, ThumbsDown, Minus, Sparkles } from "lucide-react";
+import { AlertTriangle, TrendingUp, CheckCircle2, Save, Loader2, Star, ThumbsDown, Minus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -95,20 +95,9 @@ export function ConseilDeClasse({ classeId, periodeId, classeNom, periodeNom, el
   }
 
   function applyAutoDecisions() {
-    setEleves((prev) =>
-      prev.map((e) => {
-        if (e.moyenneGenerale === null) return e;
-        let decision: Decision;
-        if (e.moyenneGenerale >= 16) decision = "FELICITATIONS";
-        else if (e.moyenneGenerale >= 14) decision = "ENCOURAGEMENTS";
-        else if (e.moyenneGenerale >= 10) decision = "PASSAGE";
-        else if (e.moyenneGenerale >= 8) decision = "AVERTISSEMENT";
-        else decision = "REDOUBLEMENT";
-        return { ...e, decision };
-      })
-    );
-    setSaved(false);
-    toast.info(t("autoApplied"));
+    // La décision du conseil de classe est saisie manuellement.
+    // Le pré-remplissage automatique a été retiré : la décision relève
+    // du conseil, pas du système.
   }
 
   function handleSave() {
@@ -146,10 +135,6 @@ export function ConseilDeClasse({ classeId, periodeId, classeNom, periodeNom, el
           <p className="text-sm text-gray-500">{periodeNom} · {t("students", { count: eleves.length })}</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={applyAutoDecisions}>
-            <Award className="w-4 h-4 mr-2" />
-            {t("autoDecisions")}
-          </Button>
           <Button
             size="sm"
             onClick={handleSave}

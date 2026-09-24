@@ -1,5 +1,5 @@
 /**
- * EcolPro — Analyse d'un import d'élèves
+ * École Miriam — Analyse d'un import d'élèves
  * ======================================
  *
  * Lecture du fichier et construction d'un **plan d'import** : pour chaque
@@ -136,6 +136,12 @@ export async function parseElevesWorkbook(buffer: ArrayBuffer): Promise<ParseRes
         nom = nomRaw;
       }
     }
+
+    // Convention d'affichage : noms et prénoms en MAJUSCULES, comme pour
+    // toutes les fiches existantes. Un fichier en minuscules ou casse
+    // mixte ne doit pas produire un affichage incohérent.
+    nom = nom.trim().toUpperCase();
+    prenom = prenom.trim().toUpperCase();
 
     rows.push({
       ligne: i,

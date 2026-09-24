@@ -1,0 +1,189 @@
+# ============================================================
+# École Miriam — Caddyfile (reverse proxy + sécurité)
+# ============================================================
+# Caddy reçoit le trafic depuis cloudflared (port 8080 interne, en HTTP).
+# Cloudflare termine le TLS externe (edge), cloudflared fait le pont en
+# HTTP vers Caddy. PAS de `tls internal` ici — cela casserait la chaîne.
+# Headers de sécurité, rate limiting, proxy vers l'app.
+#
+# Blue-Green : l'upstream est défini dans upstream.conf (import).
+# Le script blue-green-deploy.sh switche entre app-blue et app-green
+# en réécrivant upstream.conf + caddy reload (zero downtime).
+# ============================================================
+
+{
+	# Désactiver le HTTPS public (Cloudflare gère le TLS externe)
+	auto_https off
+	email admin@ecolemiriam.com
+}
+
+# ============================================================
+# Proxy principal : ecolemiriam.com (apex, seul domaine de production)
+# ============================================================
+:8080 {
+	# Pas de TLS ici — cloudflared se connecte en HTTP (service: http://caddy:8080).
+	# Cloudflare termine le TLS externe (edge), cloudflared fait le pont en HTTP
+	# vers Caddy. Ajouter `tls internal` ici casserait la chaîne (erreur 400 :
+	# "Client sent an HTTP request to an HTTPS server").
+
+	# --- Headers de sécurité ---
+	# CSP, Permissions-Policy et X-DNS-Prefetch-Control sont gérés par
+	# next.config.ts (plus complets et plus stricts). Les dupliquer ici
+	# produisait deux valeurs contradictoires dans la réponse (Caddy "on"
+	# vs Next "off" pour X-DNS-Prefetch-Control ; CSP avec 'unsafe-eval'
+	# côté Caddy vs sans côté Next).
+	header {
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+	}
+
+	# --- Cache des assets statiques Next.js ---
+	# La directive `header` n'accepte PAS de matcher de chemin imbriqué.
+	# Écrite `header { /chemin/* { ... } }`, Caddy lit `/chemin/*` comme un
+	# NOM DE CHAMP et applique la règle à TOUTES les réponses : pages
+	# authentifiées et routes /api/* partaient avec
+	#   Cache-Control: public, max-age=31536000, immutable
+	# en plus du `no-store` applicatif. Les deux valeurs se combinent en une
+	# directive contradictoire ; navigateurs et edge Cloudflare pouvaient
+	# retenir `public/immutable` et resservir une page HTML en cache sur une
+	# requête attendant du JSON → « Unexpected token '<' » sur /api/auth/*.
+	# Le matcher doit être nommé et porté par la directive elle-même.
+	# Chemin réel des assets : /_next/static (underscore), pas /.next/static.
+	@static path /_next/static/*
+	header @static Cache-Control "public, max-age=31536000, immutable"
+
+	# --- Domaine canonique : tout ramener sur l'apex ---
+	# `app.ecolemiriam.com` servait l'application à l'identique, et c'est ce qui
+	# rendait la connexion impossible depuis un ancien signet :
+	#
+	#   1. l'utilisateur ouvre https://app.ecolemiriam.com/login ;
+	#   2. il s'authentifie — Auth.js pose le cookie de session SANS attribut
+	#      `domain`, donc limité à l'hôte exact `app.ecolemiriam.com` ;
+	#   3. Auth.js redirige ensuite vers AUTH_URL, c'est-à-dire l'apex ;
+	#   4. sur l'apex, ce cookie n'existe pas : le middleware renvoie sur /login.
+	#
+	# La boucle est silencieuse — aucun message d'erreur, le mot de passe est
+	# pourtant le bon. Le commentaire de `cloudflared/config.yml` pariait sur
+	# « Auth.js ramènera les utilisateurs sur l'apex au prochain callback » :
+	# il les y ramène en effet, mais sans leur session.
+	#
+	# Le 301 doit rester servi (et l'ingress du tunnel conservé) : le retirer
+	# rendrait les anciens signets muets au lieu de les rediriger.
+	# Le matcher liste les hôtes publics explicitement plutôt que d'écrire
+	# `not host ecolemiriam.com` : Caddy est aussi interrogé en interne en
+	# `Host: localhost:8080` — par la sonde de disponibilité de
+	# `blue-green-deploy-gcp.sh`, qui attend « OK » sur /health. Un matcher
+	# par la négative aurait redirigé cette sonde vers l'apex public et fait
+	# échouer chaque déploiement.
+	@hors_canonique host app.ecolemiriam.com www.ecolemiriam.com
+	handle @hors_canonique {
+		redir https://ecolemiriam.com{uri} permanent
+	}
+
+	# --- Rate limiting ---
+	# Keyé sur CF-Connecting-IP (positionné par Cloudflare à l'edge) car
+	# {remote_host} derrière cloudflared est l'IP du conteneur tunnel —
+	# identique pour tous les visiteurs. Sans ce fix, 5 req/min étaient
+	# partagées par l'ensemble des utilisateurs.
+	#
+	# P0-1 (diagnostic instabilité) : la zone auth à 10 req/min/key IP était
+	# partagée par toute une école derrière un NAT → 128 × 429 / 24h, dont
+	# 100 % sur /api/auth/*. Les GET passifs (session re-sync du
+	# SessionProvider à chaque refocus d'onglet, CSRF token) grignotaient le
+	# quota en permanence. Split :
+	#   - session + csrf : GET idempotents, quota large (300/min/IP)
+	#   - reste /api/auth/* (login, 2fa, callback, signout) : 60/min/IP
+	# Le durcissement par-email (anti-énumération de mots de passe) est géré
+	# au niveau applicatif dans les routes 2fa/check-required et authorize.
+
+	@api_auth_passive {
+		path /api/auth/session /api/auth/csrf
+	}
+	handle @api_auth_passive {
+		rate_limit {
+			zone auth_passive {
+				key {http.request.header.CF-Connecting-IP}
+				events 300
+				window 1m
+			}
+		}
+		import upstream-simple.conf
+	}
+
+	@api_auth {
+		path /api/auth/*
+	}
+	handle @api_auth {
+		rate_limit {
+			zone auth {
+				key {http.request.header.CF-Connecting-IP}
+				events 60
+				window 1m
+			}
+		}
+		# Upstream swappable (blue-green) — voir upstream-simple.conf
+		import upstream-simple.conf
+	}
+
+	# Cron : 10 appels / minute (Ofelia appelle en interne)
+	@api_cron {
+		path /api/cron/*
+	}
+	handle @api_cron {
+		rate_limit {
+			zone cron {
+				key {http.request.header.CF-Connecting-IP}
+				events 10
+				window 1m
+			}
+		}
+		import upstream-simple.conf
+	}
+
+	# Uploads : 10 / minute / IP
+	@api_upload {
+		path /api/eleves/upload-photo /api/parametres/upload-signature
+	}
+	handle @api_upload {
+		rate_limit {
+			zone upload {
+				key {http.request.header.CF-Connecting-IP}
+				events 10
+				window 1m
+			}
+		}
+		import upstream-simple.conf
+	}
+
+	# --- Route par défaut ---
+	# Upstream swappable (blue-green) — voir upstream.conf
+	# Contient le bloc reverse_proxy complet avec health checks + headers
+	handle {
+		import upstream.conf
+	}
+
+	# --- Health endpoint pour Caddy lui-même ---
+	handle /health {
+		respond "OK" 200
+	}
+
+	# --- Logging ---
+	log {
+		output stdout
+		format json
+		level info
+	}
+
+	# --- Compression ---
+	encode gzip zstd
+}
+
+# ============================================================
+# Monitoring : status.ecolemiriam.com (Uptime Kuma)
+# ============================================================
+:8081 {
+	# Pas de TLS — cloudflared se connecte en HTTP (même raison que :8080).
+	reverse_proxy monitoring:3001
+}

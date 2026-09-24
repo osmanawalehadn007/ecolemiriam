@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CreditCard, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
+import { niveauToLabel } from "@/lib/niveau";
+import { openPrintWindow } from "@/lib/print-window";
 
 interface Classe {
   id: string;
@@ -31,12 +33,8 @@ export function CartesScolairesForm({ classes }: { classes: Classe[] }) {
       const res = await fetch(`/api/eleves/cartes-scolaires?classeId=${classeId}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      const w = window.open("", "_blank");
-      if (w) {
-        w.document.write(data.html);
-        w.document.close();
-        w.focus();
-        setTimeout(() => w.print(), 500);
+      if (!openPrintWindow(data.html)) {
+        toast.error(t("cardsError"));
       }
       toast.success(t("cardsGenerated"));
     } catch (e: unknown) {
@@ -61,7 +59,7 @@ export function CartesScolairesForm({ classes }: { classes: Classe[] }) {
             <SelectTrigger><SelectValue placeholder={t("cardsSelectClass")} /></SelectTrigger>
             <SelectContent>
               {classes.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.nom} ({c.niveau})</SelectItem>
+                <SelectItem key={c.id} value={c.id}>{c.nom} ({niveauToLabel(c.niveau)})</SelectItem>
               ))}
             </SelectContent>
           </Select>

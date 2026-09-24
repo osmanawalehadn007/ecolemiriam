@@ -1,5 +1,5 @@
 -- ============================================================
--- EcolPro — Script de Seed Complet pour les Tests
+-- École Miriam — Script de Seed Complet pour les Tests
 -- À exécuter dans : Supabase Dashboard → SQL Editor
 -- Crée : 1 Super Admin + 1 Tenant (école de démo) + données complètes
 -- ============================================================
@@ -15,7 +15,7 @@ INSERT INTO "users" (
 ) VALUES (
   'superadmin-001',
   'super.admin@test.com',
-  'Super Admin EcolPro',
+  'Super Admin École Miriam',
   '$2a$10$KPSm9uvcAvuPWbTaYXSrmuoi8hK3qAvWoxQxZzDAbdHL4EnxVav0i',
   'SUPER_ADMIN',
   true,
@@ -316,7 +316,7 @@ INSERT INTO "notifications" (
   "envoyeParId", "nbDestinataires", "envoyeeAt", "createdAt", "updatedAt"
 ) VALUES (
   'notif-001', 'tenant-demo-001',
-  'Bienvenue sur EcolPro !',
+  'Bienvenue sur École Miriam !',
   'Votre établissement a été configuré avec succès. Vous pouvez maintenant gérer vos élèves, notes, absences et bien plus encore.',
   'IN_APP', 'ENVOYEE', 'TOUS',
   'user-admin-001', 50, NOW(),

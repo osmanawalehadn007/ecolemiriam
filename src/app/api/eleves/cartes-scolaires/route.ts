@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+import { siteFilterForModel } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
+import { niveauToLabel } from "@/lib/niveau";
 import { siteFilterForModel, eleveScopeFilter } from "@/lib/site-scope";
 import { checkPermission } from "@/lib/rbac";
 
@@ -28,7 +34,14 @@ export async function GET(req: NextRequest) {
   const eleveFilter = eleveScopeFilter(session.user, "eleve");
   const [classe, eleves, tenant] = await Promise.all([
     prisma.classe.findFirst({
-      where: { id: classeId, tenantId: session.user.tenantId, ...classeFilter },
+      where: mergeFilters(
+        { id: classeId, tenantId: session.user.tenantId },
+        classeFilter,
+        anneeFilterForModel(
+          "classe",
+          await getAnneeCouranteLibelle(session.user.tenantId),
+        ),
+      ),
     }),
     prisma.eleve.findMany({
       where: { classeId, tenantId: session.user.tenantId, ...eleveFilter, statut: "ACTIF" },
@@ -60,7 +73,7 @@ export async function GET(req: NextRequest) {
         <div class="eleve-info">
           <div class="nom">${e.nom} ${e.prenom}</div>
           <div class="matricule">N° ${e.matricule}</div>
-          <div class="classe">${classe.nom} — ${classe.niveau}</div>
+          <div class="classe">${classe.nom} — ${niveauToLabel(classe.niveau)}</div>
         </div>
         <div class="annee">Année ${tenant.currentYear}</div>
       </div>

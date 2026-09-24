@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatDate } from "@/lib/utils";
+import { hasPermission } from "@/lib/client-permissions";
 import { useTranslations } from "next-intl";
 
 type TypeIncident = "RETARD" | "BAVARDAGE" | "INSOLENCE" | "BAGARRE" | "TRICHE" | "VANDALISM" | "ABSENTEISME" | "AUTRE";
@@ -201,7 +202,7 @@ function CreateIncidentModal({
   );
 }
 
-function IncidentCard({ incident, onUpdate }: { incident: Incident; onUpdate: (i: Incident) => void }) {
+function IncidentCard({ incident, onUpdate, canWrite }: { incident: Incident; onUpdate: (i: Incident) => void; canWrite: boolean }) {
   const t = useTranslations("vieScolaire");
   const [expanded, setExpanded] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -282,12 +283,12 @@ function IncidentCard({ incident, onUpdate }: { incident: Incident; onUpdate: (i
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {incident.statut === "OUVERT" && (
+            {canWrite && incident.statut === "OUVERT" && (
               <Button size="sm" variant="outline" className="text-xs" onClick={() => updateStatut("EN_TRAITEMENT")} disabled={isPending}>
                 {t("process")}
               </Button>
             )}
-            {incident.statut === "EN_TRAITEMENT" && (
+            {canWrite && incident.statut === "EN_TRAITEMENT" && (
               <Button size="sm" variant="outline" className="text-xs text-green-700 border-green-200" onClick={() => updateStatut("RESOLU")} disabled={isPending}>
                 {t("resolve")}
               </Button>
@@ -334,14 +335,17 @@ export function VieScolaireView({
   eleves,
   classes,
   currentUserId,
+  userRole,
 }: {
   incidents: Incident[];
   eleves: Eleve[];
   classes: { id: string; nom: string }[];
   currentUserId: string;
   tenantId: string;
+  userRole?: string;
 }) {
   const t = useTranslations("vieScolaire");
+  const canWrite = hasPermission(userRole, "vie-scolaire:write");
   const [incidents, setIncidents] = useState<Incident[]>(initial);
   const [showCreate, setShowCreate] = useState(false);
   const [filterStatut, setFilterStatut] = useState<StatutIncident | "ALL">("ALL");
@@ -420,6 +424,7 @@ export function VieScolaireView({
           <option value="ALL">{t("allClasses")}</option>
           {classes.map((c) => <option key={c.id} value={c.nom}>{c.nom}</option>)}
         </select>
+        {canWrite && (
         <Button
           onClick={() => setShowCreate(true)}
           className="gap-2 bg-red-600 hover:bg-red-700 text-white shrink-0"
@@ -427,6 +432,7 @@ export function VieScolaireView({
           <Plus className="w-4 h-4" />
           {t("report")}
         </Button>
+        )}
       </div>
 
       {/* Liste */}
@@ -441,7 +447,7 @@ export function VieScolaireView({
       ) : (
         <div className="space-y-3">
           {filtered.map((inc) => (
-            <IncidentCard key={inc.id} incident={inc} onUpdate={updateIncident} />
+            <IncidentCard key={inc.id} incident={inc} onUpdate={updateIncident} canWrite={canWrite} />
           ))}
         </div>
       )}

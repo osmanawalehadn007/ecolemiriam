@@ -14,6 +14,7 @@ interface TenantSignature {
   chefEtablissement: string | null;
   signatureUrl: string | null;
   cachetUrl: string | null;
+  logoUrl: string | null;
 }
 
 export function SignatureCachetManager({ tenant: initial }: { tenant: TenantSignature }) {
@@ -23,6 +24,7 @@ export function SignatureCachetManager({ tenant: initial }: { tenant: TenantSign
   const [chefEtablissement, setChefEtablissement] = useState(initial.chefEtablissement ?? "");
   const [signatureUrl, setSignatureUrl] = useState(initial.signatureUrl ?? "");
   const [cachetUrl, setCachetUrl] = useState(initial.cachetUrl ?? "");
+  const [logoUrl, setLogoUrl] = useState(initial.logoUrl ?? "");
   const [isPending, startTransition] = useTransition();
 
   async function handleSave() {
@@ -31,13 +33,13 @@ export function SignatureCachetManager({ tenant: initial }: { tenant: TenantSign
         const res = await fetch("/api/parametres/signature-cachet", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chefEtablissement, signatureUrl, cachetUrl }),
+          body: JSON.stringify({ chefEtablissement, signatureUrl, cachetUrl, logoUrl }),
         });
         if (!res.ok) {
           const data = await res.json();
           throw new Error(data.error ?? t("error"));
         }
-        setTenant({ name: tenant.name, chefEtablissement, signatureUrl, cachetUrl });
+        setTenant({ name: tenant.name, chefEtablissement, signatureUrl, cachetUrl, logoUrl });
         toast.success(t("saved"));
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : t("error"));
@@ -45,7 +47,7 @@ export function SignatureCachetManager({ tenant: initial }: { tenant: TenantSign
     });
   }
 
-  async function handleUpload(type: "signature" | "cachet") {
+  async function handleUpload(type: "signature" | "cachet" | "logo") {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
@@ -63,7 +65,8 @@ export function SignatureCachetManager({ tenant: initial }: { tenant: TenantSign
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
         if (type === "signature") setSignatureUrl(data.url);
-        else setCachetUrl(data.url);
+        else if (type === "cachet") setCachetUrl(data.url);
+        else setLogoUrl(data.url);
         toast.success(t("saved"));
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : t("error"));
@@ -89,6 +92,19 @@ export function SignatureCachetManager({ tenant: initial }: { tenant: TenantSign
             value={chefEtablissement}
             onChange={(e) => setChefEtablissement(e.target.value)}
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Logo de l&apos;établissement</Label>
+          <div className="flex items-center gap-3">
+            {/* Aperçu du logo : URL data:/blob: locale ou URL de stockage arbitraire. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {logoUrl && <img src={logoUrl} alt="Logo" className="h-16 object-contain border rounded" />}
+            <Button variant="outline" size="sm" onClick={() => handleUpload("logo")} className="gap-2">
+              <Upload className="h-4 w-4" /> Téléverser le logo
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">Le logo apparaît sur les bulletins, attestations, factures, convocations et cartes scolaires.</p>
         </div>
 
         <div className="grid grid-cols-2 gap-4">

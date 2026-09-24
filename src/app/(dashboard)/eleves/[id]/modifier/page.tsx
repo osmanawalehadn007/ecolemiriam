@@ -1,5 +1,6 @@
 import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect, notFound } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { EleveForm } from "@/components/eleves/EleveForm";
@@ -11,6 +12,7 @@ export default async function ModifierElevePage({
   params: Promise<{ id: string }>;
 }) {
   const session = await auth();
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   if (!session?.user?.tenantId) redirect("/login");
   guardPage(session, "eleves:write");
 

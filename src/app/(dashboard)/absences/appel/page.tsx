@@ -1,7 +1,13 @@
 import { guardStaff } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
+import { siteFilterForModel, type SessionSiteClaims, mergeFilters } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-scope";
 import { Header } from "@/components/layout/Header";
 import { AppelInterface } from "@/components/absences/AppelInterface";
@@ -21,10 +27,49 @@ async function getClasses(
         ? { id: "__none__" }
         : {};
 
+async function getClasses(
+  tenantId: string,
+  claims: SessionSiteClaims,
+  scope?: { classeIds: string[]; isRestricted: boolean }
+) {
+  // Pour les enseignants restreints : filtrer par scope (classeIds) SANS
+  // filtre de site, car un enseignant peut enseigner dans des classes
+  // situées sur des sites auxquels il n'est pas rattaché.
+  const isScoped = scope?.isRestricted && scope.classeIds.length > 0;
+  const scopeDenyAll = scope?.isRestricted && scope.classeIds.length === 0;
+
+  // L'appel ne se fait que dans les classes de l'année en cours. Sans cette
+  // borne, les classes des années révolues apparaissaient dans la liste avec
+  // leurs anciens effectifs.
+  const anneeFilter = anneeFilterForModel(
+    "classe",
+    await getAnneeCouranteLibelle(tenantId),
+  );
+
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- teacher scope: classeIds is the security boundary for restricted teachers, not siteId
   return prisma.classe.findMany({
+    // mergeFilters, et non un étalement : les fragments de site et d'année
+    // encapsulent tous deux leurs prédicats dans `AND`. Étalés côte à côte,
+    // le second écraserait silencieusement le premier — et le filtre de site
+    // disparaîtrait.
+    where: mergeFilters(
+      { tenantId },
+      isScoped || scopeDenyAll ? {} : siteFilterForModel("classe", claims),
+      anneeFilter,
+      isScoped
+        ? { id: { in: scope.classeIds } }
+        : scopeDenyAll
+          ? { id: "__none__" }
+          : {},
+    ),
     where: { tenantId, ...siteFilterForModel("classe", claims), ...teacherClasseFilter },
     include: {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- eleves filtered via classe scope (classeIds), not site
       eleves: {
+        where: {
+          statut: "ACTIF",
+          ...(isScoped || scopeDenyAll ? {} : siteFilterForModel("eleve", claims)),
+        },
         where: { statut: "ACTIF", ...siteFilterForModel("eleve", claims) },
         select: {
           id: true, nom: true, prenom: true,
@@ -32,21 +77,60 @@ async function getClasses(
         },
         orderBy: [{ nom: "asc" }, { prenom: "asc" }],
       },
+      structure: { select: { id: true, nom: true, type: true } },
     },
-    orderBy: { nom: "asc" },
+    orderBy: [{ structure: { type: "asc" } }, { nom: "asc" }],
+  });
+}
+
+async function getEmplois(
+  tenantId: string,
+  claims: SessionSiteClaims,
+  classeIds: string[],
+  scope?: { classeIds: string[]; isRestricted: boolean }
+) {
+  if (classeIds.length === 0) return [];
+  const isScoped = scope?.isRestricted && scope.classeIds.length > 0;
+  const scopeDenyAll = scope?.isRestricted && scope.classeIds.length === 0;
+  if (scopeDenyAll) return [];
+
+  const anneeFilter = anneeFilterForModel(
+    "emploiTemps",
+    await getAnneeCouranteLibelle(tenantId),
+  );
+
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- teacher scope: classeIds is the security boundary
+  return prisma.emploiTemps.findMany({
+    where: mergeFilters(
+      { tenantId, classeId: { in: classeIds } },
+      isScoped ? {} : siteFilterForModel("emploiTemps", claims),
+      anneeFilter,
+    ),
+    select: { classeId: true, jour: true, heureDebut: true, heureFin: true },
   });
 }
 
 export default async function AppelPage() {
   const session = await auth();
-  if (!session?.user?.tenantId) redirect("/login");
-  guardStaff(session, "absences:read");
+  if (!session?.user?.tenantId) redirect("/select-tenant");
+  guardPage(session, "absences:write");
 
-  const scope = isTeacherRole(session.user.role)
-    ? await getTeacherScope(session.user.tenantId, session.user.id, session.user.role)
+  // Filtrer par classes de l'enseignant si applicable
+  const scope = isTeacherRole(session.user.role as Role)
+    ? await getTeacherScope(session.user.tenantId!, session.user.id, session.user.role as Role)
     : undefined;
 
   const classes = await getClasses(session.user.tenantId, session.user, scope);
+  const emplois = await getEmplois(
+    session.user.tenantId,
+    session.user,
+    classes.map((c) => c.id),
+    scope,
+  );
+  if (!session?.user?.tenantId) redirect("/login");
+  guardStaff(session, "absences:read");
+  const scope = isTeacherRole(session.user.role)
+    ? await getTeacherScope(session.user.tenantId, session.user.id, session.user.role)
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -57,7 +141,7 @@ export default async function AppelPage() {
         userAvatar={session.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <AppelInterface classes={classes} tenantId={session.user.tenantId} />
+        <AppelInterface classes={classes} emplois={emplois} tenantId={session.user.tenantId} />
       </div>
     </div>
   );

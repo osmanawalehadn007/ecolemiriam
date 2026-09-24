@@ -50,7 +50,7 @@ export function Header({ title, subtitle, site, siteColor, userName = "Admin", u
   }
 
   useEffect(() => {
-    const CACHE_KEY = "ecolpro_notif_cache";
+    const CACHE_KEY = "ecolemiriam_notif_cache";
     const CACHE_TTL = 120_000; // 2 minutes
 
     // Try cache first
@@ -260,13 +260,24 @@ export function Header({ title, subtitle, site, siteColor, userName = "Admin", u
 
           {showUserMenu && (
             <div className="absolute right-0 mt-1 w-48 bg-popover border rounded-lg shadow-lg py-1 z-50">
-              <button className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent transition-colors">
+              <button
+                onClick={() => { setShowUserMenu(false); router.push("/profil"); }}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-accent transition-colors"
+              >
                 <User className="h-4 w-4" />
                 {tCommon("myProfile")}
               </button>
               <div className="border-t my-1" />
               <button
-                onClick={() => signOut({ callbackUrl: "/login" })}
+                onClick={() => {
+                  // Vider le cache navigateur avant de se déconnecter
+                  try {
+                    sessionStorage.clear();
+                    localStorage.clear();
+                  } catch {}
+                  // redirect: true force un rechargement complet (window.location)
+                  signOut({ callbackUrl: "/login", redirect: true });
+                }}
                 className="flex items-center gap-2 w-full px-3 py-2 text-sm text-destructive hover:bg-accent transition-colors"
               >
                 <LogOut className="h-4 w-4" />

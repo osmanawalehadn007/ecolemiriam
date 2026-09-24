@@ -27,17 +27,41 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const classeId = searchParams.get("classeId");
+    const enseignantId = searchParams.get("enseignantId");
     const tenantId = session.user.tenantId;
   const siteId = (session.user as { siteId?: string | null }).siteId ?? null;
   const siteIds = (session.user as { siteIds?: string[] }).siteIds;
   const classeFilter = siteFilterForModel("classe", session.user);
   const emploiFilter = siteFilterForRelation(session.user, "classe");
 
+    // Pour PARENT/STUDENT, restreindre aux classes de leurs enfants / leur
+    // propre classe. Sans cela, un parent voit l'emploi du temps de toutes
+    // les classes du tenant.
+    let personalClasseFilter: Record<string, unknown> = {};
+    if (session.user.role === "PARENT" || session.user.role === "STUDENT") {
+      const userId = session.user.id;
+      // `as const` : sans lui, le ternaire élargit "ACTIF" en `string`, que
+      // Prisma refuse là où il attend l'enum StatutEleve.
+      const eleveWhere = session.user.role === "STUDENT"
+        ? { userId, tenantId, statut: "ACTIF" as const, classeId: { not: null } }
+        : { parents: { some: { parent: { userId } } }, tenantId, statut: "ACTIF" as const, classeId: { not: null } };
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- PARENT/STUDENT : la portée est déjà réduite aux propres enfants (parents.some.parent.userId) ou à soi-même (userId), plus étroite qu'un filtre de site
+      const eleves = await prisma.eleve.findMany({
+        where: eleveWhere,
+        select: { classeId: true },
+        distinct: ["classeId"],
+      });
+      const classeIds = eleves.map((e) => e.classeId).filter((c): c is string => !!c);
+      personalClasseFilter = { classeId: { in: classeIds } };
+    }
+
     const annee = await getAnneeCouranteLibelle(tenantId);
 
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- `annee` est déjà injecté dans le where ci-dessous (spread conditionnel non vu par le linter)
     const emplois = await prisma.emploiTemps.findMany({
-      where: { tenantId, ...emploiFilter,
+      where: { tenantId, ...emploiFilter, ...personalClasseFilter,
         ...(classeId ? { classeId } : {}),
+        ...(enseignantId ? { enseignantId } : {}),
         ...(annee ? { annee } : {}),
       },
       include: {

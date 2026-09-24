@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Table } from "lucide-react";
 import { ExportMenu } from "@/components/ui/ExportMenu";
 import type { ExportColumn } from "@/lib/export";
+import { niveauToLabel } from "@/lib/niveau";
 import { useTranslations } from "next-intl";
 
 interface ClasseInfo {
@@ -92,7 +93,7 @@ export function RapportClasseTable({ classes, periodes }: { classes: ClasseInfo[
               <SelectTrigger><SelectValue placeholder={t("rapportSelectClass")} /></SelectTrigger>
               <SelectContent>
                 {classes.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.nom} ({c.niveau})</SelectItem>
+                  <SelectItem key={c.id} value={c.id}>{c.nom} ({niveauToLabel(c.niveau)})</SelectItem>
                 ))}
               </SelectContent>
             </Select>

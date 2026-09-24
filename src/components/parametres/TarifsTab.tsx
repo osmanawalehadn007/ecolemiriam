@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, Trash2, DollarSign } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { createTarif, deleteTarif, getTarifsForTenant, type TarifFormData } from "@/lib/actions/facturation-avancee";
+import { niveauToLabel } from "@/lib/niveau";
 
 interface TarifItem {
   id: string;
@@ -25,14 +26,23 @@ interface TarifItem {
   actif: boolean;
 }
 
-const NIVEAUX_PREDEFINIS = ["Maternelle", "Primaire", "Collège", "Lycée"];
+const NIVEAUX_PREDEFINIS = [
+  "1ère", "2ème", "3ème", "4ème", "5ème",
+  "6ème", "7ème", "8ème", "9ème",
+  "Seconde", "Première", "Terminale",
+];
 
 function formatMoney(amount: number, devise: string) {
   const currency = devise === "XOF" ? "DJF" : devise;
   return new Intl.NumberFormat("fr-DJ", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
 }
 
-export function TarifsTab() {
+export function TarifsTab({ anneeCourante }: { anneeCourante?: string }) {
+  // Même défaut figé que pour les classes : un tarif créé sous une année
+  // révolue n'est jamais retrouvé par la facturation de l'année en cours
+  // (la facture d'inscription tombe alors à 0).
+  const anneeDefaut =
+    anneeCourante ?? `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
   const t = useTranslations("parametres");
   const [tarifs, setTarifs] = useState<TarifItem[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -40,7 +50,7 @@ export function TarifsTab() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<TarifFormData>({
     niveau: "",
-    annee: "2025-2026",
+    annee: anneeDefaut,
     mensualite: 0,
     fraisInscription: 0,
     fraisRenouvellement: 0,
@@ -73,7 +83,7 @@ export function TarifsTab() {
       await createTarif(form);
       toast.success(t("tarifCreated"));
       setShowForm(false);
-      setForm({ niveau: "", annee: "2025-2026", mensualite: 0, fraisInscription: 0, fraisRenouvellement: 0, fraisCantine: undefined, fraisTransport: undefined, devise: "DJF", nbMois: 10, siteId: undefined });
+      setForm({ niveau: "", annee: anneeDefaut, mensualite: 0, fraisInscription: 0, fraisRenouvellement: 0, fraisCantine: undefined, fraisTransport: undefined, devise: "DJF", nbMois: 10, siteId: undefined });
       await loadTarifs();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("error"));
@@ -123,7 +133,7 @@ export function TarifsTab() {
                 >
                   <option value="">{t("select")}</option>
                   {NIVEAUX_PREDEFINIS.map((n) => (
-                    <option key={n} value={n}>{n}</option>
+                    <option key={n} value={n}>{niveauToLabel(n)}</option>
                   ))}
                 </select>
               </div>
@@ -213,7 +223,7 @@ export function TarifsTab() {
                     <tr key={tarif.id} className="border-b hover:bg-muted/30">
                       <td className="px-4 py-3 font-medium">
                         <div className="flex items-center gap-2">
-                          {tarif.niveau}
+                          {niveauToLabel(tarif.niveau)}
                           {!tarif.actif && <Badge variant="secondary">{t("inactive")}</Badge>}
                         </div>
                       </td>

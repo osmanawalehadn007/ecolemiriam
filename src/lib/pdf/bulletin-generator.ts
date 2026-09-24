@@ -1,5 +1,5 @@
 /**
- * Générateur de bulletins PDF — EcolPro
+ * Générateur de bulletins PDF — École Miriam
  * Récupère les données préparées par le script de génération.
  */
 
@@ -88,6 +88,7 @@ export async function getBulletinData(
    * de vérifier que `eleveId` relève bien du périmètre de sites de
    * l'utilisateur avant d'appeler cette fonction.
    */
+  /* eslint-disable ecolemiriam/require-site-filter */
   /* eslint-disable ecolpro/require-site-filter */
   const eleve = await prisma.eleve.findFirst({
     where: { id: eleveId, tenantId },
@@ -160,7 +161,7 @@ export async function getBulletinData(
     },
     select: { matiereId: true, moyenneEleve: true },
   });
-  /* eslint-enable ecolpro/require-site-filter */
+  /* eslint-enable ecolemiriam/require-site-filter */
 
   const moyenneClasseByMatiere: Record<string, number | null> = {};
   const matiereIds = [...new Set(allBulletinsMatieres.map(bm => bm.matiereId))];
@@ -292,6 +293,7 @@ export async function getBulletinAnnuelData(
    * est vérifiée sur l'élève et sur l'année, et tout le reste dérive de ces
    * deux lectures. La vérification du site incombe à la route appelante.
    */
+  /* eslint-disable ecolemiriam/require-site-filter */
   /* eslint-disable ecolpro/require-site-filter */
   const eleve = await prisma.eleve.findFirst({
     where: { id: eleveId, tenantId },
@@ -445,7 +447,7 @@ export async function getBulletinAnnuelData(
       },
       select: { bulletin: { select: { eleveId: true } }, moyenneEleve: true },
     });
-  /* eslint-enable ecolpro/require-site-filter */
+  /* eslint-enable ecolemiriam/require-site-filter */
     // Actually we need matiereId, not code. Let's use the map.
     // Skip for now - too complex for this iteration
     matiere.rangAnnuel = null;
@@ -481,10 +483,34 @@ export async function getBulletinAnnuelData(
     rangAnnuel,
     effectifClasse: classeEleves.length,
 
-    appreciation: null,
-    decision: null,
+    appreciation: genererAppreciationAnnuelle(moyenneAnnuelle),
+    decision: genererDecisionAnnuelle(moyenneAnnuelle),
 
     profPrincipalNom: eleve.classe.profPrincipal?.user.name,
     generatedAt: new Date(),
   };
+}
+
+// ============================================================
+// Helpers pour la décision annuelle (pré-remplissage)
+// ============================================================
+
+function genererDecisionAnnuelle(moyenne: number | null): string | null {
+  if (moyenne === null) return null;
+  if (moyenne >= 16) return "FELICITATIONS";
+  if (moyenne >= 14) return "ENCOURAGEMENTS";
+  if (moyenne >= 10) return "PASSAGE";
+  if (moyenne >= 8) return "AVERTISSEMENT";
+  return "REDOUBLEMENT";
+}
+
+function genererAppreciationAnnuelle(moyenne: number | null): string | null {
+  if (moyenne === null) return null;
+  if (moyenne >= 18) return "Excellente année scolaire. Résultats remarquables, continuez ainsi.";
+  if (moyenne >= 16) return "Très bons résultats annuels. Élève sérieux et appliqué.";
+  if (moyenne >= 14) return "Bons résultats annuels. Peut encore progresser avec plus d'efforts.";
+  if (moyenne >= 12) return "Résultats annuels satisfaisants. Des efforts supplémentaires sont attendus.";
+  if (moyenne >= 10) return "Résultats annuels moyens. Un travail plus régulier s'impose.";
+  if (moyenne >= 8) return "Résultats annuels insuffisants. Des difficultés persistantes nécessitent un suivi.";
+  return "Résultats annuels très insuffisants. Un soutien scolaire est fortement recommandé.";
 }

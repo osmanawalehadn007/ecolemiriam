@@ -1,0 +1,18 @@
+# ============================================================
+# École Miriam — SOPS config (chiffrement des secrets avec age)
+# ============================================================
+# SOPS chiffre les fichiers de secrets avec age (X25519).
+# La clé age est stockée hors du repo (VPS, 1Password, etc.).
+# Les fichiers chiffrés peuvent être commités sans risque.
+# ============================================================
+
+creation_rules:
+  # Chiffrer tous les fichiers dans docker/secrets/
+  - path_regex: docker/secrets/.*\.yaml$
+    age: age1ql3z7hjy54pwkhyx9m5f6l0p0w6l0p0w6l0p0w6l0p0w6l0p0w6l0p0w6l0p0
+  - path_regex: docker/secrets/.*\.yml$
+    age: age1ql3z7hjy54pwkhyx9m5f6l0p0w6l0p0w6l0p0w6l0p0w6l0p0w6l0p0w6l0p0
+  - path_regex: docker/secrets/.*\.json$
+    age: age1ql3z7hjy54pwkhyx9m5f6l0p0w6l0p0w6l0p0w6l0p0w6l0p0w6l0p0w6l0p0
+  - path_regex: docker/secrets/.*\.env$
+    age: age1ql3z7hjy54pwkhyx9m5f6l0p0w6l0p0w6l0p0w6l0p0w6l0p0w6l0p0w6l0p0

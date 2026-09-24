@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
+import { withMobileScope } from "@/lib/mobile-auth";
 import { eleveScopeFilter, mergeFilters } from "@/lib/site-filter";
 import { teacherEleveRelationFilter } from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
-  const user = await verifyMobileScope(req);
-  if (!user) return mobileUnauthorized();
-  if (!user.tenantId) {
-    return NextResponse.json({ error: "Aucun établissement associé" }, { status: 403 });
-  }
-
+  return withMobileScope(req, async (user) => {
   const { searchParams } = new URL(req.url);
   const eleveId = searchParams.get("eleveId");
   const date = searchParams.get("date");
@@ -60,4 +55,5 @@ export async function GET(req: NextRequest) {
   };
 
   return NextResponse.json({ absences: list, stats });
+  });
 }

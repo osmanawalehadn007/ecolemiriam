@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# ============================================================
+# École Miriam — Pre-push hook
+# ============================================================
+# Refuse un push qui retirerait la porte de promotion en production.
+# Le même contrôle tourne dans la CI (.github/workflows/guard.yml) ; ici il
+# arrive plus tôt, avant que le code ne quitte la machine.
+#
+# Contournement en cas de besoin légitime : git push --no-verify
+set -euo pipefail
+
+if [ -x .github/scripts/check-deploy-gate.sh ]; then
+  .github/scripts/check-deploy-gate.sh
+fi

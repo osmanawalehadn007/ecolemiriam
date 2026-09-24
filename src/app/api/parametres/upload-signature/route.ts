@@ -2,15 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
 import { checkPermission } from "@/lib/rbac";
+import { uploadPublicImage } from "@/lib/storage/r2";
 
-// Téléverse une signature ou un cachet et renvoie une data URL base64
-// (même stratégie de stockage que /api/eleves/upload-photo).
+// Téléverse un logo, une signature ou un cachet dans le bucket public R2 et
+// renvoie son URL. Ces images sont ensuite stockées en base sous forme d'URL
+// et non de base64 : voir l'en-tête de @/lib/storage/r2 pour la panne que ce
+// choix corrige.
 export async function POST(req: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user?.tenantId) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
+    const denied = checkPermission(session.user.role, "parametres:write");
     // Même permission que `PUT /api/parametres/signature-cachet` : la signature
     // et le cachet sont les mentions officielles de l'établissement. Le refus
     // est journalisé (contrairement à l'ancien contrôle de rôle inline).
@@ -33,7 +37,7 @@ export async function POST(req: NextRequest) {
     if (!file) {
       return NextResponse.json({ error: "Aucun fichier" }, { status: 400 });
     }
-    if (type !== "signature" && type !== "cachet") {
+    if (type !== "signature" && type !== "cachet" && type !== "logo") {
       return NextResponse.json({ error: "Type invalide" }, { status: 400 });
     }
 
@@ -47,12 +51,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "L'image ne doit pas dépasser 2 Mo" }, { status: 400 });
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const base64 = buffer.toString("base64");
-    const dataUrl = `data:${file.type};base64,${base64}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const url = await uploadPublicImage({
+      buffer,
+      contentType: file.type,
+      path: `tenants/${session.user.tenantId}/${type}`,
+    });
 
-    return NextResponse.json({ url: dataUrl });
+    return NextResponse.json({ url });
   } catch (error) {
     console.error("[API/parametres/upload-signature]", error);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });

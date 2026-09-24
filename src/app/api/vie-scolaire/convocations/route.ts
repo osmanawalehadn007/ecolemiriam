@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { roleHasPermission } from "@/lib/rbac";
+import type { Role } from "@prisma/client";
 import { isEleveInTeacherScope } from "@/lib/teacher-classes";
 import { checkPermission } from "@/lib/rbac";
 
@@ -11,6 +13,9 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.tenantId) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+  }
+  if (!roleHasPermission(session.user.role as Role, "vie-scolaire:write")) {
+    return NextResponse.json({ error: "Permission insuffisante" }, { status: 403 });
   }
 
   // Une convocation est un courrier officiel signé du directeur : elle exige
@@ -38,6 +43,7 @@ export async function POST(req: NextRequest) {
     where: { id: eleveId, tenantId: session.user.tenantId, ...siteFilter },
     include: {
       classe: true,
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
       // Enfants de l'élève déjà borné au périmètre par le `where` ci-dessus :
       // `EleveParent` n'a aucun chemin de site propre (il passe par l'élève).
       // eslint-disable-next-line ecolpro/require-site-filter
@@ -71,6 +77,7 @@ export async function POST(req: NextRequest) {
   @page { size: A4; margin: 20mm; }
   body { font-family: 'Times New Roman', serif; color: #1a1a1a; margin: 0; padding: 20px; }
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; }
+  .logo { max-width: 80px; max-height: 80px; }
   .ecole-info { text-align: right; font-size: 11px; line-height: 1.4; }
   .ecole-info .name { font-size: 16px; font-weight: bold; }
   .title { text-align: center; font-size: 20px; font-weight: bold; text-transform: uppercase; margin: 20px 0; letter-spacing: 1px; }
@@ -86,7 +93,7 @@ export async function POST(req: NextRequest) {
 </head>
 <body>
   <div class="header">
-    <div style="width:80px"></div>
+    ${tenant.logoUrl ? `<img src="${tenant.logoUrl}" class="logo" alt="Logo" />` : '<div style="width:80px"></div>'}
     <div class="ecole-info">
       <div class="name">${tenant.name}</div>
       ${tenant.address ? `<div>${tenant.address}</div>` : ''}

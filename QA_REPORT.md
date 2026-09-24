@@ -1,8 +1,8 @@
-# Rapport QA — EcolPro
+# Rapport QA — École Miriam
 
 **Date :** 2026-07-01  
 **Environnement :** Next.js 15.3.3 + Prisma + PostgreSQL, local `http://localhost:3000`  
-**Utilisateur de test :** `admin@lycee-djibouti.ecolpro.app` (TENANT_ADMIN)  
+**Utilisateur de test :** `admin@lycee-djibouti.ecolemiriam.app` (TENANT_ADMIN)  
 **Niveau de test :** Standard — navigation + boutons + onglets principaux + formulaires élève
 
 ## Résumé exécutif
@@ -127,7 +127,7 @@ Les pages suivantes étaient déjà implémentées avec des composants complets 
 
 ## Recommandation
 
-L'application EcolPro est désormais fonctionnelle sur l'ensemble de ses modules : gestion des élèves, facturation, paramètres (établissement, utilisateurs, classes, matières), communication, rapports PDF, cours en ligne, orientation, alumni et inventaire. Les prochaines améliorations pourraient porter sur l'intégration Stripe pour les paiements en ligne, l'upload de photos d'élèves, les reçus PDF de paiement, et les vues Super Admin multi-tenants.
+L'application École Miriam est désormais fonctionnelle sur l'ensemble de ses modules : gestion des élèves, facturation, paramètres (établissement, utilisateurs, classes, matières), communication, rapports PDF, cours en ligne, orientation, alumni et inventaire. Les prochaines améliorations pourraient porter sur l'intégration Stripe pour les paiements en ligne, l'upload de photos d'élèves, les reçus PDF de paiement, et les vues Super Admin multi-tenants.
 
 ---
 
@@ -184,6 +184,6 @@ Cela régénère le client Prisma avec les nouveaux modèles `Salle` et `Disponi
 
 **Pour appliquer la migration SQL :**
 ```bash
-psql -U postgres -d ecolpro -f migration_disponibilites_salles.sql
+psql -U postgres -d ecolemiriam -f migration_disponibilites_salles.sql
 ```
 

@@ -23,6 +23,7 @@ export async function GET(
     const evaluationId = (await params).id;
     const siteFilter = siteFilterForRelation(session.user, "classe");
 
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : l'évaluation porte son année via sa classe
     // Garde serveur : un enseignant ne lit la grille que d'une évaluation
     // portant sur SA classe et SA matière. `evaluationId` vient de l'URL, le
     // seul filtre de site ne l'empêchait pas de consulter celle d'un collègue.
@@ -41,6 +42,8 @@ export async function GET(
           : {}),
       },
       include: {
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
+        classe: { include: { eleves: { orderBy: { prenom: 'asc' } } } },
         // La classe est déjà bornée par le `where` (classeId dans le périmètre
         // enseignant + site) : ses élèves en découlent, aucun autre chemin
         // n'existe. `Eleve` est filtré par site dans toutes les autres requêtes.
@@ -103,6 +106,7 @@ export async function PUT(
     const evaluationId = (await params).id;
     const siteFilter2 = siteFilterForRelation(session.user, "classe");
 
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- lookup par id : l'évaluation porte son année via sa classe
     // Même garde qu'en lecture : la grille d'un AUTRE enseignant n'est ni
     // lisible ni modifiable, y compris en forgeant l'identifiant de l'évaluation.
     const teacherScope2 = await resolveTeacherScope(session.user);
@@ -169,7 +173,7 @@ export async function PUT(
       });
     }
 
-    revalidateTag("dashboard-data");
+    revalidateTag("dashboard-data", "max");
 
     return NextResponse.json({ success: true, count: notesToCreate.length });
   } catch (error) {

@@ -1,5 +1,5 @@
 -- ============================================================
--- EcolPro — RLS (Row Level Security) Setup
+-- École Miriam — RLS (Row Level Security) Setup
 -- Active l'isolation multi-tenant au niveau base de données
 -- ============================================================
 

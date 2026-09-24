@@ -3,6 +3,10 @@ node_modules/
 .pnp
 .pnp.js
 
+# Lockfile pnpm — standardisé sur npm (package-lock.json)
+# Ignorer si pnpm est accidentellement utilisé
+pnpm-lock.yaml
+
 # Next.js
 .next/
 out/
@@ -67,5 +71,46 @@ next-env.d.ts
 /android/local.properties
 .gstack/
 
-# Sauvegardes DB (données sensibles)
+# Docker — fichiers générés par blue-green-deploy.sh (jamais committer)
+# Ces fichiers sont régénérés à chaque déploiement. Les suivre dans git
+# provoque une course avec git stash/pop dans ci-deploy.sh → conflit
+# silencieux → Caddy peut pointer vers un conteneur arrêté → 502 total.
+docker/caddy/upstream.conf
+docker/caddy/upstream-simple.conf
+docker/.active-color
+docker/ofelia/config.ini
+
+# PgBouncer userlist — généré sur le VPS avec les hashes réels
+# (docker/scripts/generate-pgbouncer-userlist.sh). Ne JAMAIS committer.
+docker/pgbouncer/userlist.txt
+
+# Docker secrets (jamais committer)
+docker/secrets/
+docker/keys/
+.env.production
+.env.*.backup
+.env.supabase-backup
+.env.backup
+.cf-token.env
+.cf-token.env.save
+
+# VPS — fichiers de diagnostic et backups générés sur le serveur
+# Ces fichiers s'accumulent sur le VPS (sessions SSH, scripts de debug,
+# backups manuels). Sans les ignorer, git stash/pop dans ci-deploy.sh
+# échoue avec "would be overwritten by checkout" → déploiement bloqué.
+*.sql
+*.bak
+*.bak-*
 backups/
+# Le motif ci-dessus n'est pas ancré : il attrape aussi scripts/backups/, qui
+# contient les scripts de sauvegarde et non des dumps. Les fichiers déjà suivis
+# y survivent, mais tout nouveau fichier y serait silencieusement ignoré.
+!scripts/backups/
+docker/caddy/*.bak*
+docker/postgres/*.bak*
+docker/postgres/rclone/
+docker/postgres/rclone-binary
+docker/postgres/tls/
+docker/caddy/upstream-test.conf
+.env.production.bak*
+.npm-cache/

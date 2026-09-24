@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { checkPermission, roleHasPermission } from "@/lib/rbac";
+import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { checkPermission, roleHasPermission } from "@/lib/rbac";
 import {
   teacherEleveFilter,
   teacherClasseFilter,
@@ -42,6 +45,11 @@ export async function GET(req: NextRequest) {
   const absenceFilter = mergeFilters(siteFilterForModel("absence", session.user), tAbsence);
   const incidentFilter = mergeFilters(siteFilterForModel("incident", session.user), tIncident);
   const examenFilter = siteFilterForModel("examen", session.user);
+  const anneeFilter = anneeFilterForModel(
+    "classe",
+    await getAnneeCouranteLibelle(tenantId),
+  );
+
   const [
     totalEleves,
     elevesParClasse,
@@ -56,8 +64,10 @@ export async function GET(req: NextRequest) {
       where: mergeFilters({ tenantId, ...eleveFilter, statut: "ACTIF" }) as Prisma.EleveWhereInput,
     }),
 
-    // Élèves par classe
+    // Élèves par classe. Borné à l'année en cours : sinon les classes des
+    // années révolues gonflaient le nombre de classes de l'établissement.
     prisma.classe.findMany({
+      where: mergeFilters({ tenantId }, classeFilter, anneeFilter),
       where: mergeFilters({ tenantId, ...classeFilter }) as Prisma.ClasseWhereInput,
       select: {
         nom: true, niveau: true,
@@ -250,10 +260,12 @@ export async function GET(req: NextRequest) {
   const canSeeFinance = roleHasPermission(session.user.role, "finance:read");
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const paiements = await prisma.paiement.findMany({
+    where: { ...siteFilterForModel("paiement", session.user), facture: { tenantId }, date: { gte: sixMonthsAgo } },
+    select: { montant: true, devise: true, date: true },
+  });
   const paiements = canSeeFinance
     ? await prisma.paiement.findMany({
-        where: { ...siteFilterForModel("paiement", session.user), facture: { tenantId }, date: { gte: sixMonthsAgo } },
-        select: { montant: true, devise: true, date: true },
       })
     : [];
   const revenueByMonth: Record<string, number> = {};

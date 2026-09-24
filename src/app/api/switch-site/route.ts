@@ -69,6 +69,7 @@ export async function POST(req: Request) {
         where: { userId, tenantId, isActive: true },
         select: { role: true },
       });
+      // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-tenant-id -- self-lookup de l'utilisateur connecté pour le rôle
       // eslint-disable-next-line ecolpro/require-site-filter, ecolpro/require-tenant-id -- self-lookup de l'utilisateur connecté pour le rôle
       const fallback = await prisma.user.findUnique({
         where: { id: userId },
@@ -101,6 +102,7 @@ export async function POST(req: Request) {
     // `deriveClaims`. L'ancienne version écrasait `User.role` à chaque bascule,
     // ce qui rendait une élévation de privilèges persistante et faussait le
     // rôle dans les autres établissements de l'utilisateur.
+    // eslint-disable-next-line ecolemiriam/require-tenant-id -- self-lookup de l'utilisateur connecté, userId provient de la session
     // eslint-disable-next-line ecolpro/require-tenant-id -- self-lookup de l'utilisateur connecté, userId provient de la session
     await prisma.user.update({
       where: { id: userId },

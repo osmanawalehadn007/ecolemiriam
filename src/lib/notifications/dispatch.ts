@@ -1,5 +1,5 @@
 /**
- * EcolPro — Orchestrateur d'envoi des notifications
+ * École Miriam — Orchestrateur d'envoi des notifications
  * ============================================================
  * Résout les destinataires selon la cible, envoie via le bon canal
  * (EMAIL / SMS / PUSH / IN_APP), met à jour les compteurs et purge
@@ -44,13 +44,13 @@ async function resolveRecipients(
 
   switch (cible) {
     case "TOUS": {
-      // eslint-disable-next-line ecolpro/require-site-filter -- notification dispatch, tenant-wide recipient resolution
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- notification dispatch, tenant-wide recipient resolution
       const users = await prisma.user.findMany({
         where: { tenantId, isActive: true },
         select: { id: true, email: true },
       });
       users.forEach((u) => { if (u.email) emails.add(u.email); userIds.add(u.id); });
-      // eslint-disable-next-line ecolpro/require-site-filter -- notification dispatch, tenant-wide recipient resolution
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- notification dispatch, tenant-wide recipient resolution
       const parents = await prisma.parent.findMany({
         where: { tenantId },
         select: { email: true, phone: true, userId: true },
@@ -59,7 +59,7 @@ async function resolveRecipients(
       break;
     }
     case "PARENTS": {
-      // eslint-disable-next-line ecolpro/require-site-filter -- notification dispatch, tenant-wide recipient resolution
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- notification dispatch, tenant-wide recipient resolution
       const parents = await prisma.parent.findMany({
         where: { tenantId },
         select: { email: true, phone: true, userId: true },
@@ -68,7 +68,7 @@ async function resolveRecipients(
       break;
     }
     case "ENSEIGNANTS": {
-      // eslint-disable-next-line ecolpro/require-site-filter -- notification dispatch, tenant-wide recipient resolution
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- notification dispatch, tenant-wide recipient resolution
       const ens = await prisma.enseignant.findMany({
         where: { tenantId },
         select: { user: { select: { id: true, email: true } } },
@@ -82,7 +82,7 @@ async function resolveRecipients(
     case "ELEVES":
     case "CLASSE":
     case "NIVEAU": {
-      // eslint-disable-next-line ecolpro/require-site-filter -- notification dispatch, tenant-wide recipient resolution
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- notification dispatch, tenant-wide recipient resolution
       const parents = await prisma.parent.findMany({
         where: {
           tenantId,
@@ -99,6 +99,23 @@ async function resolveRecipients(
         select: { email: true, phone: true, userId: true },
       });
       addParents(parents);
+      break;
+    }
+    case "DIRECTION": {
+      // Notifie le directeur (TENANT_ADMIN) et le chef d'établissement (PRINCIPAL)
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- notification dispatch, role-based recipient resolution
+      const directors = await prisma.user.findMany({
+        where: {
+          tenantId,
+          isActive: true,
+          role: { in: ["TENANT_ADMIN", "PRINCIPAL"] },
+        },
+        select: { id: true, email: true },
+      });
+      directors.forEach((u) => {
+        if (u.email) emails.add(u.email);
+        userIds.add(u.id);
+      });
       break;
     }
   }
@@ -125,7 +142,7 @@ export async function dispatchNotification(
   notificationId: string,
   tenantId: string
 ): Promise<DispatchResult> {
-  // eslint-disable-next-line ecolpro/require-site-filter -- notification lookup by id+tenantId, site scoping is caller's responsibility
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- notification lookup by id+tenantId, site scoping is caller's responsibility
   const notif = await prisma.notification.findFirst({
     where: { id: notificationId, tenantId },
   });
@@ -135,7 +152,7 @@ export async function dispatchNotification(
     where: { id: notif.tenantId },
     select: { name: true },
   });
-  const ecoleNom = tenant?.name ?? "EcolPro";
+  const ecoleNom = tenant?.name ?? "École Miriam";
 
   const { emails, phones, userIds } = await resolveRecipients(
     notif.tenantId,
@@ -165,6 +182,7 @@ export async function dispatchNotification(
       break;
     }
     case "PUSH": {
+      // eslint-disable-next-line ecolemiriam/require-tenant-id -- userIds déjà résolus dans le scope du tenant (resolveRecipients filtre par tenantId)
       // `DeviceToken` porte `tenantId` : on borne la lecture (et la purge
       // ci-dessous) au tenant courant, sinon les jetons d'un autre
       // établissement pourraient être lus ou désactivés.
@@ -183,6 +201,7 @@ export async function dispatchNotification(
       success = r.success;
       // Purge des tokens invalides
       if (r.invalidTokens.length > 0) {
+        // eslint-disable-next-line ecolemiriam/require-tenant-id -- purge technique de tokens invalides : les tokens sont uniques, pas de risque de fuite inter-tenant
         await prisma.deviceToken.updateMany({
           where: { token: { in: r.invalidTokens }, tenantId },
           data: { isActive: false },
@@ -200,7 +219,7 @@ export async function dispatchNotification(
     }
   }
 
-  // eslint-disable-next-line ecolpro/require-tenant-id -- notif.id vérifié par findFirst avec tenantId (ligne 123-125)
+   
   await prisma.notification.update({
     where: { id: notif.id },
     data: {

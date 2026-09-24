@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import type { Role } from "@prisma/client";
 import { revalidateTag } from "next/cache";
 
 const PatchSchema = z.object({
@@ -13,6 +15,25 @@ const PatchSchema = z.object({
   dateDebut: z.string().optional(),
   dateFin: z.string().optional(),
 });
+
+// Vérifie qu'un enseignant a accès à au moins une session de l'examen
+async function checkTeacherExamenAccess(
+  examenId: string,
+  tenantId: string,
+  userId: string,
+  role: Role
+): Promise<boolean> {
+  const scope = await getTeacherScope(tenantId, userId, role);
+  if (!scope.isRestricted) return true;
+  if (scope.classeIds.length === 0) return false;
+  // L'enseignant a accès si au moins une session est liée à une de ses classes
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
+  const session = await prisma.sessionExamen.findFirst({
+    where: { examId: examenId, classeId: { in: scope.classeIds } },
+    select: { id: true },
+  });
+  return !!session;
+}
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -33,8 +54,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // autre site du même établissement restait modifiable par identifiant.
     const examenFilter = siteFilterForModel("examen", session.user);
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
+    const existing = await prisma.examen.findFirst({ where: { id, tenantId } });
     const existing = await prisma.examen.findFirst({ where: { id, tenantId, ...examenFilter } });
     if (!existing) return NextResponse.json({ error: "Examen introuvable" }, { status: 404 });
+
+    // Pour les enseignants : vérifier l'accès à l'examen via ses classes
+    if (isTeacherRole(session.user.role as Role)) {
+      const hasAccess = await checkTeacherExamenAccess(id, tenantId!, session.user.id, session.user.role as Role);
+      if (!hasAccess) {
+        return NextResponse.json({ error: "Vous n'avez pas accès à cet examen" }, { status: 403 });
+      }
+    }
 
     const { intitule, description, statut, dateDebut, dateFin } = parsed.data;
 
@@ -50,7 +81,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       include: { sessions: true },
     });
 
-    revalidateTag("dashboard-data");
+    revalidateTag("dashboard-data", "max");
 
     return NextResponse.json(updated);
   } catch (error) {
@@ -69,14 +100,24 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
     const tenantId = session.user.tenantId;
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
+    const existing = await prisma.examen.findFirst({ where: { id, tenantId } });
     const existing = await prisma.examen.findFirst({
       where: { id, tenantId, ...siteFilterForModel("examen", session.user) },
     });
     if (!existing) return NextResponse.json({ error: "Examen introuvable" }, { status: 404 });
 
+    // Pour les enseignants : vérifier l'accès à l'examen via ses classes
+    if (isTeacherRole(session.user.role as Role)) {
+      const hasAccess = await checkTeacherExamenAccess(id, tenantId!, session.user.id, session.user.role as Role);
+      if (!hasAccess) {
+        return NextResponse.json({ error: "Vous n'avez pas accès à cet examen" }, { status: 403 });
+      }
+    }
+
     await prisma.examen.delete({ where: { id } });
 
-    revalidateTag("dashboard-data");
+    revalidateTag("dashboard-data", "max");
 
     return NextResponse.json({ success: true });
   } catch (error) {

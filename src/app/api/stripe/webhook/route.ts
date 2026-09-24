@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
 
         if (!factureId || !tenantId) break;
 
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- webhook Stripe externe sans session utilisateur, tenantId provient des metadata Stripe
         // eslint-disable-next-line ecolpro/require-site-filter -- webhook Stripe externe sans session utilisateur, tenantId provient des metadata Stripe
         const facture = await prisma.facture.findFirst({
           where: { id: factureId, tenantId },
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
           data: { statut: newStatut as never },
         });
 
-        revalidateTag("dashboard-data");
+        revalidateTag("dashboard-data", "max");
 
         console.log(`[Stripe] Paiement enregistré pour facture ${facture.numero}: ${amount}`);
         break;

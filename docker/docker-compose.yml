@@ -1,0 +1,573 @@
+# ============================================================
+# École Miriam — docker-compose.yml (stack VPS complète, durcie)
+# ============================================================
+#
+# Architecture réseau :
+#
+#   Internet → Cloudflare (WAF/DDoS) → Cloudflare Tunnel → VPS
+#                                                          ↓
+#                                                        Caddy (TLS interne, headers, rate limit)
+#                                                          ↓
+#                                                        app (Next.js standalone, non-root, read-only)
+#                                                          ↓
+#                                                        PgBouncer (pool, mode transaction)
+#                                                          ↓
+#                                                        Postgres 17 (RLS, pgaudit, pgBackRest)
+#
+# Réseaux Docker :
+#   - frontend : Caddy ↔ cloudflared ↔ monitoring (peut sortir vers Internet)
+#   - backend  : app ↔ PgBouncer ↔ Postgres ↔ pgBackRest (internal: true, pas d'Internet)
+#
+# Aucun port n'est publié vers l'extérieur.
+# Cloudflare Tunnel établit une connexion sortante → aucun port entrant requis.
+# Ofelia utilise docker-socket-proxy (pas de docker.sock direct).
+# ============================================================
+
+services:
+  # ============================================================
+  # POSTGRES 17 — Base de données (réseau interne uniquement)
+  # ============================================================
+  postgres:
+    build:
+      context: ./postgres
+      dockerfile: Dockerfile
+    image: ecolemiriam-postgres:latest
+    container_name: ecolemiriam-postgres
+    restart: unless-stopped
+
+    # Sécurité conteneur
+    user: "70:70"
+    read_only: false
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    mem_limit: 4g
+    memswap_limit: 4g
+    pids_limit: 200
+
+    networks:
+      - backend
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - postgres-wal:/var/lib/postgresql/wal
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+
+    command: >
+      postgres
+      -c config_file=/etc/postgresql/postgresql.conf
+      -c hba_file=/etc/postgresql/pg_hba.conf
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ecolemiriam}
+      POSTGRES_USER: ${POSTGRES_OWNER_USER:-ecolemiriam_owner}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_owner_password
+      PGDATA: /var/lib/postgresql/data
+
+    secrets:
+      - postgres_owner_password
+      - postgres_app_password
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================
+  # PGBOUNCER — Pool de connexions (mode transaction)
+  # ============================================================
+  pgbouncer:
+    image: edoburu/pgbouncer:1.24.1
+    container_name: ecolemiriam-pgbouncer
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 768m
+    pids_limit: 100
+
+    networks:
+      - backend
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+
+    environment:
+      DB_HOST: postgres
+      DB_USER: ${POSTGRES_APP_USER:-ecolemiriam_app}
+      DB_PASSWORD_FILE: /run/secrets/postgres_app_password
+      DB_NAME: ${POSTGRES_DB:-ecolemiriam}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 500
+      DEFAULT_POOL_SIZE: 40
+
+    secrets:
+      - postgres_app_password
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 6432 -U $${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================
+  # REDIS — Cache partagé + sessions invalidables + queues
+  # ============================================================
+  # Utilisé pour :
+  #   - Cache des KPIs et données chaudes (TTL 60s-10min)
+  #   - Sessions NextAuth (invalidation sans attendre l'expiration JWT)
+  #   - Queues pour tâches de fond (relances auto, exports, notifications)
+  #
+  # Persistence : AOF (appendonly yes) pour survivre aux redémarrages.
+  # Maxmemory : 256MB avec policy allkeys-lru (évite OOM du VPS).
+  # ============================================================
+  redis:
+    image: redis:7-alpine
+    container_name: ecolemiriam-redis
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - CHOWN
+    mem_limit: 384m
+    pids_limit: 100
+
+    networks:
+      - backend
+
+    env_file:
+      - ../.env.production
+
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD:-ecolemiriam_redis_dev}
+
+    volumes:
+      - redis-data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-ecolemiriam_redis_dev}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================
+  # APP — Next.js (standalone, non-root, read-only rootfs)
+  # ============================================================
+  # Architecture Blue-Green : deux conteneurs (app-blue, app-green),
+  # un seul actif à la fois. Caddy bascule entre les deux via
+  # caddy/upstream.conf (géré par blue-green-deploy.sh).
+  #
+  # Le slot inactif sert de STAGING : on y déploie la nouvelle image,
+  # on exécute les smoke tests, puis on bascule Caddy.
+  #
+  # Resource-efficient : en fonctionnement normal, seul le slot actif
+  # tourne. Le slot inactif est démarré uniquement pendant le déploiement.
+  # ============================================================
+
+  # Ancre YAML : config commune aux deux slots (évite la duplication)
+  x-app-base: &app-base
+    image: ghcr.io/wilsan007/ecolemiriam-app:latest
+    restart: unless-stopped
+
+    # Sécurité conteneur
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1.5g
+    memswap_limit: 1.5g
+    pids_limit: 200
+    tmpfs:
+      - /tmp:size=64M,mode=1777
+      - /home/nextjs:size=16M,mode=1777
+      # Le conteneur est read_only. Sans ce montage, Next.js ne peut pas
+      # écrire son cache de rendu : chaque requête produisait
+      #   Failed to update prerender cache [ENOENT: mkdir '/app/.next/cache']
+      # et tous les `unstable_cache` (getTenantName, getDashboardData,
+      # getClassesList…) retombaient sur le seul LRU mémoire — perdu à chaque
+      # redéploiement et jamais partagé entre les slots blue et green. Chaque
+      # bascule repartait donc cache totalement froid.
+      - /app/.next/cache:size=256M,mode=0777
+
+    networks:
+      - frontend
+      - backend
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    env_file:
+      - ../.env.production
+
+    environment:
+      # DATABASE_URL et DIRECT_URL sont fournis par .env.production (avec mots de passe)
+      # Ne pas les surcharger ici — sinon le mot de passe est perdu.
+      NODE_ENV: production
+      RLS_ACTIVE: "true"
+      # Cloudflare Tunnel → Caddy → app : la requête arrive en HTTP interne
+      # avec l'en-tête Host du proxy. Sans AUTH_TRUST_HOST, Auth.js v5 lève
+      # UntrustedHost et toute la chaîne /api/auth/* répond 500.
+      AUTH_TRUST_HOST: "true"
+
+    expose:
+      - "3000"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # --- Slot BLUE (actif par défaut au premier déploiement) ---
+  app-blue:
+    <<: *app-base
+    container_name: ecolemiriam-app-blue
+
+  # --- Slot GREEN (inactif = staging au premier déploiement) ---
+  app-green:
+    <<: *app-base
+    container_name: ecolemiriam-app-green
+
+  # ============================================================
+  # CADDY — Reverse proxy (TLS interne, security headers, rate limit)
+  # ============================================================
+  caddy:
+    build:
+      context: ./caddy
+      dockerfile: Dockerfile
+    image: ecolemiriam-caddy:latest
+    container_name: ecolemiriam-caddy
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    mem_limit: 256m
+    pids_limit: 100
+
+    networks:
+      - frontend
+
+    depends_on:
+      # Caddy dépend du slot BLUE (actif par défaut au premier démarrage).
+      # En blue-green, le slot inactif peut être arrêté — Caddy ne doit pas
+      # dépendre des deux slots. Le script blue-green-deploy.sh gère le basculement.
+      app-blue:
+        condition: service_healthy
+
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/upstream.conf:/etc/caddy/upstream.conf:ro
+      - ./caddy/upstream-simple.conf:/etc/caddy/upstream-simple.conf:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+    expose:
+      - "8080"
+      - "8081"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================
+  # CLOUDFLARED — Tunnel (zero-trust, token-based, aucun port entrant)
+  # ============================================================
+  cloudflared:
+    image: cloudflare/cloudflared:2025.8.0
+    container_name: ecolemiriam-cloudflared
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 128m
+    pids_limit: 50
+
+    networks:
+      - frontend
+
+    depends_on:
+      caddy:
+        condition: service_started
+
+    command: tunnel --config /etc/cloudflared/config.yml run
+
+    environment:
+      TUNNEL_TOKEN_FILE: /run/secrets/cloudflare_tunnel_token
+
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+
+    secrets:
+      - cloudflare_tunnel_token
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================
+  # DOCKER-SOCKET-PROXY — Proxy sécurisé pour le socket Docker
+  # ============================================================
+  # Ofelia ne monte plus /var/run/docker.sock directement.
+  # Le proxy expose uniquement les endpoints nécessaires (exec, inspect).
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: ecolemiriam-docker-socket-proxy
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 64m
+    pids_limit: 50
+
+    networks:
+      - frontend
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+    environment:
+      # Autoriser uniquement les endpoints nécessaires pour Ofelia
+      CONTAINERS: 1
+      EXEC: 1
+      INFO: 1
+      # Tout le reste : interdit
+      POST: 1
+      BUILD: 0
+      COMMIT: 0
+      CONFIGS: 0
+      DISTRIBUTION: 0
+      EVENTS: 0
+      IMAGES: 0
+      NETWORKS: 0
+      NODES: 0
+      PLUGINS: 0
+      SECRETS: 0
+      SERVICES: 0
+      SESSION: 0
+      SWARM: 0
+      SYSTEM: 0
+      TASKS: 0
+      VOLUMES: 0
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # ============================================================
+  # OFELIA — Cron jobs (remplace Vercel Cron)
+  # ============================================================
+  # Utilise docker-socket-proxy au lieu de monter docker.sock directement.
+  ofelia:
+    image: mcuadros/ofelia:0.4.7
+    container_name: ecolemiriam-ofelia
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 128m
+    pids_limit: 50
+
+    networks:
+      - frontend
+
+    depends_on:
+      app-blue:
+        condition: service_healthy
+      docker-socket-proxy:
+        condition: service_started
+
+    volumes:
+      - ./ofelia/config.ini:/etc/ofelia/config.ini:ro
+      # Ofelia parle au docker-socket-proxy via HTTP
+      # Pas de mount du socket Docker directement
+
+    environment:
+      # Ofelia utilise l'API Docker via le proxy
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================
+  # PGBACKREST — Sauvegardes PITR (Point-In-Time Recovery)
+  # ============================================================
+  pgbackrest:
+    image: pgbackrest/pgbackrest:2.54.2
+    container_name: ecolemiriam-pgbackrest
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 512m
+    pids_limit: 50
+
+    networks:
+      - backend
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data:ro
+      - postgres-wal:/var/lib/postgresql/wal:ro
+      - pgbackrest-repo:/var/lib/pgbackrest
+      - ./pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      - ./secrets/pgbackrest_cipher_pass.txt:/run/secrets/pgbackrest_cipher_pass:ro
+
+    command: >
+      sh -c "pgbackrest --stanza=ecolemiriam check &&
+             while true; do
+               pgbackrest --stanza=ecolemiriam --type=incr backup;
+               pgbackrest --stanza=ecolemiriam expire;
+               sleep 86400;
+             done"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================
+  # UPTIME KUMA — Monitoring & alertes
+  # ============================================================
+  monitoring:
+    image: louislam/uptime-kuma:1.23.16-alpine
+    container_name: ecolemiriam-monitoring
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    pids_limit: 100
+
+    networks:
+      - frontend
+
+    volumes:
+      - monitoring-data:/app/data
+
+    expose:
+      - "3001"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ============================================================
+# RÉSEAUX
+# ============================================================
+networks:
+  frontend:
+    driver: bridge
+
+  backend:
+    driver: bridge
+    internal: true
+
+# ============================================================
+# VOLUMES
+# ============================================================
+volumes:
+  postgres-data:
+  postgres-wal:
+  pgbackrest-repo:
+  caddy-data:
+  caddy-config:
+  monitoring-data:
+  redis-data:
+
+# ============================================================
+# SECRETS (stockés via Docker secrets, jamais dans l'image)
+# ============================================================
+secrets:
+  postgres_owner_password:
+    file: ./secrets/postgres_owner_password.txt
+  postgres_app_password:
+    file: ./secrets/postgres_app_password.txt
+  cloudflare_tunnel_token:
+    file: ./secrets/cloudflare_tunnel_token.txt
+  cloudflare_api_token:
+    file: ./secrets/cloudflare_api_token.txt

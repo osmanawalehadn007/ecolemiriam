@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
@@ -7,6 +7,8 @@ import { checkPermission } from "@/lib/rbac";
 import { overlaps } from "@/lib/emploi-du-temps/suggest";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { mergeFilters } from "@/lib/site-scope";
 
 const CreneauSchema = z.object({
   matiereId: z.string().min(1),
@@ -36,7 +38,7 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.tenantId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     const denied = checkPermission(session.user.role, "emploi-du-temps:write");
     if (denied) return denied;
-    const siteFilter = siteFilterForModel("classe", session.user);
+    const siteFilter = siteFilterForModel("emploiTemps", session.user);
 
     const body = await req.json();
     const parsed = Schema.safeParse(body);
@@ -46,10 +48,23 @@ export async function POST(req: NextRequest) {
     const { classeId, creneaux } = parsed.data;
     const tenantId = session.user.tenantId;
 
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller a déjà vérifié l'accès via gate/checkPermission
     const classe = await prisma.classe.findFirst({
-      where: { id: classeId, tenantId, ...siteFilter },
+      // On ne construit pas une grille horaire sur une classe d'une année
+      // révolue : les créneaux créés plus bas portent l'année en cours.
+      where: mergeFilters(
+        { id: classeId, tenantId },
+        anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+      ),
       select: { id: true, nom: true },
     });
+    if (!classe) {
+      return NextResponse.json(
+        { error: "Classe introuvable pour l'année en cours" },
+        { status: 404 }
+      );
+    }
+      where: { id: classeId, tenantId, ...siteFilter },
     if (!classe) return NextResponse.json({ error: "Classe introuvable" }, { status: 404 });
 
     // Auto-conflit interne au plan fourni (classe, enseignant, salle).
@@ -70,53 +85,57 @@ export async function POST(req: NextRequest) {
     const annee = await getAnneeCouranteLibelle(tenantId);
     if (!annee) return NextResponse.json({ error: "Aucune année scolaire active" }, { status: 400 });
 
-    const result = await prisma.$transaction(async (tx) => {
-      const deleted = await tx.emploiTemps.deleteMany({ where: { tenantId, ...siteFilter, classeId, annee } });
+    const result = await prisma.$transaction(
+      async (tx) => {
+        const deleted = await tx.emploiTemps.deleteMany({ where: { tenantId, ...siteFilter, classeId, annee } });
 
-      // Revalidation contre les engagements des AUTRES classes (enseignants,
-      // salles) — l'unique source de vérité au moment de l'écriture, pas au
-      // moment où le plan a été généré.
-      const autres = await tx.emploiTemps.findMany({
-        where: { tenantId, ...siteFilter, annee, classeId: { not: classeId } },
-        select: { jour: true, heureDebut: true, heureFin: true, enseignantId: true, salle: true },
-      });
+        // Revalidation contre les engagements des AUTRES classes (enseignants,
+        // salles) — l'unique source de vérité au moment de l'écriture, pas au
+        // moment où le plan a été généré.
+        const autres = await tx.emploiTemps.findMany({
+          where: { tenantId, ...siteFilter, annee, classeId: { not: classeId } },
+          select: { jour: true, heureDebut: true, heureFin: true, enseignantId: true, salle: true },
+        });
 
-      for (const c of creneaux) {
-        const conflitEnseignant =
-          c.enseignantId &&
-          autres.some(
-            (a) => a.enseignantId === c.enseignantId && a.jour === c.jour && overlaps(a.heureDebut, a.heureFin, c.heureDebut, c.heureFin)
-          );
-        if (conflitEnseignant) {
-          throw new Error(`Conflit détecté : un enseignant du plan est déjà engagé ailleurs le ${c.jour} à ${c.heureDebut}. Régénère le plan.`);
+        for (const c of creneaux) {
+          const conflitEnseignant =
+            c.enseignantId &&
+            autres.some(
+              (a) => a.enseignantId === c.enseignantId && a.jour === c.jour && overlaps(a.heureDebut, a.heureFin, c.heureDebut, c.heureFin)
+            );
+          if (conflitEnseignant) {
+            throw new Error(`Conflit détecté : un enseignant du plan est déjà engagé ailleurs le ${c.jour} à ${c.heureDebut}. Régénère le plan.`);
+          }
+          const salleBrute = c.salle?.replace(/\s*\(Groupe [AB]\)$/, "") ?? null;
+          const conflitSalle =
+            salleBrute &&
+            autres.some((a) => a.salle === salleBrute && a.jour === c.jour && overlaps(a.heureDebut, a.heureFin, c.heureDebut, c.heureFin));
+          if (conflitSalle) {
+            throw new Error(`Conflit détecté : une salle du plan est déjà occupée ailleurs le ${c.jour} à ${c.heureDebut}. Régénère le plan.`);
+          }
         }
-        const salleBrute = c.salle?.replace(/\s*\(Groupe [AB]\)$/, "") ?? null;
-        const conflitSalle =
-          salleBrute &&
-          autres.some((a) => a.salle === salleBrute && a.jour === c.jour && overlaps(a.heureDebut, a.heureFin, c.heureDebut, c.heureFin));
-        if (conflitSalle) {
-          throw new Error(`Conflit détecté : une salle du plan est déjà occupée ailleurs le ${c.jour} à ${c.heureDebut}. Régénère le plan.`);
-        }
-      }
 
-      await tx.emploiTemps.createMany({
-        data: creneaux.map((c) => ({
-          tenantId,
-          classeId,
-          matiereId: c.matiereId,
-          enseignantId: c.enseignantId,
-          jour: c.jour,
-          heureDebut: c.heureDebut,
-          heureFin: c.heureFin,
-          salle: c.salle,
-          annee,
-        })),
-      });
+        await tx.emploiTemps.createMany({
+          data: creneaux.map((c) => ({
+            tenantId,
+            classeId,
+            matiereId: c.matiereId,
+            enseignantId: c.enseignantId,
+            jour: c.jour,
+            heureDebut: c.heureDebut,
+            heureFin: c.heureFin,
+            salle: c.salle,
+            annee,
+          })),
+        });
 
-      return { deleted: deleted.count, created: creneaux.length };
-    });
+        return { deleted: deleted.count, created: creneaux.length };
+      },
+      { timeout: 30000, maxWait: 10000 }
+    );
 
     revalidatePath("/emploi-du-temps");
+    revalidateTag("emploi-du-temps-data", "max");
     return NextResponse.json({ success: true, classeNom: classe.nom, ...result });
   } catch (error) {
     console.error("[API/emploi-du-temps/bulk-apply]", error);

@@ -1,5 +1,5 @@
 /**
- * Générateur d'attestation de scolarité PDF — EcolPro
+ * Générateur d'attestation de scolarité PDF — École Miriam
  * Calqué sur bulletin-generator.ts, utilise les données existantes (Eleve, Classe, Tenant).
  */
 
@@ -42,7 +42,9 @@ export async function getAttestationData(
   siteFilter: Record<string, unknown> = {}
 ): Promise<AttestationData | null> {
   const { default: prisma } = await import("@/lib/prisma");
+  const { getAnneeCouranteLibelle } = await import("@/lib/annee-scolaire");
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId : le caller (server action) a déjà vérifié l'accès
   // `eleveId` vient de l'appelant : `siteFilter` borne la recherche au périmètre
   // de l'utilisateur. Sans lui, une attestation de scolarité — document
   // officiel nominatif — pouvait être émise pour un élève d'un autre site du
@@ -57,9 +59,7 @@ export async function getAttestationData(
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
   if (!tenant) return null;
 
-  const annee = await prisma.anneesScolaires.findFirst({
-    where: { tenantId, libelle: tenant.currentYear },
-  });
+  const anneeLibelle = await getAnneeCouranteLibelle(tenantId);
 
   return {
     ecoleName: tenant.name,
@@ -78,7 +78,7 @@ export async function getAttestationData(
     eleveSexe: eleve.sexe,
     eleveDateNaissance: eleve.dateNaissance,
 
-    annee: annee?.libelle ?? tenant.currentYear,
+    annee: anneeLibelle ?? tenant.currentYear,
     dateDelivrance: new Date(),
 
     chefEtablissement: tenant.chefEtablissement,

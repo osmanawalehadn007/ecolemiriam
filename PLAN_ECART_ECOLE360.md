@@ -1,4 +1,4 @@
-# Plan d'implémentation — Résorption des écarts EcolPro / École360
+# Plan d'implémentation — Résorption des écarts École Miriam / École360
 
 > **Périmètre exclu** : l'architecture multi-tenant SaaS est **conservée**. Aucun slot ne remet en
 > cause `Tenant`, `UserTenant`, `Site` ni le modèle mutualisé. Les mesures d'École360 qui découlent
@@ -44,7 +44,7 @@ passe, soit le slot n'est pas livré.
 
 ## Slot 0.1 — Rendre la CI bloquante 🔴
 
-**Constat.** `@/Users/awalehosman/Documents/logiciel EcolPro/.github/workflows/ci.yml` porte
+**Constat.** `@/Users/awalehosman/Documents/logiciel École Miriam/.github/workflows/ci.yml` porte
 `continue-on-error: true` sur les étapes *Lint* et *Type-check*. Notre règle ESLint
 `require-tenant-id` — le garde-fou multi-tenant le plus important du projet — **ne bloque aucun
 déploiement**. Elle peut échouer à chaque livraison sans empêcher le `deploy` vers Cloudflare Workers.
@@ -91,7 +91,7 @@ raison: <justification>`) et créer un slot 0.1b pour les résorber — mais **j
 **Constat précis** (vérifié dans le code, plus étroit que l'estimation initiale) :
 
 **Fuite A — `dispatch.ts` ligne 120** :
-```@/Users/awalehosman/Documents/logiciel EcolPro/src/lib/notifications/dispatch.ts:120
+```@/Users/awalehosman/Documents/logiciel École Miriam/src/lib/notifications/dispatch.ts:120
   const notif = await prisma.notification.findUnique({ where: { id: notificationId } });
 ```
 La fonction `dispatchNotification(notificationId)` ne borne pas la recherche au tenant appelant. Un
@@ -101,7 +101,7 @@ destinataires sont résolus depuis `notif.tenantId`), c'est une **action inter-t
 e-mails et push facturés au tenant B, avec compteurs mis à jour.
 
 **Fuite B — `suggest.ts` ligne 75** :
-```@/Users/awalehosman/Documents/logiciel EcolPro/src/lib/emploi-du-temps/suggest.ts:75
+```@/Users/awalehosman/Documents/logiciel École Miriam/src/lib/emploi-du-temps/suggest.ts:75
     prisma.matiere.findUnique({ where: { id: matiereId }, select: { nom: true } }),
 ```
 Les cinq autres requêtes du même `Promise.all` bornent correctement par `tenantId`. Celle-ci non :
@@ -152,7 +152,7 @@ externe ne subsiste.
 ## Slot 0.3 — Supprimer la cascade destructrice sur les notes 🔴
 
 **Constat.** Perte de données silencieuse :
-```@/Users/awalehosman/Documents/logiciel EcolPro/prisma/schema.prisma
+```@/Users/awalehosman/Documents/logiciel École Miriam/prisma/schema.prisma
   evaluationId String?
   evaluation   Evaluation? @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
 ```
@@ -194,7 +194,7 @@ et que les notes survivent.
 ## Slot 0.4 — Rattacher `Conversation` au tenant 🟠
 
 **Constat.** Seul modèle du schéma portant un `tenantId` **sans relation Prisma** :
-```@/Users/awalehosman/Documents/logiciel EcolPro/prisma/schema.prisma
+```@/Users/awalehosman/Documents/logiciel École Miriam/prisma/schema.prisma
 model Conversation {
   id       String  @id @default(cuid())
   tenantId String
@@ -231,7 +231,7 @@ participants. Aucun orphelin.
 ## Slot 0.5 — Restreindre les permissions de messagerie des élèves 🟠
 
 **Constat.**
-```@/Users/awalehosman/Documents/logiciel EcolPro/src/lib/rbac.ts
+```@/Users/awalehosman/Documents/logiciel École Miriam/src/lib/rbac.ts
   STUDENT: [
     "bulletins:read", "absences:read", "notes:read", "messages:*",
 ```
@@ -264,14 +264,14 @@ répondant dans une conversation dont il est participant reçoit 200.
 **Constat — deux problèmes liés.**
 
 *Problème 1* : `isCurrent` est un booléen nu, sans contrainte d'unicité.
-```@/Users/awalehosman/Documents/logiciel EcolPro/prisma/schema.prisma
+```@/Users/awalehosman/Documents/logiciel École Miriam/prisma/schema.prisma
   isCurrent Boolean  @default(false)
 ```
 Rien n'empêche deux lignes `isCurrent = true` pour le même `tenantId`. Le même défaut existe sur
 `Periode.isCurrent`.
 
 *Problème 2* : double source de vérité contradictoire.
-```@/Users/awalehosman/Documents/logiciel EcolPro/prisma/schema.prisma
+```@/Users/awalehosman/Documents/logiciel École Miriam/prisma/schema.prisma
   currentYear String @default("2025-2026")
 ```
 `Tenant.currentYear` (chaîne libre) coexiste avec `AnneesScolaires.isCurrent`. Elles peuvent
@@ -435,7 +435,7 @@ export async function audit(entry: {
 
 **Objectif.** Chaque `403` et chaque `401` laisse une trace exploitable.
 
-**Point d'insertion unique.** `@/Users/awalehosman/Documents/logiciel EcolPro/src/lib/rbac.ts`
+**Point d'insertion unique.** `@/Users/awalehosman/Documents/logiciel École Miriam/src/lib/rbac.ts`
 concentre déjà l'autorisation :
 ```
 const gate = await authorize({ permission: "eleves:write" });
@@ -543,7 +543,7 @@ export const MODULES = {
   STATISTIQUES:     { label: "Statistiques",             core: false },
   TRANSFERTS:       { label: "Transferts inter-sites",   core: false },
   EMPLOI_TEMPS:     { label: "Emploi du temps & salles", core: false },
-  // Modules propres à EcolPro, absents d'École360 :
+  // Modules propres à École Miriam, absents d'École360 :
   RH:               { label: "Ressources humaines",      core: false },
   ADMISSIONS:       { label: "Admissions",               core: false },
   INVENTAIRE:       { label: "Inventaire",               core: false },
@@ -930,7 +930,7 @@ vierge reconstitue l'année.
 ## Slot 4.1 — Fenêtre de saisie appliquée par le serveur 🟠
 
 **Constat.** La structure existe, l'application manque :
-```@/Users/awalehosman/Documents/logiciel EcolPro/prisma/schema.prisma
+```@/Users/awalehosman/Documents/logiciel École Miriam/prisma/schema.prisma
   statut           String  @default("OUVERTE") // OUVERTE | CLOTUREE
   cloturedAt       DateTime?
   dateLimiteSaisie DateTime? // prolongation exceptionnelle
@@ -993,11 +993,11 @@ n'est jamais bloqué. »*
 **Constat — trois risques cumulés.**
 
 *Risque 1* : le coefficient est dupliqué sans règle de synchronisation.
-```@/Users/awalehosman/Documents/logiciel EcolPro/prisma/schema.prisma
+```@/Users/awalehosman/Documents/logiciel École Miriam/prisma/schema.prisma
   coefficient Float    @default(1)
 ```
 (sur `Evaluation`) et
-```@/Users/awalehosman/Documents/logiciel EcolPro/prisma/schema.prisma
+```@/Users/awalehosman/Documents/logiciel École Miriam/prisma/schema.prisma
   noteMax     Float    @default(20)
   coefficient Float    @default(1)
 ```
@@ -1252,7 +1252,7 @@ reposent sur cette désignation).
 **Deux constats.**
 
 *Constat 1* — `montant Float` pour de l'argent :
-```@/Users/awalehosman/Documents/logiciel EcolPro/prisma/schema.prisma
+```@/Users/awalehosman/Documents/logiciel École Miriam/prisma/schema.prisma
   montant  Float
 ```
 Un flottant binaire ne représente pas exactement les décimales. Pour du DJF (sans subdivision
@@ -1684,7 +1684,7 @@ que ses propres connexions.
 ## Slot 6.5 — Écran Rôles & permissions 🟡
 
 **Constat.** `ROLE_PERMISSIONS` est une **matrice codée en dur** :
-```@/Users/awalehosman/Documents/logiciel EcolPro/src/lib/rbac.ts
+```@/Users/awalehosman/Documents/logiciel École Miriam/src/lib/rbac.ts
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 ```
 Modifier une permission exige de modifier le code et de redéployer. École360 a un écran dédié,
@@ -2162,7 +2162,7 @@ masquées avant stockage. »*
 **Étapes.**
 1. Remplacer tous les noms des seeds par des noms génériques (`Élève Test 01`, `Parent Test 01`).
 2. Téléphones en `2537700000XX` (plage de test).
-3. E-mails en `test0X@ecolpro.test` (domaine `.test` non résolvable).
+3. E-mails en `test0X@ecolemiriam.test` (domaine `.test` non résolvable).
 4. Documenter dans `README` que les seeds ne contiennent aucune donnée réelle.
 5. Un test de gouvernance vérifie qu'aucun seed ne contient un numéro de téléphone hors plage de
    test.
@@ -2638,4 +2638,4 @@ applicatives.
 
 ---
 
-*Document généré le 8 août 2026 — plan d'implémentation EcolPro / École360.*
+*Document généré le 8 août 2026 — plan d'implémentation École Miriam / École360.*

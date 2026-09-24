@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { eleveScopeFilter, mergeFilters, isRelationScopedRole } from "@/lib/site-scope";
 import { isClasseInTeacherScope, teacherEleveRelationFilter } from "@/lib/teacher-classes";
@@ -12,6 +13,8 @@ export async function GET(req: NextRequest) {
   }
   const denied = checkPermission(session.user.role, "bulletins:read");
   if (denied) return denied;
+  // Route agrégée par classe — refuser l'accès aux PARENT/STUDENT
+  if (session.user.role === "PARENT" || session.user.role === "STUDENT") {
 
   // Rapport de classe (noms, moyennes, rangs, décisions) : artefact de
   // personnel, jamais borné à un élève.
@@ -35,12 +38,14 @@ export async function GET(req: NextRequest) {
   }
 
   const bulletins = await prisma.bulletin.findMany({
+    where: {
+      eleve: { classeId, tenantId: session.user.tenantId },
+      periodeId,
+      tenantId: session.user.tenantId,
+      ...siteFilterForModel("bulletin", session.user),
+    },
     where: mergeFilters(
       {
-        eleve: { classeId, tenantId: session.user.tenantId },
-        periodeId,
-        tenantId: session.user.tenantId,
-      },
       eleveScopeFilter(session.user, "eleve"),
       await teacherEleveRelationFilter(session.user, "eleve")
     ),
@@ -50,6 +55,7 @@ export async function GET(req: NextRequest) {
       // et au périmètre de sites : elles ne peuvent appartenir qu'à un bulletin
       // autorisé. `BulletinMatiere` n'a pas de chemin de site propre (elle
       // passe par le bulletin, qui ne porte pas de colonne `siteId`).
+      // eslint-disable-next-line ecolemiriam/require-site-filter
       // eslint-disable-next-line ecolpro/require-site-filter
       matieres: { include: { matiere: { select: { nom: true, code: true } } } },
     },

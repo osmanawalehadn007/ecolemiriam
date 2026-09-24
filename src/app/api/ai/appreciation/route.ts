@@ -5,6 +5,7 @@ import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { generateCompletion, AiConfigError } from "@/lib/ai/glm-client";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { niveauToLabel } from "@/lib/niveau";
 import { isEleveInTeacherScope } from "@/lib/teacher-classes";
 
 const Schema = z.object({
@@ -61,6 +62,7 @@ export async function POST(req: NextRequest) {
         // borné au tenant et au périmètre de sites : l'isolation est portée par la
         // relation. (BulletinMatiere n'a par ailleurs aucun chemin propre vers le
         // site : son rattachement passe uniquement par ce bulletin.)
+        // eslint-disable-next-line ecolemiriam/require-site-filter
         // eslint-disable-next-line ecolpro/require-site-filter
         matieres: { include: { matiere: true } },
         periode: true,
@@ -91,7 +93,7 @@ export async function POST(req: NextRequest) {
 
     const prompt = `Rédige une appréciation générale de bulletin scolaire pour cet élève, en français, 2 à 3 phrases maximum, bienveillante mais honnête et constructive.
 
-Élève : ${eleve.prenom} ${eleve.nom} — Classe ${eleve.classe?.nom ?? "N/A"} (${eleve.classe?.niveau ?? ""})
+Élève : ${eleve.prenom} ${eleve.nom} — Classe ${eleve.classe?.nom ?? "N/A"} (${eleve.classe?.niveau ? niveauToLabel(eleve.classe.niveau) : ""})
 Moyenne générale : ${bulletin.moyenneGenerale !== null ? bulletin.moyenneGenerale.toFixed(2) : "N/A"}/20
 Rang : ${bulletin.rang ?? "N/A"}
 Absences sur la période : ${absences}

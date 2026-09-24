@@ -80,6 +80,7 @@ export async function POST(req: NextRequest) {
     }
 
     console.log("[generer] step 1: fetching classe");
+    // eslint-disable-next-line ecolemiriam/require-annee-filter -- régénération possible sur une année révolue (correction d'archives) ; la période choisie porte l'année
     const classe = await prisma.classe.findFirst({
       where: { id: classeId, tenantId, ...siteFilterForModel("classe", session.user) },
       include: {

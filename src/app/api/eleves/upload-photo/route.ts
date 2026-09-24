@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/rbac";
 import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
 import { checkPermission } from "@/lib/rbac";
 
@@ -40,9 +41,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Format non supporté. Utilisez JPG, PNG, WebP ou GIF." }, { status: 400 });
     }
 
-    const maxSize = 2 * 1024 * 1024; // 2MB
+    const maxSize = 5 * 1024 * 1024; // 5MB
     if (file.size > maxSize) {
-      return NextResponse.json({ error: "L'image ne doit pas dépasser 2 Mo" }, { status: 400 });
+      return NextResponse.json({ error: "L'image ne doit pas dépasser 5 Mo" }, { status: 400 });
     }
 
     const bytes = await file.arrayBuffer();

@@ -4,6 +4,10 @@ import prisma from "@/lib/prisma";
 import { z } from "zod";
 import { generateMatricule } from "@/lib/utils";
 import { checkPermission } from "@/lib/rbac";
+import { siteFilterForModel, siteIdForCreate, requireSiteIdForCreate, eleveScopeFilter } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
 import { siteFilterForModel, siteIdForCreate, requireSiteIdForCreate, mergeFilters } from "@/lib/site-scope";
 import { teacherEleveFilter } from "@/lib/teacher-classes";
 import { revalidateTag, revalidatePath } from "next/cache";
@@ -34,7 +38,10 @@ export async function GET(req: NextRequest) {
     if (!session?.user?.tenantId) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     const denied = checkPermission(session.user.role, "eleves:read");
     if (denied) return denied;
-    const siteFilter = siteFilterForModel("eleve", session.user);
+    // eleveScopeFilter combine le filtrage par site ET le périmètre personnel
+    // (lien familial pour PARENT, userId pour STUDENT). Sans cela, un parent
+    // disposant de `eleves:read` voit tous les élèves du tenant.
+    const siteFilter = eleveScopeFilter(session.user, null);
 
     const { searchParams } = new URL(req.url);
     const classeId = searchParams.get("classeId");
@@ -134,11 +141,18 @@ export async function POST(req: NextRequest) {
     let resolvedSiteId = siteIdForCreate(session.user);
     if (parsed.data.classeId) {
       const classe = await prisma.classe.findFirst({
-        where: { id: parsed.data.classeId, tenantId, ...siteFilter },
+        where: mergeFilters(
+          { id: parsed.data.classeId, tenantId },
+          siteFilter,
+          anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+        ),
         select: { id: true, siteId: true },
       });
       if (!classe) {
-        return NextResponse.json({ error: "Classe introuvable ou hors de votre périmètre" }, { status: 403 });
+        return NextResponse.json(
+          { error: "Classe introuvable, hors de votre périmètre, ou hors de l'année en cours" },
+          { status: 403 }
+        );
       }
       resolvedSiteId = classe.siteId;
     }
@@ -161,10 +175,12 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    revalidateTag("eleves-stats");
+    revalidateTag("eleves-stats", "max");
     // Les effectifs par classe affichés dans Paramètres → Pédagogie.
     revalidatePath("/parametres");
     revalidatePath("/eleves");
+    revalidateTag("dashboard-data", "max");
+    revalidateTag("eleves-stats");
     revalidateTag("dashboard-data");
 
     return NextResponse.json({ eleve }, { status: 201 });

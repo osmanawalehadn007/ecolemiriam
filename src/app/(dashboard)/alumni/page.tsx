@@ -1,17 +1,19 @@
 import { guardPage } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { AlumniView } from "@/components/alumni/AlumniView";
 import { getTranslations } from "next-intl/server";
 
-export const metadata = { title: "Alumni — Anciens élèves | EcolPro" };
+export const metadata = { title: "Alumni — Anciens élèves | École Miriam" };
 
 export default async function AlumniPage() {
   const [session, t] = await Promise.all([
     auth(),
     getTranslations("alumni"),
   ]);
+  if (!session?.user?.tenantId) redirect("/select-tenant");
   if (!session?.user?.tenantId) redirect("/login");
   guardPage(session, "alumni:read");
   return (
@@ -23,7 +25,7 @@ export default async function AlumniPage() {
         userAvatar={session.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <AlumniView />
+        <AlumniView userRole={session.user.role} />
       </div>
     </div>
   );

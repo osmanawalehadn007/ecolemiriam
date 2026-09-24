@@ -1,5 +1,6 @@
 import { guardStaff } from "@/lib/guard-page";
 import { auth } from "@/lib/auth";
+import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
@@ -10,35 +11,51 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, List, Award } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
+import { siteFilterForModel, personalScopeFilter, mergeFilters } from "@/lib/site-scope";
 import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
 import type { Role } from "@prisma/client";
 
 async function getBulletinsData(
   tenantId: string,
   scope?: { classeIds: string[]; isRestricted: boolean },
-  classeSiteFilter: Record<string, unknown> = {}
+  claims?: { role?: string | null; siteId?: string | null; siteIds?: string[] | null; tenantHasSites?: boolean; userId?: string; id?: string }
 ) {
+  // Filtre de périmètre personnel pour PARENT/STUDENT : ne retient que les
+  // classes contenant leurs enfants (ou la classe de l'élève lui-même).
+  const personalClasse = claims ? personalScopeFilter(claims, null) : {};
+  const hasPersonalScope = Object.keys(personalClasse).length > 0;
+  const siteClasseFilter = claims ? siteFilterForModel("classe", claims) : {};
+
   const classeWhere = mergeFilters(
-    {
-      tenantId,
-      ...(scope?.isRestricted && scope.classeIds.length > 0
-        ? { id: { in: scope.classeIds } }
-        : scope?.isRestricted
-          ? { id: "__none__" }
-          : {}),
-    },
-    classeSiteFilter
+    { tenantId },
+    siteClasseFilter,
+    scope?.isRestricted && scope.classeIds.length > 0
+      ? { id: { in: scope.classeIds } }
+      : scope?.isRestricted
+        ? { id: "__none__" }
+        : {},
+    hasPersonalScope ? { eleves: { some: personalClasse } } : {}
   );
 
   const [classes, periodes] = await Promise.all([
+    // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- écran de bulletins : les années révolues doivent rester consultables (la période choisie porte l'année)
+    prisma.classe.findMany({
+      where: classeWhere,
+      include: {
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
+        eleves: { where: { statut: "ACTIF", ...(hasPersonalScope ? personalClasse : {}) }, select: { id: true, nom: true, prenom: true, matricule: true }, orderBy: { prenom: "asc" } },
+  classeSiteFilter: Record<string, unknown> = {}
+    {
+      tenantId,
+      ...(scope?.isRestricted && scope.classeIds.length > 0
+          : {}),
+    },
+    classeSiteFilter
     // `classeWhere` est construit par mergeFilters({ …périmètre enseignant },
     // classeSiteFilter) — le filtre de site vient du PARAMÈTRE `classeSiteFilter`,
     // que la règle ne remonte pas. L'appelant passe
     // siteFilterForModel("classe", session.user).
     // eslint-disable-next-line ecolpro/require-site-filter
-    prisma.classe.findMany({
-      where: classeWhere,
-      include: {
         // Élèves d'une classe déjà bornée par `classeWhere` (périmètre + site) :
         // le lien est porté par la classe, `Eleve` n'a pas d'autre chemin ici.
         // eslint-disable-next-line ecolpro/require-site-filter
@@ -62,6 +79,8 @@ export default async function BulletinsPage() {
     auth(),
     getTranslations("bulletins"),
   ]);
+  if (!session?.user?.tenantId) redirect("/select-tenant");
+  guardPage(session, "bulletins:read");
   if (!session?.user?.tenantId) redirect("/login");
   guardStaff(session, "bulletins:read");
 
@@ -70,6 +89,7 @@ export default async function BulletinsPage() {
     ? await getTeacherScope(session.user.tenantId, session.user.id, session.user.role as Role)
     : undefined;
 
+  const { classes, periodes, anneeId } = await getBulletinsData(session.user.tenantId, scope, session.user);
   const { classes, periodes, anneeId } = await getBulletinsData(
     session.user.tenantId,
     scope,

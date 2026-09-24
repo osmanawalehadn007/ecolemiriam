@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { withMobileScope } from "@/lib/mobile-auth";
+import { eleveScopeFilter, siteFilterForModel, siteFilterForRelation } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
 import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
 import { eleveScopeFilter, siteFilterForModel, siteFilterForRelation, mergeFilters } from "@/lib/site-scope";
 import {
@@ -11,12 +16,7 @@ import {
 } from "@/lib/teacher-classes";
 
 export async function GET(req: NextRequest) {
-  const user = await verifyMobileScope(req);
-  if (!user) return mobileUnauthorized();
-  if (!user.tenantId) {
-    return NextResponse.json({ error: "Aucun établissement associé" }, { status: 403 });
-  }
-
+  return withMobileScope(req, async (user) => {
   const tenantId = user.tenantId;
 
   // Les compteurs eux-mêmes fuitaient : ils révélaient les volumes de
@@ -45,15 +45,16 @@ export async function GET(req: NextRequest) {
   ]);
 
   const [totalEleves, totalClasses, totalNotes] = await Promise.all([
+    prisma.eleve.count({ where: { tenantId, statut: "ACTIF", ...eleveFilter } }),
+    prisma.classe.count({
+      where: mergeFilters({ tenantId }, classeFilter, anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId))),
+    }),
+    prisma.note.count({ where: { tenantId, ...eleveRelFilter } }),
     prisma.eleve.count({
       where: mergeFilters({ tenantId, statut: "ACTIF" }, eleveFilter, teacherEleveScope),
-    }),
-    prisma.classe.count({
       where: mergeFilters({ tenantId }, classeFilter, teacherClasseScope),
-    }),
     prisma.note.count({
       where: mergeFilters({ tenantId }, eleveRelFilter, teacherNoteScope),
-    }),
   ]);
 
   const today = new Date();
@@ -95,6 +96,7 @@ export async function GET(req: NextRequest) {
       where: mergeFilters(
         { tenantId, statut: "PLANIFIE" },
         classeRelFilter,
+        anneeFilterForModel("evaluation", await getAnneeCouranteLibelle(tenantId)),
         teacherEvaluationScope
       ),
       select: {
@@ -119,5 +121,6 @@ export async function GET(req: NextRequest) {
     absencesRecentes,
     notesRecentes,
     prochainsExamens,
+  });
   });
 }

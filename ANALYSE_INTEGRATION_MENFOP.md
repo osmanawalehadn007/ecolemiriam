@@ -1,6 +1,6 @@
-# Analyse des captures MENFOP — Intégration dans EcolPro
+# Analyse des captures MENFOP — Intégration dans École Miriam
 
-Les 5 captures montrent le module **Examen / Vie scolaire** d'une plateforme concurrente (MENFOP). Voici ce que chaque écran représente, et comment cela se compare/s'intègre à ce qui existe déjà dans EcolPro (`prisma/schema.prisma`, `src/app/api/bulletins/`, `src/app/api/notes/`, `src/app/api/examens/`, `src/components/bulletins/`).
+Les 5 captures montrent le module **Examen / Vie scolaire** d'une plateforme concurrente (MENFOP). Voici ce que chaque écran représente, et comment cela se compare/s'intègre à ce qui existe déjà dans École Miriam (`prisma/schema.prisma`, `src/app/api/bulletins/`, `src/app/api/notes/`, `src/app/api/examens/`, `src/components/bulletins/`).
 
 ---
 
@@ -11,14 +11,14 @@ Tableau matriciel **classe entière** (une ligne = un élève) avec :
 - Puis Trimestre 1 / Trimestre 2 / Trimestre 3, Résultat total, Nombre de matières, **Moyenne Annuelle**, Absences Annuelle, Décision, Appréciation globale
 - Filtres : Niveau → Classe → Période, bouton **Excel** et **Imprimer**
 
-**Statut EcolPro :** Nous avons déjà toutes les données sous-jacentes (`Bulletin`, `BulletinMatiere`, moyennes/rang/décision par période — voir `bulletin-generator.ts` et `generer/route.ts`), mais **pas de vue matricielle classe × matières × trimestres**, et **pas de calcul de moyenne annuelle** agrégeant les 3 périodes. Le `Bulletin` actuel est scopé par `periodeId` uniquement (unique `[eleveId, periodeId]`), il n'y a pas de "bulletin annuel" consolidé.
+**Statut École Miriam :** Nous avons déjà toutes les données sous-jacentes (`Bulletin`, `BulletinMatiere`, moyennes/rang/décision par période — voir `bulletin-generator.ts` et `generer/route.ts`), mais **pas de vue matricielle classe × matières × trimestres**, et **pas de calcul de moyenne annuelle** agrégeant les 3 périodes. Le `Bulletin` actuel est scopé par `periodeId` uniquement (unique `[eleveId, periodeId]`), il n'y a pas de "bulletin annuel" consolidé.
 **Pas d'export Excel** actuellement (recherche confirmée : aucune lib xlsx dans le module examens/bulletins).
 
 ## Image 2 — "Rapport général d'examen de classe"
 
 Même tableau matriciel mais **par période** (pas annuel), avec une colonne **Statut** (Active/Inactive de l'élève) et une colonne **Absences & Conduite** distincte de l'appréciation globale.
 
-**Statut EcolPro :** Équivalent conceptuel à une vue "classe" de `ConseilDeClasse.tsx`, mais celui-ci est présenté en liste verticale (une carte par élève), pas en tableau/grille exportable Excel.
+**Statut École Miriam :** Équivalent conceptuel à une vue "classe" de `ConseilDeClasse.tsx`, mais celui-ci est présenté en liste verticale (une carte par élève), pas en tableau/grille exportable Excel.
 
 ## Image 3 & 4 — "Bulletin de notes" (trimestriel) et "Bulletin de notes annuel"
 
@@ -29,7 +29,7 @@ La version **annuelle** (image 4) ajoute :
 - Moyennes par trimestre (Moy T1, T2, T3) + Moyenne Générale Annuelle
 - Bloc "Appréciation du conseil de classe" + Décision + **Signature & Cachet**
 
-**Statut EcolPro :** Le bulletin trimestriel existe déjà et est **plus complet** sur certains points (génération PDF via `bulletin-generator.ts`, `BulletinPreview.tsx`, moyenne classe/premier de classe, décision conseil). **Ce qui manque** :
+**Statut École Miriam :** Le bulletin trimestriel existe déjà et est **plus complet** sur certains points (génération PDF via `bulletin-generator.ts`, `BulletinPreview.tsx`, moyenne classe/premier de classe, décision conseil). **Ce qui manque** :
 1. Le **bulletin annuel consolidé** (agrégation des 3 bulletins trimestriels par matière + moyenne générale annuelle + rang annuel)
 2. Un bloc **signature & cachet** numérique/scanné sur le PDF exporté
 
@@ -37,11 +37,11 @@ La version **annuelle** (image 4) ajoute :
 
 Interface de **paramétrage de règles** : plages horaires (De/À en heures d'absence) → libellé d'appréciation auto-généré ("Attention aux absences !", "Avertissement pour absence", "Blâmes pour les absences", "S'exclu lui-même"). Modifiable/supprimable via CRUD. Les onglets voisins visibles dans la barre : *Appréciation des profs*, *Appréciations des périodes*, *Appréciations annuelles*, **Appréciations absences**, *Prolonger la saisie des notes*, *Signature*, *Clôture des périodes*.
 
-**Statut EcolPro :** Notre génération d'appréciation (`genererAppréciation()` dans `src/app/api/bulletins/generer/route.ts`) est **codée en dur** dans le code (seuils de moyenne fixes, aucune règle sur les absences, non éditable sans redéploiement). Il n'existe **aucune UI de configuration des règles d'appréciation**, ni de gestion de **clôture de période** (verrouillage de la saisie), ni de **prolongation de délai de saisie des notes**, ni de **signature électronique du principal** — confirmé par recherche dans le code (`excel`, `cloture`, `signature`, `prolonger` : 0 résultat pertinent dans le module examens).
+**Statut École Miriam :** Notre génération d'appréciation (`genererAppréciation()` dans `src/app/api/bulletins/generer/route.ts`) est **codée en dur** dans le code (seuils de moyenne fixes, aucune règle sur les absences, non éditable sans redéploiement). Il n'existe **aucune UI de configuration des règles d'appréciation**, ni de gestion de **clôture de période** (verrouillage de la saisie), ni de **prolongation de délai de saisie des notes**, ni de **signature électronique du principal** — confirmé par recherche dans le code (`excel`, `cloture`, `signature`, `prolonger` : 0 résultat pertinent dans le module examens).
 
 ---
 
-## Synthèse — Ce qui peut/doit être intégré à EcolPro
+## Synthèse — Ce qui peut/doit être intégré à École Miriam
 
 | Fonctionnalité MENFOP | Existe déjà ? | Effort d'intégration |
 |---|---|---|
@@ -72,7 +72,7 @@ Barre d'onglets : **Période scolaire** · Saisie de notes · Créer un devoir �
 
 L'onglet **"Période scolaire"** affiche en fait une config de **"Genre d'épreuve"** : tableau NOM / TEMPS DE DÉBUT / TEMPS DE FIN / **DANS LE DERNIER** (Oui/Non) / Actions — avec les 3 trimestres et un flag indiquant lequel est la période courante/dernière.
 
-**Statut EcolPro :**
+**Statut École Miriam :**
 - Équivalent du modèle `Periode` (`dateDebut`, `dateFin`, `isCurrent`) → **déjà couvert**, juste pas exposé sous cette UI précise (tableau éditable avec CRUD dédié dans le module Examens plutôt que dans Paramètres).
 - **"Saisie de notes"** → couvert par `src/app/api/notes/route.ts` + composants de saisie.
 - **"Créer un devoir"** → couvert par le modèle `Evaluation`.
@@ -85,7 +85,7 @@ L'onglet **"Période scolaire"** affiche en fait une config de **"Genre d'épreu
 
 Confirme la structure : Gestion de notes, **Résultats d'Admission**, Configuration des appréciations, Fiche de conseil de classe, Rapport conseil classe annuelle, **Résultats BEF**, Bulletin de notes, Bulletin de notes annuel.
 
-**Statut EcolPro :**
+**Statut École Miriam :**
 - "Résultats d'Admission" ici concerne les **résultats d'un examen national/certificatif** (admis/recalé), **pas** notre module `Admissions` actuel qui gère les candidatures d'inscription des nouveaux élèves — ce sont deux concepts différents portant un nom proche. ❌ Absent.
 - "Résultats BEF" (Brevet d'Études Fondamentales — examen national djiboutien) → ❌ Absent. Nécessiterait un module spécifique de gestion des résultats d'examens **nationaux/certificatifs** distinct des évaluations internes (import de résultats officiels par élève, mention/décision).
 
@@ -93,7 +93,7 @@ Confirme la structure : Gestion de notes, **Résultats d'Admission**, Configurat
 
 Sous "La liste des élèves", interface de **transfert d'un élève d'une classe à une autre** au sein du même niveau ou non : sélection niveau → classe source → classe destination, listes à double panneau avec boutons `»` / `«` pour déplacer les élèves sélectionnés.
 
-**Statut EcolPro :** ❌ **Absent** — aucune fonctionnalité de changement de classe en masse trouvée (recherche "changement de classe"/"transfert" : 0 résultat pertinent). Actuellement, changer la classe d'un élève nécessite probablement une édition individuelle de sa fiche. Cette UI en double-liste est un gain de productivité clair pour les directeurs en début d'année scolaire (répartition des effectifs).
+**Statut École Miriam :** ❌ **Absent** — aucune fonctionnalité de changement de classe en masse trouvée (recherche "changement de classe"/"transfert" : 0 résultat pertinent). Actuellement, changer la classe d'un élève nécessite probablement une édition individuelle de sa fiche. Cette UI en double-liste est un gain de productivité clair pour les directeurs en début d'année scolaire (répartition des effectifs).
 
 ### Image 5 — "Configuration des appréciations" › données réelles de l'onglet "Appréciation des profs"
 
@@ -107,11 +107,11 @@ Confirme et précise la structure déjà supposée : tableau NOM / **À PARTIR D
 
 C'est exactement une **table de règles seuil→libellé**, identique par structure à ce que `genererAppréciation()` fait en dur dans `src/app/api/bulletins/generer/route.ts` (actuellement seuils 18/16/14/12/10/8 fixes en JS). Les autres onglets (Appréciations des périodes, Appréciations annuelles, Appréciations absences, Prolonger la saisie des notes, Signature, Clôture des périodes) sont chacun une variante du même besoin : une règle de seuils différente selon le contexte (note de matière vs bulletin de période vs bulletin annuel vs heures d'absence).
 
-**Statut EcolPro :** ❌ Confirmé absent — recommandation inchangée : un modèle Prisma unique `ReglesAppreciation` avec un champ `contexte` (enum: NOTE_MATIERE, BULLETIN_PERIODE, BULLETIN_ANNUEL, ABSENCE) + `seuilMin`, `seuilMax`, `libelle`, réutilisable pour tous ces onglets via une seule UI paramétrable (avec un sélecteur de contexte en haut).
+**Statut École Miriam :** ❌ Confirmé absent — recommandation inchangée : un modèle Prisma unique `ReglesAppreciation` avec un champ `contexte` (enum: NOTE_MATIERE, BULLETIN_PERIODE, BULLETIN_ANNUEL, ABSENCE) + `seuilMin`, `seuilMax`, `libelle`, réutilisable pour tous ces onglets via une seule UI paramétrable (avec un sélecteur de contexte en haut).
 
 ---
 
-## Synthèse mise à jour — Fonctionnalités totalement absentes d'EcolPro
+## Synthèse mise à jour — Fonctionnalités totalement absentes d'École Miriam
 
 | Fonctionnalité | Où dans MENFOP | Effort |
 |---|---|---|
@@ -135,10 +135,10 @@ Ces captures détaillent le sous-menu **La liste des élèves** : *Gestion des �
 
 Tableau paginé des élèves : ID / NOM / SEX / NIVEAU / DATE DE NAISSANCE / STATUS / ANNÉE SCOLAIRE / Actions (éditer + voir). Filtres Niveau → Classe → Nationalité → Statut. Boutons d'action de tête : **élèves inactifs**, **Class Info**, **Importe images élèves**, **Excel**, **Imprimer**, **Imprimer feuille présence**, plus recherche + sélecteur de colonnes + Export.
 
-**Statut EcolPro :**
+**Statut École Miriam :**
 - Liste + filtres + fiche élève → **couvert** (modèle `Eleve`, pages `(dashboard)` liste élèves).
 - Photo élève → **couvert unitairement** (`src/app/api/eleves/upload-photo/route.ts`, champ `Eleve.photoUrl`), mais **"Importe images élèves" en masse** (upload groupé associant chaque photo au matricule) → ❌ **absent**.
-- **"Imprimer feuille présence"** (génération d'une feuille d'appel vierge à imprimer, classe × dates) → ❌ absent. EcolPro fait l'appel **en ligne** (`AppelInterface.tsx`, `api/absences/appel`), mais **pas d'export/impression d'une feuille de présence papier**.
+- **"Imprimer feuille présence"** (génération d'une feuille d'appel vierge à imprimer, classe × dates) → ❌ absent. École Miriam fait l'appel **en ligne** (`AppelInterface.tsx`, `api/absences/appel`), mais **pas d'export/impression d'une feuille de présence papier**.
 - **"élèves inactifs"** (filtre archivés) → partiellement couvert via `StatutAbsence`/statut, à confirmer côté `Eleve`.
 - Export Excel de la liste → ❌ absent (même constat que le module notes : pas de lib xlsx branchée).
 
@@ -146,13 +146,13 @@ Tableau paginé des élèves : ID / NOM / SEX / NIVEAU / DATE DE NAISSANCE / STA
 
 Formulaire : Titre → **Type d'utilisateur** (Student) → Rôles → **Mot de passe personnalisé** (toggle) → **Appliquer**. Génère en lot un tableau matricule / Nom complet / Titre / classe-niveau / **Nom d'utilisateur** / **Mot de passe** pour toute une classe.
 
-**Statut EcolPro :** ❌ **Absent**. EcolPro a bien l'authentification (`User`, `password` bcrypt, rôles), mais **aucune UI de génération en masse d'identifiants élèves** (création automatique username + mot de passe pour toute une classe, avec impression des accès). C'est une fonctionnalité clé pour ouvrir un espace élève/parent en début d'année. Effort : **Moyen** — endpoint bulk créant les `User` liés aux `Eleve` d'une classe + génération username/mot de passe + export imprimable.
+**Statut École Miriam :** ❌ **Absent**. École Miriam a bien l'authentification (`User`, `password` bcrypt, rôles), mais **aucune UI de génération en masse d'identifiants élèves** (création automatique username + mot de passe pour toute une classe, avec impression des accès). C'est une fonctionnalité clé pour ouvrir un espace élève/parent en début d'année. Effort : **Moyen** — endpoint bulk créant les `User` liés aux `Eleve` d'une classe + génération username/mot de passe + export imprimable.
 
 ### Image — "Changement de classe d'un élève" (rappel, vue réelle)
 
 Confirme l'écran déjà analysé (2e lot, Image 3) : double panneau De la classe → à la classe, boutons `»` / `«`. **Statut : ❌ absent** (confirmé, 0 résultat pour "changement de classe"/"transfert" dans le code).
 
-> À noter aussi dans ce menu : **"Élève transféré"** (gestion des élèves transférés vers/depuis un autre établissement — différent du changement de classe interne) et **"Cartes scolaire"** (génération de cartes d'élève imprimables) → tous deux ❌ absents d'EcolPro.
+> À noter aussi dans ce menu : **"Élève transféré"** (gestion des élèves transférés vers/depuis un autre établissement — différent du changement de classe interne) et **"Cartes scolaire"** (génération de cartes d'élève imprimables) → tous deux ❌ absents d'École Miriam.
 
 ---
 
@@ -166,21 +166,21 @@ La navigation principale confirme aussi les grands modules : Vie scolaire, La li
 
 Formulaire : Honorifique (Monsieur…) → **Chef d'établissement** → Titre (CPE) → Niveaux → Classe → Élève → **Imprimer**. Génère un **Certificat de Scolarité officiel** (en-tête établissement tél/email, "Je soussigné … certifie que l'élève [matricule, nom, né(e) le, à], poursuit ses études en classe de …, année scolaire …, fait à … le …", + signature/fonction du chef d'établissement).
 
-**Statut EcolPro :** ❌ **Absent** — aucun générateur d'attestation/certificat trouvé dans le code. EcolPro possède l'infrastructure PDF (`bulletin-generator.ts`) et toutes les données nécessaires (`Eleve`, `Classe`, `AnneesScolaires`, `Tenant`), donc l'effort est **Faible** : un template PDF paramétrable + choix du signataire. À forte valeur (document réclamé en permanence par les familles).
+**Statut École Miriam :** ❌ **Absent** — aucun générateur d'attestation/certificat trouvé dans le code. École Miriam possède l'infrastructure PDF (`bulletin-generator.ts`) et toutes les données nécessaires (`Eleve`, `Classe`, `AnneesScolaires`, `Tenant`), donc l'effort est **Faible** : un template PDF paramétrable + choix du signataire. À forte valeur (document réclamé en permanence par les familles).
 
 ### Image — "Convocation des parents"
 
 Formulaire : Niveaux → Classe → Élève → **Responsables** (parent) → Date → heure → **Imprimer**, avec choix du **motif** dans une liste : Violence scolaire, Dégradation des biens communs, Insolence envers un adulte, Exclusion de la classe. Produit une **convocation imprimable** adressée au responsable légal.
 
-**Statut EcolPro :** ⚠️ **Partiel**. `CONVOCATION_PARENTS` existe uniquement comme **type de `Sanction`** rattaché à un `Incident` — il n'y a **pas de génération de document de convocation imprimable** (date/heure de RDV, motif, destinataire parent). Effort : **Faible** — réutiliser `Incident`/`Sanction` + relation `Parent`/`EleveParent` déjà présentes, ajouter un template PDF de convocation + champ date/heure de rendez-vous.
+**Statut École Miriam :** ⚠️ **Partiel**. `CONVOCATION_PARENTS` existe uniquement comme **type de `Sanction`** rattaché à un `Incident` — il n'y a **pas de génération de document de convocation imprimable** (date/heure de RDV, motif, destinataire parent). Effort : **Faible** — réutiliser `Incident`/`Sanction` + relation `Parent`/`EleveParent` déjà présentes, ajouter un template PDF de convocation + champ date/heure de rendez-vous.
 
 ### Vie scolaire — comparaison structurelle discipline
 
 MENFOP crée **une page par type d'incident** (Violence, Insolence, Exclusion, Dégradation infrastructures…), chacune avec ses colonnes métier (ex. Violence : *L'agresseur · Forme d'agression · Cause · Dommage corporel · Moyens de résolution · Date*).
 
-EcolPro fait l'inverse : **un seul écran** `VieScolaireView.tsx` + modèle `Incident` générique avec un enum `TypeIncident` (`INSOLENCE`, `BAGARRE`, `VANDALISM`, `RETARD`, `TRICHE`, `ABSENTEISME`, `AUTRE`) et un enum `TypeSanction`.
+École Miriam fait l'inverse : **un seul écran** `VieScolaireView.tsx` + modèle `Incident` générique avec un enum `TypeIncident` (`INSOLENCE`, `BAGARRE`, `VANDALISM`, `RETARD`, `TRICHE`, `ABSENTEISME`, `AUTRE`) et un enum `TypeSanction`.
 
-| Entrée MENFOP | Équivalent EcolPro | Statut |
+| Entrée MENFOP | Équivalent École Miriam | Statut |
 |---|---|---|
 | Violence des élèves | `Incident type=BAGARRE` | ✅ Donnée couverte, ⚠️ pas de champs dédiés (agresseur/victime, dommage corporel, moyens de résolution) |
 | Insolence de l'élève | `Incident type=INSOLENCE` | ✅ Couvert (générique) |
@@ -192,20 +192,20 @@ EcolPro fait l'inverse : **un seul écran** `VieScolaireView.tsx` + modèle `Inc
 | Dispositif socialisation | — | ❌ Absent (suivi éducatif/médiation) |
 | Notification de l'inspecteur VS | `Notification` (générique) | ⚠️ Pas de workflow dédié inspecteur vie scolaire |
 
-**Analyse de fond :** l'approche EcolPro (1 modèle générique + enums) est **techniquement plus saine et plus extensible** que les 9 tables/pages séparées de MENFOP. Le vrai écart n'est donc **pas le modèle de données** mais :
+**Analyse de fond :** l'approche École Miriam (1 modèle générique + enums) est **techniquement plus saine et plus extensible** que les 9 tables/pages séparées de MENFOP. Le vrai écart n'est donc **pas le modèle de données** mais :
 1. La **richesse des champs métier** par type d'incident (pour "Violence" : agresseur/victime, forme, dommage corporel, moyen de résolution) — actuellement `Incident.description` est un texte libre.
-2. Les **documents imprimables** (attestation, convocation, notification inspecteur) qui n'existent pas côté EcolPro.
+2. Les **documents imprimables** (attestation, convocation, notification inspecteur) qui n'existent pas côté École Miriam.
 
 ---
 
-## Synthèse finale consolidée (4 lots) — Vraie comparaison EcolPro ↔ MENFOP
+## Synthèse finale consolidée (4 lots) — Vraie comparaison École Miriam ↔ MENFOP
 
-### A. Ce qu'EcolPro fait DÉJÀ (souvent mieux)
+### A. Ce qu'École Miriam fait DÉJÀ (souvent mieux)
 - Bulletin trimestriel PDF avec moyenne de classe, rang, 1er de classe (MENFOP ne montre pas la moyenne de classe comparative aussi clairement).
 - Conseil de classe (décision + appréciation).
 - Suivi des absences **en ligne** (appel numérique, motifs, notifications) — plus moderne que la feuille papier MENFOP.
 - Discipline sur modèle générique extensible (`Incident`/`Sanction`).
-- Modules **absents chez MENFOP (ou non montrés)** mais présents chez EcolPro : Facturation/Paiements, Paie (`BulletinPaie`, `FicheRH`), Inventaire, Emploi du temps, Messagerie/Conversations, App mobile, Alumni, RH enseignants multi-sites.
+- Modules **absents chez MENFOP (ou non montrés)** mais présents chez École Miriam : Facturation/Paiements, Paie (`BulletinPaie`, `FicheRH`), Inventaire, Emploi du temps, Messagerie/Conversations, App mobile, Alumni, RH enseignants multi-sites.
 
 ### B. Écarts RÉELS à combler (priorisés par ratio valeur/effort)
 
@@ -227,7 +227,7 @@ EcolPro fait l'inverse : **un seul écran** `VieScolaireView.tsx` + modèle `Inc
 | 14 | **Résultats d'examens nationaux** (BEF, Admission certificative) | Élevé | Contexte Djibouti | 🟢 P4 |
 | 15 | **Dispositif de socialisation** + **Notification inspecteur VS** | Moyen | Faible/Contexte | 🟢 P4 |
 
-**Recommandation stratégique :** commencer par les 3 items P1 (attestation, rapport de classe + Excel, comptes élèves en masse) — ils réutilisent l'infrastructure existante (PDF, données `Bulletin`/`Eleve`), demandent peu de nouveaux modèles Prisma, et répondent aux usages **quotidiens** d'un établissement djiboutien — ce sont eux qui feront percevoir EcolPro comme « au moins équivalent à MENFOP » lors d'une démonstration.
+**Recommandation stratégique :** commencer par les 3 items P1 (attestation, rapport de classe + Excel, comptes élèves en masse) — ils réutilisent l'infrastructure existante (PDF, données `Bulletin`/`Eleve`), demandent peu de nouveaux modèles Prisma, et répondent aux usages **quotidiens** d'un établissement djiboutien — ce sont eux qui feront percevoir École Miriam comme « au moins équivalent à MENFOP » lors d'une démonstration.
 
 ---
 

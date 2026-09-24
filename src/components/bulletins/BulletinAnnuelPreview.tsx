@@ -23,6 +23,14 @@ function fmt(v: number | null): string {
   return v !== null ? v.toFixed(2) : "—";
 }
 
+const DECISION_LABELS: Record<string, string> = {
+  PASSAGE: "Passage en classe supérieure",
+  REDOUBLEMENT: "Redoublement",
+  FELICITATIONS: "Félicitations",
+  ENCOURAGEMENTS: "Encouragements",
+  AVERTISSEMENT: "Avertissement",
+};
+
 export function BulletinAnnuelPreview({ data }: Props) {
   const t = useTranslations("bulletins");
   return (
@@ -38,9 +46,31 @@ export function BulletinAnnuelPreview({ data }: Props) {
       }}
     >
       {/* Header Info */}
-      <div className="flex flex-col mb-4">
-        <div className="text-center text-red-600 font-bold mb-2">
-          Email: ecoleprivee@gmail.com
+      <div className="flex flex-col mb-4 print:mb-2">
+        {/* En-tête : Logo pleine largeur + Infos établissement centrées */}
+        <div className="flex flex-col items-center mb-2 border-b-2 border-[#1e40af] pb-2 print:mb-1 print:pb-1">
+          {/*
+            `next/image` est inapplicable ici : le logo est téléversé par
+            chaque établissement (URL de stockage arbitraire ou `data:`),
+            hors des `remotePatterns` de next.config, et ce bloc est
+            dimensionné en millimètres pour l'impression.
+          */}
+          {data.ecoleLogo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={data.ecoleLogo}
+              alt="Logo"
+              className="max-h-[40mm] w-full object-contain"
+            />
+          ) : (
+            <div style={{ height: "20mm" }} />
+          )}
+          <div className="text-center text-[10px] leading-tight mt-1">
+            <div className="font-bold text-[14px] text-[#1e40af]">{data.ecoleName}</div>
+            {data.ecoleVille && (
+              <div>{data.ecoleVille}{data.ecolePays ? `, ${data.ecolePays}` : ""}</div>
+            )}
+          </div>
         </div>
 
         <table className="w-full border-collapse border border-black text-center mb-1">
@@ -68,7 +98,7 @@ export function BulletinAnnuelPreview({ data }: Props) {
       </div>
 
       {/* Tableau des Disciplines: Moyennes par trimestre + Moyenne annuelle */}
-      <table className="w-full border-collapse border border-black text-center mb-4">
+      <table className="w-full border-collapse border border-black text-center mb-4 print:mb-2">
         <thead>
           <tr className="font-bold bg-white text-[9px]">
             <th className="border border-black p-1 w-[20%]" rowSpan={2}>{t("disciplines")}</th>
@@ -137,7 +167,7 @@ export function BulletinAnnuelPreview({ data }: Props) {
       </table>
 
       {/* Tableau récapitulatif des trimestres */}
-      <table className="w-full border-collapse border border-black text-center mb-4">
+      <table className="w-full border-collapse border border-black text-center mb-4 print:mb-2">
         <thead>
           <tr className="font-bold bg-[#fbcfe8] text-[10px]">
             <th className="border border-black p-2 w-[25%] text-left pl-2">{t("trimesters")}</th>
@@ -171,8 +201,28 @@ export function BulletinAnnuelPreview({ data }: Props) {
         </tbody>
       </table>
 
+      {/* Décision du conseil + Appréciation générale annuelle */}
+      {(data.decision || data.appreciation) && (
+        <table className="w-full border-collapse border border-black text-[10px] mb-4 print:mb-2">
+          <tbody>
+            {data.appreciation && (
+              <tr>
+                <td className="border border-black p-2 font-bold w-[25%] bg-[#fbcfe8]">{t("councilAppreciation")}</td>
+                <td className="border border-black p-2 text-left">{data.appreciation}</td>
+              </tr>
+            )}
+            {data.decision && (
+              <tr>
+                <td className="border border-black p-2 font-bold w-[25%] bg-[#fbcfe8]">{t("decision")}</td>
+                <td className="border border-black p-2 text-left font-bold">{DECISION_LABELS[data.decision] ?? data.decision}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
+
       {/* Signature & Cachet */}
-      <div className="flex justify-end mt-6">
+      <div className="flex justify-end mt-6 print:mt-3">
         <div className="text-center text-[10px] w-[60mm]">
           <p className="mb-1">
             {data.ecoleVille}, le {formatDateFr(data.generatedAt)}

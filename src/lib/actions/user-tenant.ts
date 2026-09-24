@@ -2,9 +2,12 @@
 
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import prismaBase from "@/lib/prisma-base";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
+import { checkPermission } from "@/lib/rbac";
 import type { Role } from "@prisma/client";
+import { generateSecurePassword } from "@/lib/security/password";
 
 /**
  * Ajoute un utilisateur existant (par email) à un tenant.
@@ -29,9 +32,8 @@ export async function addUserToTenant(params: {
   }
 
   // Seuls TENANT_ADMIN et SUPER_ADMIN peuvent ajouter des utilisateurs
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Accès refusé");
 
   // Un TENANT_ADMIN ne peut agir que sur un établissement dont il est
   // effectivement administrateur : sans ce contrôle, l'admin de l'école A
@@ -60,6 +62,10 @@ export async function addUserToTenant(params: {
     throw new Error("Établissement introuvable");
   }
 
+  // Chercher l'utilisateur par email (insensible à la casse)
+   
+  const existingUser = await prismaBase.user.findFirst({
+    where: { email: { equals: params.email, mode: "insensitive" } },
   // Chercher l'utilisateur par email
   // Rattachement d'un compte EXISTANT à un établissement : la recherche par
 // email doit être globale (le compte peut déjà exister ailleurs, c'est le but
@@ -110,8 +116,10 @@ export async function addUserToTenant(params: {
   }
 
   // Créer un nouvel utilisateur avec mot de passe temporaire
-  const tempPassword = params.temporaryPassword || "EcolPro2026!";
-  const hashed = await bcrypt.hash(tempPassword, 10);
+  // Sécurité : pas de mot de passe par défaut codé en dur. Si aucun
+  // temporaryPassword n'est fourni, on génère un mot de passe aléatoire fort.
+  const tempPassword = params.temporaryPassword || generateSecurePassword();
+  const hashed = await bcrypt.hash(tempPassword, 12);
 
   const [firstName, ...restName] = params.email.split("@");
   const name = firstName.charAt(0).toUpperCase() + firstName.slice(1);
@@ -151,9 +159,8 @@ export async function removeUserFromTenant(userId: string, tenantId: string) {
     throw new Error("Non autorisé");
   }
 
-  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN") {
-    throw new Error("Permissions insuffisantes");
-  }
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Accès refusé");
 
   // Ne pas se retirer soi-même
   if (userId === session.user.id) {
@@ -210,6 +217,7 @@ export async function getUserTenants(userId: string) {
     throw new Error("Permissions insuffisantes");
   }
 
+  // eslint-disable-next-line ecolemiriam/require-tenant-id -- récupération des tenants d'un user : cross-tenant par design
   // Liste des établissements d'un utilisateur : elle est TRANSVERSE par nature
   // (c'est le sélecteur de tenant). Le contrôle d'accès ci-dessus garantit qu'on
   // ne lit que ses propres rattachements, sauf pour un SUPER_ADMIN.

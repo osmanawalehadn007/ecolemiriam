@@ -1,4 +1,6 @@
 import prisma from "@/lib/prisma";
+import { runWithTenant } from "@/lib/prisma";
+import { cached, cacheDel, cacheKey } from "@/lib/redis";
 
 export interface SiteColor {
   base: string;
@@ -19,16 +21,34 @@ function generateSiteColor(index: number): SiteColor {
   };
 }
 
+/**
+ * CACHE: Redis (10 minutes, partagé entre instances blue/green).
+ * Les sites changent rarement et la couleur est dérivée de l'ordre
+ * de création (stable).
+ */
 export async function getSiteColorMap(tenantId: string): Promise<Record<string, SiteColor>> {
-  const sites = await prisma.site.findMany({
-    where: { tenantId, deletedAt: null },
-    select: { id: true, createdAt: true },
-    orderBy: { createdAt: "asc" },
-  });
+  return cached(
+    cacheKey(tenantId, "site-colors"),
+    () => runWithTenant(tenantId, null, async () => {
+      const sites = await prisma.site.findMany({
+        where: { tenantId, deletedAt: null },
+        select: { id: true, createdAt: true },
+        orderBy: { createdAt: "asc" },
+      });
 
-  const colors: Record<string, SiteColor> = {};
-  for (let i = 0; i < sites.length; i++) {
-    colors[sites[i].id] = generateSiteColor(i);
-  }
-  return colors;
+      const colors: Record<string, SiteColor> = {};
+      for (let i = 0; i < sites.length; i++) {
+        colors[sites[i].id] = generateSiteColor(i);
+      }
+      return colors;
+    }),
+    600 // 10 minutes
+  );
+}
+
+/**
+ * Invalide le cache des couleurs de sites pour un tenant.
+ */
+export async function invalidateSiteColorMap(tenantId: string): Promise<void> {
+  await cacheDel(cacheKey(tenantId, "site-colors"));
 }

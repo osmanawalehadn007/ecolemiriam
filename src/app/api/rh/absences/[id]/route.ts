@@ -52,6 +52,7 @@ export async function PATCH(
   });
 
   if (statut === "INJUSTIFIEE" || statut === "JUSTIFIEE") {
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
     // Le compteur doit porter sur le même périmètre que l'absence traitée :
     // un enseignant peut être rattaché à plusieurs sites.
     const count = await prisma.absencePersonnel.count({
@@ -62,6 +63,11 @@ export async function PATCH(
         ...absenceFilter,
       },
     });
+    // eslint-disable-next-line ecolemiriam/require-tenant-id -- ID vérifié par findFirst avec tenantId au-dessus
+    await prisma.ficheRH.update({
+      where: { enseignantId: absence.enseignantId },
+      data: { absencesCount: count },
+    }).catch(() => {});
     // Écriture par identifiant : on vérifie d'abord que la fiche visée est bien
     // dans le périmètre (une fiche d'un autre site ne doit pas être touchée).
     const fiche = await prisma.ficheRH.findFirst({
@@ -69,10 +75,7 @@ export async function PATCH(
       select: { id: true },
     });
     if (fiche) {
-      await prisma.ficheRH.update({
         where: { id: fiche.id },
-        data: { absencesCount: count },
-      }).catch(() => {});
     }
   }
 

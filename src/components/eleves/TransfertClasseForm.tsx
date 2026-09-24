@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowRight, ArrowLeft, Loader2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
+import { niveauToLabel } from "@/lib/niveau";
 
 interface EleveSimple {
   id: string;
@@ -93,7 +94,7 @@ export function TransfertClasseForm({ classes }: { classes: ClasseSimple[] }) {
               <SelectTrigger><SelectValue placeholder={t("transfertSelect")} /></SelectTrigger>
               <SelectContent>
                 {classes.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.nom} ({c.niveau})</SelectItem>
+                  <SelectItem key={c.id} value={c.id}>{c.nom} ({niveauToLabel(c.niveau)})</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -104,7 +105,7 @@ export function TransfertClasseForm({ classes }: { classes: ClasseSimple[] }) {
               <SelectTrigger><SelectValue placeholder={t("transfertSelect")} /></SelectTrigger>
               <SelectContent>
                 {classes.filter((c) => c.id !== sourceClasseId).map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.nom} ({c.niveau})</SelectItem>
+                  <SelectItem key={c.id} value={c.id}>{c.nom} ({niveauToLabel(c.niveau)})</SelectItem>
                 ))}
               </SelectContent>
             </Select>

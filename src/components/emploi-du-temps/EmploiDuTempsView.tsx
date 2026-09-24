@@ -1,29 +1,35 @@
 "use client";
 
+import { useState, useTransition, useRef, useCallback, useMemo, useEffect } from "react";
 import { useState, useTransition, useRef, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Trash2, Loader2, Clock, Printer, GripVertical, Sparkles, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Plus, Trash2, Loader2, Clock, Printer, GripVertical, Sparkles, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, School, ChevronUp, Minus, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { hasPermission } from "@/lib/client-permissions";
 import { SmartSuggestPanel } from "./SmartSuggestPanel";
+import { ImportEmploiModal } from "./ImportEmploiModal";
 import { useTranslations } from "next-intl";
+import { niveauToLabel } from "@/lib/niveau";
+import {
+  getGridConfig,
+  getStructureTypeFromClasse,
+  computeEndTime,
+  computeDuration,
+  getValidStartSlots,
+  type GridConfig,
+} from "@/lib/emploi-du-temps/grid-config";
 
 type Jour = "DIMANCHE" | "LUNDI" | "MARDI" | "MERCREDI" | "JEUDI" | "VENDREDI" | "SAMEDI";
 
 const JOURS: Jour[] = ["DIMANCHE", "LUNDI", "MARDI", "MERCREDI", "JEUDI", "VENDREDI", "SAMEDI"];
 
-// Continuous grid: 07:00 → 18:00 in 30-min increments
-const ALL_SLOTS = [
-  "07:00", "07:30", "08:00", "08:30", "09:00", "09:30",
-  "10:00", "10:30", "11:00", "11:30", "12:00", "12:30",
-  "13:00", "13:30", "14:00", "14:30", "15:00", "15:30",
-  "16:00", "16:30", "17:00", "17:30",
-];
+// Grille standard (collège/lycée) : 07:00 → 18:00 en pas de 30 min.
+// La grille fine (maternel/primaire) est calculée dynamiquement via getGridConfig
+// dans le composant, selon le type de Structure de la classe sélectionnée.
 
-const SLOT_HEIGHT = 48;
-
-interface Classe { id: string; nom: string; niveau: string }
+interface Classe { id: string; nom: string; niveau: string; structure: { id: string; nom: string; type: string } | null }
 interface Matiere { id: string; nom: string; code: string; couleur: string | null; coefficient: number }
 interface Enseignant { id: string; user: { name: string | null } }
 interface Salle { id: string; nom: string; capacite: number; type: string | null }
@@ -47,10 +53,6 @@ function timeToMinutes(t: string): number {
   return h * 60 + m;
 }
 
-function slotIndexIn(time: string, slots: string[]): number {
-  return slots.indexOf(time);
-}
-
 /**
  * Une session dédoublée en groupes A/B est représentée par deux lignes
  * EmploiTemps distinctes (même jour/horaire, prof et salle différents) — il
@@ -65,15 +67,73 @@ function parseGroupe(salle: string | null): { salleAffichee: string | null; grou
   return { salleAffichee: salle, groupe: null };
 }
 
+/**
+ * Convertit un niveau ("1ère", "2ème", …, "Seconde", "Première", "Terminale")
+ * en numéro d'année (1-12) pour l'affichage à côté du nom de matière.
+ * "1ère" → "1", "Seconde" → "10", "Première" → "11", "Terminale" → "12"
+ */
+function niveauToNumero(niveau: string): string {
+  const map: Record<string, string> = {
+    "1ère": "1", "1ere": "1", "1er": "1",
+    "2ème": "2", "2eme": "2",
+    "3ème": "3", "3eme": "3",
+    "4ème": "4", "4eme": "4",
+    "5ème": "5", "5eme": "5",
+    "6ème": "6", "6eme": "6",
+    "7ème": "7", "7eme": "7",
+    "8ème": "8", "8eme": "8",
+    "9ème": "9", "9eme": "9",
+    "Seconde": "10", "seconde": "10",
+    "Première": "11", "premiere": "11",
+    "Terminale": "12", "terminale": "12", "tle": "12", "term": "12",
+    "Maternelle": "0",
+  };
+  return map[niveau] ?? niveau;
+}
+
 function matiereColor(couleur: string | null): string {
   if (!couleur) return "bg-gray-100 border-gray-300 text-gray-800 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300";
+  // Palette étendue — chaque couleur hex a une classe Tailwind correspondante.
+  // Pour les couleurs non listées, on utilise un fallback vert.
   const colorMap: Record<string, string> = {
-    "#3b82f6": "bg-blue-100 border-blue-300 text-blue-800 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300",
     "#ef4444": "bg-red-100 border-red-300 text-red-800 dark:bg-red-900/30 dark:border-red-700 dark:text-red-300",
+    "#3b82f6": "bg-blue-100 border-blue-300 text-blue-800 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300",
     "#f59e0b": "bg-amber-100 border-amber-300 text-amber-800 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300",
-    "#8b5cf6": "bg-violet-100 border-violet-300 text-violet-800 dark:bg-violet-900/30 dark:border-violet-700 dark:text-violet-300",
     "#10b981": "bg-emerald-100 border-emerald-300 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-700 dark:text-emerald-300",
+    "#8b5cf6": "bg-violet-100 border-violet-300 text-violet-800 dark:bg-violet-900/30 dark:border-violet-700 dark:text-violet-300",
+    "#ec4899": "bg-pink-100 border-pink-300 text-pink-800 dark:bg-pink-900/30 dark:border-pink-700 dark:text-pink-300",
+    "#14b8a6": "bg-teal-100 border-teal-300 text-teal-800 dark:bg-teal-900/30 dark:border-teal-700 dark:text-teal-300",
     "#f97316": "bg-orange-100 border-orange-300 text-orange-800 dark:bg-orange-900/30 dark:border-orange-700 dark:text-orange-300",
+    "#6366f1": "bg-indigo-100 border-indigo-300 text-indigo-800 dark:bg-indigo-900/30 dark:border-indigo-700 dark:text-indigo-300",
+    "#84cc16": "bg-lime-100 border-lime-300 text-lime-800 dark:bg-lime-900/30 dark:border-lime-700 dark:text-lime-300",
+    "#06b6d4": "bg-cyan-100 border-cyan-300 text-cyan-800 dark:bg-cyan-900/30 dark:border-cyan-700 dark:text-cyan-300",
+    "#a855f7": "bg-purple-100 border-purple-300 text-purple-800 dark:bg-purple-900/30 dark:border-purple-700 dark:text-purple-300",
+    "#eab308": "bg-yellow-100 border-yellow-300 text-yellow-800 dark:bg-yellow-900/30 dark:border-yellow-700 dark:text-yellow-300",
+    "#64748b": "bg-slate-100 border-slate-300 text-slate-800 dark:bg-slate-900/30 dark:border-slate-700 dark:text-slate-300",
+    "#dc2626": "bg-rose-100 border-rose-300 text-rose-800 dark:bg-rose-900/30 dark:border-rose-700 dark:text-rose-300",
+    "#0ea5e9": "bg-sky-100 border-sky-300 text-sky-800 dark:bg-sky-900/30 dark:border-sky-700 dark:text-sky-300",
+    "#22c55e": "bg-green-100 border-green-300 text-green-800 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300",
+    "#d946ef": "bg-fuchsia-100 border-fuchsia-300 text-fuchsia-800 dark:bg-fuchsia-900/30 dark:border-fuchsia-700 dark:text-fuchsia-300",
+    "#fbbf24": "bg-amber-100 border-amber-300 text-amber-800 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300",
+    "#7c3aed": "bg-violet-100 border-violet-300 text-violet-800 dark:bg-violet-900/30 dark:border-violet-700 dark:text-violet-300",
+    "#059669": "bg-emerald-100 border-emerald-300 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-700 dark:text-emerald-300",
+    "#e11d48": "bg-rose-100 border-rose-300 text-rose-800 dark:bg-rose-900/30 dark:border-rose-700 dark:text-rose-300",
+    "#0891b2": "bg-cyan-100 border-cyan-300 text-cyan-800 dark:bg-cyan-900/30 dark:border-cyan-700 dark:text-cyan-300",
+    "#ca8a04": "bg-yellow-100 border-yellow-300 text-yellow-800 dark:bg-yellow-900/30 dark:border-yellow-700 dark:text-yellow-300",
+    "#2563eb": "bg-blue-100 border-blue-300 text-blue-800 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300",
+    "#9333ea": "bg-purple-100 border-purple-300 text-purple-800 dark:bg-purple-900/30 dark:border-purple-700 dark:text-purple-300",
+    "#65a30d": "bg-lime-100 border-lime-300 text-lime-800 dark:bg-lime-900/30 dark:border-lime-700 dark:text-lime-300",
+    "#db2777": "bg-pink-100 border-pink-300 text-pink-800 dark:bg-pink-900/30 dark:border-pink-700 dark:text-pink-300",
+    "#0d9488": "bg-teal-100 border-teal-300 text-teal-800 dark:bg-teal-900/30 dark:border-teal-700 dark:text-teal-300",
+    "#c2410c": "bg-orange-100 border-orange-300 text-orange-800 dark:bg-orange-900/30 dark:border-orange-700 dark:text-orange-300",
+    "#4f46e5": "bg-indigo-100 border-indigo-300 text-indigo-800 dark:bg-indigo-900/30 dark:border-indigo-700 dark:text-indigo-300",
+    "#16a34a": "bg-green-100 border-green-300 text-green-800 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300",
+    "#be185d": "bg-pink-100 border-pink-300 text-pink-800 dark:bg-pink-900/30 dark:border-pink-700 dark:text-pink-300",
+    "#1d4ed8": "bg-blue-100 border-blue-300 text-blue-800 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300",
+    "#b45309": "bg-amber-100 border-amber-300 text-amber-800 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300",
+    "#15803d": "bg-emerald-100 border-emerald-300 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-700 dark:text-emerald-300",
+    "#86198f": "bg-fuchsia-100 border-fuchsia-300 text-fuchsia-800 dark:bg-fuchsia-900/30 dark:border-fuchsia-700 dark:text-fuchsia-300",
+    "#9f1239": "bg-rose-100 border-rose-300 text-rose-800 dark:bg-rose-900/30 dark:border-rose-700 dark:text-rose-300",
   };
   return colorMap[couleur] ?? "bg-green-100 border-green-300 text-green-800 dark:bg-green-900/30 dark:border-green-700 dark:text-green-300";
 }
@@ -87,7 +147,7 @@ function AddCreneauModal({
   salles,
   disponibilites,
   emploisExistants,
-  availableSlots,
+  gridConfig,
   onClose,
   onAdded,
 }: {
@@ -99,21 +159,63 @@ function AddCreneauModal({
   salles: Salle[];
   disponibilites: Disponibilite[];
   emploisExistants: EmploiCreneau[];
-  availableSlots: string[];
+  gridConfig: GridConfig;
   onClose: () => void;
   onAdded: (c: EmploiCreneau) => void;
 }) {
   const t = useTranslations("emploi");
+  const { slots: availableSlots, durations, isFineGrid, stepMinutes } = gridConfig;
+  // Durée par défaut : 60 min en grille standard, 30 min en grille fine.
+  const defaultDuration = isFineGrid ? 30 : 60;
+  const [selectedDuration, setSelectedDuration] = useState<number>(defaultDuration);
   const [form, setForm] = useState({
     classeId,
     matiereId: matieres[0]?.id ?? "",
     enseignantId: "",
     jour: "DIMANCHE" as Jour,
-    heureDebut: availableSlots[0] ?? "07:30",
-    heureFin: availableSlots[1] ?? "08:00",
+    heureDebut: availableSlots[0] ?? "07:00",
+    heureFin: computeEndTime(availableSlots[0] ?? "07:00", defaultDuration),
     salle: "",
   });
   const [isPending, startTransition] = useTransition();
+
+  // Slots de début valides pour la durée sélectionnée (ne dépassant pas 18:00).
+  const validStartSlots = useMemo(
+    () => getValidStartSlots(availableSlots, selectedDuration),
+    [availableSlots, selectedDuration],
+  );
+
+  // Quand la durée change, recalculer l'heure de fin.
+  function changeDuration(newDuration: number) {
+    setSelectedDuration(newDuration);
+    const newFin = computeEndTime(form.heureDebut, newDuration);
+    // Si la nouvelle heure de fin dépasse 18:00, reculer l'heure de début.
+    if (timeToMinutes(newFin) > timeToMinutes("18:00")) {
+      const newDebutMin = timeToMinutes("18:00") - newDuration;
+      const newDebut = `${String(Math.floor(newDebutMin / 60)).padStart(2, "0")}:${String(newDebutMin % 60).padStart(2, "0")}`;
+      setForm({ ...form, heureDebut: newDebut, heureFin: "18:00" });
+    } else {
+      setForm({ ...form, heureFin: newFin });
+    }
+  }
+
+  // Naviguer dans la liste des durées avec les flèches haut/bas.
+  function cycleDuration(direction: "up" | "down") {
+    const idx = durations.indexOf(selectedDuration as never);
+    if (direction === "up") {
+      const nextIdx = idx > 0 ? idx - 1 : durations.length - 1;
+      changeDuration(durations[nextIdx]);
+    } else {
+      const nextIdx = idx < durations.length - 1 ? idx + 1 : 0;
+      changeDuration(durations[nextIdx]);
+    }
+  }
+
+  // Quand l'heure de début change, recalculer l'heure de fin selon la durée.
+  function changeHeureDebut(newDebut: string) {
+    const newFin = computeEndTime(newDebut, selectedDuration);
+    setForm({ ...form, heureDebut: newDebut, heureFin: newFin });
+  }
 
   // Filter enseignants: only those who already teach the selected matiere
   const filteredEnseignants = matiereToEnseignants[form.matiereId] ?? [];
@@ -226,29 +328,81 @@ function AddCreneauModal({
               {JOURS.map((j) => <option key={j} value={j}>{t(`daysShort.${j}`)}</option>)}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          {/* Sélecteur de durée à flèches (maternel/primaire) ou select standard */}
+          {isFineGrid ? (
+            <div>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">
+                {t("durationLabel")}
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => cycleDuration("down")}
+                  className="flex-shrink-0 w-9 h-9 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-center transition-colors"
+                  aria-label={t("durationDecrease")}
+                >
+                  <Minus className="w-4 h-4" />
+                </button>
+                <div className="flex-1 text-center border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 font-semibold">
+                  {selectedDuration} min
+                  <span className="block text-xs font-normal text-gray-400 mt-0.5">
+                    {form.heureDebut} → {form.heureFin}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => cycleDuration("up")}
+                  className="flex-shrink-0 w-9 h-9 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-center transition-colors"
+                  aria-label={t("durationIncrease")}
+                >
+                  <ChevronUp className="w-4 h-4" />
+                </button>
+              </div>
+              {/* Quick-pick des durées disponibles */}
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {durations.map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => changeDuration(d)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
+                      selectedDuration === d
+                        ? "bg-green-600 text-white"
+                        : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700",
+                    )}
+                  >
+                    {d}min
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <div className={isFineGrid ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
             <div>
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t("startLabel")}</label>
               <select
                 required
                 value={form.heureDebut}
-                onChange={(e) => setForm({ ...form, heureDebut: e.target.value })}
+                onChange={(e) => changeHeureDebut(e.target.value)}
                 className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
               >
-                {availableSlots.slice(0, -1).map((slot) => <option key={slot} value={slot}>{slot}</option>)}
+                {validStartSlots.map((slot) => <option key={slot} value={slot}>{slot}</option>)}
               </select>
             </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t("endLabel")}</label>
-              <select
-                required
-                value={form.heureFin}
-                onChange={(e) => setForm({ ...form, heureFin: e.target.value })}
-                className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
-              >
-                {availableSlots.slice(1).map((slot) => <option key={slot} value={slot}>{slot}</option>)}
-              </select>
-            </div>
+            {!isFineGrid && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-1">{t("endLabel")}</label>
+                <select
+                  required
+                  value={form.heureFin}
+                  onChange={(e) => setForm({ ...form, heureFin: e.target.value })}
+                  className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  {availableSlots.slice(1).map((slot) => <option key={slot} value={slot}>{slot}</option>)}
+                </select>
+              </div>
+            )}
           </div>
           {/* Avertissement disponibilité enseignant */}
           {form.enseignantId && !enseignantDisponible && (
@@ -314,6 +468,7 @@ export function EmploiDuTempsView({
   matiereToEnseignants,
   salles,
   disponibilites,
+  userRole,
   readOnly = false,
 }: {
   classes: Classe[];
@@ -324,6 +479,7 @@ export function EmploiDuTempsView({
   salles: Salle[];
   disponibilites: Disponibilite[];
   tenantId: string;
+  userRole?: string;
   /**
    * Consultation seule (enseignant) : masque la création, la suppression,
    * les suggestions IA et le glisser-déposer. Un enseignant consulte son
@@ -332,29 +488,143 @@ export function EmploiDuTempsView({
   readOnly?: boolean;
 }) {
   const t = useTranslations("emploi");
+  const canWrite = hasPermission(userRole, "emploi-du-temps:write");
   const [emplois, setEmplois] = useState<EmploiCreneau[]>(initial);
   const [selectedClasse, setSelectedClasse] = useState<Classe | null>(classes[0] ?? null);
   const [showAdd, setShowAdd] = useState(false);
   const [showSuggest, setShowSuggest] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverSlot, setDragOverSlot] = useState<{ jour: Jour; time: string } | null>(null);
   const dragOffsetRef = useRef(0);
 
+  // Configuration de grille dynamique : grille fine (pas de 10 min) pour le
+  // maternel et le primaire, grille standard (pas de 30 min) pour le collège/lycée.
+  // La détection se fait sur le type de la Structure de la classe sélectionnée.
+  const gridConfig = useMemo<GridConfig>(() => {
+    const structureType = getStructureTypeFromClasse(selectedClasse);
+    return getGridConfig(structureType);
+  }, [selectedClasse]);
+
+  // Slots et hauteur utilisés dans tout le rendu de la grille.
+  const ALL_SLOTS = gridConfig.slots;
+  const SLOT_HEIGHT = gridConfig.slotHeight;
+
+  // État des accordéons : catégories (structures) et niveaux dépliés.
+  // La catégorie de la classe sélectionnée est automatiquement dépliée.
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
+  const [expandedLevels, setExpandedLevels] = useState<Set<string>>(new Set());
+
+  // Hiérarchie : catégorie (structure) → niveau → classes.
+  // Les classes sans structure sont regroupées sous "— Hors catégorie —".
+  const hierarchy = useMemo(() => {
+    const map = new Map<string, { id: string; nom: string; type: string; niveaux: Map<string, Classe[]> }>();
+    for (const c of classes) {
+      const catKey = c.structure?.id ?? "__none__";
+      const catNom = c.structure?.nom ?? t("noCategory");
+      const catType = c.structure?.type ?? "";
+      if (!map.has(catKey)) {
+        map.set(catKey, { id: catKey, nom: catNom, type: catType, niveaux: new Map() });
+      }
+      const cat = map.get(catKey)!;
+      if (!cat.niveaux.has(c.niveau)) cat.niveaux.set(c.niveau, []);
+      cat.niveaux.get(c.niveau)!.push(c);
+    }
+    // Tri des catégories par type (MATERNELLE < PRIMAIRE < COLLEGE < LYCEE), puis par nom
+    const typeOrder: Record<string, number> = { MATERNELLE: 0, PRIMAIRE: 1, COLLEGE: 2, LYCEE: 3 };
+    return [...map.values()].sort((a, b) => {
+      const ta = typeOrder[a.type] ?? 99;
+      const tb = typeOrder[b.type] ?? 99;
+      if (ta !== tb) return ta - tb;
+      return a.nom.localeCompare(b.nom);
+    });
+  }, [classes, t]);
+
+  // Déplie automatiquement la catégorie + niveau de la classe sélectionnée
+  useEffect(() => {
+    if (!selectedClasse) return;
+    const catKey = selectedClasse.structure?.id ?? "__none__";
+    const levelKey = `${catKey}::${selectedClasse.niveau}`;
+    setExpandedCats((prev) => (prev.has(catKey) ? prev : new Set(prev).add(catKey)));
+    setExpandedLevels((prev) => (prev.has(levelKey) ? prev : new Set(prev).add(levelKey)));
+  }, [selectedClasse]);
+
+  function toggleCat(key: string) {
+    setExpandedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleLevel(key: string) {
+    setExpandedLevels((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
   // Mémoïsé : recalculé à chaque rendu, ce tableau changeait d'identité en
   // permanence et invalidait le `useCallback` de déplacement de créneau, qui
   // en dépend — la mémoïsation ne servait donc plus à rien.
+  // Fusionne les créneaux adjacents de même matière (même jour, même matière,
+  // heure de fin de l'un = heure de début du suivant) en un seul créneau.
+  const classeEmplois = useMemo(() => {
+    if (!selectedClasse) return [];
+    const filtered = emplois.filter(
+      (e) =>
+        e.classe.nom === selectedClasse.nom ||
+        (e as { classeId?: string }).classeId === selectedClasse.id
+    );
+
+    // Grouper par jour
+    const byDay = new Map<Jour, typeof filtered>();
+    for (const e of filtered) {
+      const day = e.jour;
+      if (!byDay.has(day)) byDay.set(day, []);
+      byDay.get(day)!.push(e);
+    }
+
+    // Pour chaque jour, fusionner les créneaux adjacents de même matière
+    const merged: typeof filtered = [];
+    for (const [, dayCreneaux] of byDay) {
+      // Trier par heure de début
+      const sorted = [...dayCreneaux].sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
+      const stack: typeof sorted = [];
+
+      for (const current of sorted) {
+        const prev = stack[stack.length - 1];
+        if (
+          prev &&
+          prev.matiere.nom === current.matiere.nom &&
+          prev.heureFin === current.heureDebut &&
+          // Ne pas fusionner si l'enseignant ou la salle diffère
+          (prev.enseignant?.user?.name ?? null) === (current.enseignant?.user?.name ?? null) &&
+          (prev.salle ?? null) === (current.salle ?? null)
+        ) {
+          // Fusionner : étendre la fin du précédent
+          stack[stack.length - 1] = {
+            ...prev,
+            heureFin: current.heureFin,
+          };
+        } else {
+          stack.push(current);
+        }
+      }
+      merged.push(...stack);
+    }
+
+    return merged;
+  }, [selectedClasse, emplois]);
   const classeEmplois = useMemo(
     () =>
       selectedClasse
         ? emplois.filter(
-            (e) =>
-              e.classe.nom === selectedClasse.nom ||
-              (e as { classeId?: string }).classeId === selectedClasse.id
           )
         : [],
     [selectedClasse, emplois]
-  );
 
   function addCreneau(c: EmploiCreneau) {
     setEmplois((prev) => [...prev, c]);
@@ -447,7 +717,13 @@ export function EmploiDuTempsView({
       <div key={jour} className="relative border-l border-gray-100 dark:border-gray-800">
         {ALL_SLOTS.map((time, idx) => {
           const isDropTarget = dragOverSlot?.jour === jour && dragOverSlot?.time === time;
-          const isLunch = time === "12:30" || time === "13:00" || time === "13:30";
+          // Pause déjeuner : 12:00 → 14:00. En grille fine, tous les slots de
+          // cette plage sont grisés ; en grille standard, seulement 12:30/13:00/13:30.
+          const timeMin = timeToMinutes(time);
+          const isLunch = timeMin >= 720 && timeMin < 840;
+          // Alternance de fond : en grille fine, alterner toutes les 3 cellules
+          // (toutes les 30 min) pour rester lisible ; en standard, toutes les 2.
+          const altInterval = gridConfig.isFineGrid ? 6 : 2;
           return (
             <div
               key={time}
@@ -455,7 +731,7 @@ export function EmploiDuTempsView({
                 "border-b border-gray-100 dark:border-gray-800 relative transition-colors",
                 isLunch
                   ? "bg-gray-100/50 dark:bg-gray-800/50"
-                  : idx % 2 === 0 ? "bg-white dark:bg-gray-900" : "bg-gray-50/50 dark:bg-gray-800/30",
+                  : Math.floor(idx / altInterval) % 2 === 0 ? "bg-white dark:bg-gray-900" : "bg-gray-50/50 dark:bg-gray-800/30",
                 isDropTarget && "bg-green-100 dark:bg-green-900/30 ring-2 ring-green-400 ring-inset"
               )}
               style={{ height: SLOT_HEIGHT }}
@@ -508,9 +784,15 @@ export function EmploiDuTempsView({
     }
 
     return [...parHoraire.values()].map((group) => {
-      const startIdx = slotIndexIn(group[0].heureDebut, ALL_SLOTS);
-      const endIdx = slotIndexIn(group[0].heureFin, ALL_SLOTS);
-      if (startIdx < 0 || endIdx < 0) return null;
+      // Calcul basé sur les minutes plutôt que sur l'index du slot : un créneau
+      // peut ne pas être aligné sur la grille (ex: 07:00-07:35 en grille 10 min).
+      const debutMin = timeToMinutes(group[0].heureDebut);
+      const finMin = timeToMinutes(group[0].heureFin);
+      const gridStartMin = timeToMinutes(ALL_SLOTS[0]);
+      const stepMin = gridConfig.stepMinutes;
+      const startIdx = (debutMin - gridStartMin) / stepMin;
+      const endIdx = (finMin - gridStartMin) / stepMin;
+      if (startIdx < 0 || endIdx < 0 || endIdx < startIdx) return null;
 
       const top = startIdx * SLOT_HEIGHT;
       const height = (endIdx - startIdx) * SLOT_HEIGHT;
@@ -528,6 +810,7 @@ export function EmploiDuTempsView({
                 key={creneau.id}
                 draggable={!readOnly}
                 onDragStart={(e) => {
+                  console.log('[drag-drop] dragStart on creneau', creneau.id, creneau.matiere.nom);
                   if (readOnly) return;
                   setDraggedId(creneau.id);
                   e.dataTransfer.effectAllowed = "move";
@@ -552,15 +835,15 @@ export function EmploiDuTempsView({
                   <div className="flex items-start gap-1">
                     <GripVertical className="w-3 h-3 opacity-40 flex-shrink-0 mt-0.5" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold leading-tight truncate">
-                        {creneau.matiere.code}
+                      <p className="text-xs font-bold leading-tight truncate uppercase">
+                        {creneau.matiere.nom}
+                        {selectedClasse?.niveau && (
+                          <span className="ml-1 opacity-75">
+                            {niveauToNumero(selectedClasse.niveau)}
+                          </span>
+                        )}
                         {groupe && <span className="ml-1 opacity-70">· Gr.{groupe}</span>}
                       </p>
-                      {height >= 80 && (
-                        <p className="text-xs opacity-80 truncate leading-tight mt-0.5">
-                          {creneau.matiere.nom}
-                        </p>
-                      )}
                     </div>
                   </div>
                   <div className="text-xs opacity-70 leading-tight">
@@ -616,29 +899,102 @@ export function EmploiDuTempsView({
         }
       `}</style>
 
+      {/* Sélecteur de classes — hiérarchie Catégorie → Niveau → Classe (accordéons) */}
+      <div className="flex flex-col sm:flex-row sm:items-start gap-4 print:hidden">
+        <div className="flex-1 min-w-0 space-y-1.5 max-h-[420px] overflow-y-auto scrollbar-thin pr-1">
+          {hierarchy.length === 0 && (
+            <p className="text-sm text-gray-400 italic py-4 text-center">{t("noClasses")}</p>
+          )}
+          {hierarchy.map((cat) => {
+            const catExpanded = expandedCats.has(cat.id);
+            const catClassCount = [...cat.niveaux.values()].reduce((s, cs) => s + cs.length, 0);
+            const catHasSelected = selectedClasse && (selectedClasse.structure?.id ?? "__none__") === cat.id;
+            return (
+              <div key={cat.id} className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                {/* Niveau 1 : Catégorie (structure pédagogique) */}
+                <button
+                  onClick={() => toggleCat(cat.id)}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2.5 text-sm font-semibold transition-colors",
+                    catHasSelected
+                      ? "bg-primary/10 dark:bg-primary/20 text-primary"
+                      : "bg-gray-50 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  )}
+                >
+                  {catExpanded ? <ChevronDown className="w-4 h-4 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 flex-shrink-0" />}
+                  <School className="w-4 h-4 flex-shrink-0 opacity-70" />
+                  <span className="truncate">{cat.nom}</span>
+                  <span className="ml-auto text-xs font-normal text-gray-400 flex-shrink-0">
+                    {t("classCount", { count: catClassCount })}
+                  </span>
+                </button>
+                {catExpanded && (
+                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {[...cat.niveaux.entries()]
+                      .sort((a, b) => a[0].localeCompare(b[0], "fr"))
+                      .map(([niveau, niveauClasses]) => {
+                        const levelKey = `${cat.id}::${niveau}`;
+                        const levelExpanded = expandedLevels.has(levelKey);
+                        const levelHasSelected = selectedClasse && selectedClasse.niveau === niveau && (selectedClasse.structure?.id ?? "__none__") === cat.id;
+                        return (
+                          <div key={levelKey} className="bg-white dark:bg-gray-900">
+                            {/* Niveau 2 : Niveau */}
+                            <button
+                              onClick={() => toggleLevel(levelKey)}
+                              className={cn(
+                                "w-full flex items-center gap-2 pl-8 pr-3 py-2 text-sm transition-colors",
+                                levelHasSelected
+                                  ? "text-primary font-medium"
+                                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/40"
+                              )}
+                            >
+                              {levelExpanded ? <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" />}
+                              <span className="truncate">{niveauToLabel(niveau)}</span>
+                              <span className="ml-auto text-xs text-gray-400 flex-shrink-0">{niveauClasses.length}</span>
+                            </button>
+                            {levelExpanded && (
+                              /* Niveau 3 : Classes */
+                              <div className="flex flex-wrap gap-2 pl-12 pr-3 pb-3 pt-1">
+                                {niveauClasses.map((c) => (
+                                  <button
+                                    key={c.id}
+                                    onClick={() => setSelectedClasse(c)}
+                                    className={cn(
+                                      "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                                      selectedClasse?.id === c.id
+                                        ? "bg-primary text-white shadow-md"
+                                        : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                    )}
+                                  >
+                                    {c.nom}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
       {/* Classe selector */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 print:hidden">
         <div className="flex gap-2 flex-wrap">
           {classes.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setSelectedClasse(c)}
-              className={cn(
                 "px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                selectedClasse?.id === c.id
-                  ? "bg-primary text-white shadow-md"
-                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-              )}
-            >
-              {c.nom}
-            </button>
-          ))}
         </div>
         <div className="ml-auto flex items-center gap-3">
           {selectedClasse && (
             <span className="text-sm text-gray-500">
               <Clock className="w-4 h-4 inline mr-1" />
               {t("hoursPerWeek", { count: totalHeures })}
+            </span>
+          )}
+          {selectedClasse && gridConfig.isFineGrid && (
+            <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-medium">
+              {t("fineGridMode")}
             </span>
           )}
           <Button
@@ -650,37 +1006,51 @@ export function EmploiDuTempsView({
             <Printer className="w-4 h-4" />
             {t("print")}
           </Button>
-          {!readOnly && (
-            <Button
-              onClick={() => setShowSuggest(true)}
-              disabled={!selectedClasse}
-              className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
-              size="sm"
-            >
-              <Sparkles className="w-4 h-4" />
-              {t("optimize")}
-            </Button>
+          {canWrite && (
+          <Button
+            onClick={() => setShowImport(true)}
+            variant="outline"
+            className="gap-2"
+            size="sm"
+          >
+            <Upload className="w-4 h-4" />
+            {t("importBtn")}
+          </Button>
           )}
+          {canWrite && (
+          <Button
+            onClick={() => setShowSuggest(true)}
+            disabled={!selectedClasse}
+            className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
+            size="sm"
+          >
+            <Sparkles className="w-4 h-4" />
+            {t("optimize")}
+          </Button>
+          )}
+          {canWrite && (
+          <Button
+            onClick={() => setShowAdd(true)}
+            disabled={!selectedClasse}
+            className="gap-2 bg-green-600 hover:bg-green-700 text-white"
+            size="sm"
+          >
+            <Plus className="w-4 h-4" />
+            {t("addSlotBtn")}
+          </Button>
           {!readOnly && (
-            <Button
-              onClick={() => setShowAdd(true)}
-              disabled={!selectedClasse}
-              className="gap-2 bg-green-600 hover:bg-green-700 text-white"
-              size="sm"
-            >
-              <Plus className="w-4 h-4" />
-              {t("addSlotBtn")}
-            </Button>
+          {!readOnly && (
           )}
         </div>
       </div>
 
       {/* Info banner */}
+      <div className="text-xs text-gray-500 bg-gray-50 dark:bg-gray-800/50 rounded-lg px-4 py-2 flex items-center gap-2 print:hidden">
+        <GripVertical className="w-4 h-4" />
+        <span>{gridConfig.isFineGrid ? t("dragHintFine") : t("dragHint")}</span>
+      </div>
       {!readOnly && (
-        <div className="text-xs text-gray-500 bg-gray-50 dark:bg-gray-800/50 rounded-lg px-4 py-2 flex items-center gap-2 print:hidden">
-          <GripVertical className="w-4 h-4" />
           <span>{t("dragHint")}</span>
-        </div>
       )}
 
       {/* Grille horaire */}
@@ -702,15 +1072,22 @@ export function EmploiDuTempsView({
               <div className="relative flex">
                 {/* Time labels column */}
                 <div className="w-[60px] flex-shrink-0">
-                  {ALL_SLOTS.map((time, idx) => (
-                    <div
-                      key={time}
-                      className="flex items-start justify-end pr-3 pt-1 border-b border-gray-100 dark:border-gray-800"
-                      style={{ height: SLOT_HEIGHT }}
-                    >
-                      {idx % 2 === 0 && <span className="text-xs text-gray-400">{time}</span>}
-                    </div>
-                  ))}
+                  {ALL_SLOTS.map((time, idx) => {
+                    // En grille fine (10 min), afficher un label toutes les
+                    // 30 min (tous les 3 slots). En grille standard (30 min),
+                    // afficher un label tous les 2 slots (toutes les heures).
+                    const labelInterval = gridConfig.isFineGrid ? 3 : 2;
+                    const showLabel = idx % labelInterval === 0;
+                    return (
+                      <div
+                        key={time}
+                        className="flex items-start justify-end pr-3 pt-1 border-b border-gray-100 dark:border-gray-800"
+                        style={{ height: SLOT_HEIGHT }}
+                      >
+                        {showLabel && <span className="text-xs text-gray-400">{time}</span>}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Day columns container */}
@@ -751,7 +1128,7 @@ export function EmploiDuTempsView({
           salles={salles}
           disponibilites={disponibilites}
           emploisExistants={emplois}
-          availableSlots={availableSlotsForAdd}
+          gridConfig={gridConfig}
           onClose={() => setShowAdd(false)}
           onAdded={addCreneau}
         />
@@ -779,6 +1156,48 @@ export function EmploiDuTempsView({
               );
               return [...otherClasses, ...newCreneaux];
             });
+          }}
+        />
+      )}
+
+      {showImport && classes.length > 0 && (
+        <ImportEmploiModal
+          classes={classes}
+          initialClasseId={selectedClasse?.id ?? classes[0].id}
+          existingCreneaux={emplois as unknown as { id: string; jour: Jour; heureDebut: string; heureFin: string; salle: string | null; matiere: { nom: string; code: string; couleur: string | null }; enseignant: { user: { name: string | null } } | null; classeId?: string }[]}
+          onClose={() => setShowImport(false)}
+          onImported={(imported, classeId, classeNom) => {
+            // bulk-apply remplace tous les créneaux de la classe : on reconstruit
+            // l'état local en gardant les autres classes et en ajoutant les nouveaux.
+            const newCreneaux = imported.map((c) => ({
+              id: `imported-${c.jour}-${c.heureDebut}-${c.matiereId}`,
+              jour: c.jour,
+              heureDebut: c.heureDebut,
+              heureFin: c.heureFin,
+              salle: c.salle,
+              matiere: {
+                nom: c.matiereNom,
+                code: "",
+                couleur: matieres.find((m) => m.id === c.matiereId)?.couleur ?? null,
+              },
+              classe: { nom: classeNom },
+              enseignant: c.enseignantId
+                ? { user: { name: c.enseignantNom } }
+                : null,
+              classeId,
+              matiereId: c.matiereId,
+              enseignantId: c.enseignantId,
+            })) as EmploiCreneau[];
+            setEmplois((prev) => {
+              const otherClasses = prev.filter(
+                (e) =>
+                  e.classe.nom !== classeNom &&
+                  (e as { classeId?: string }).classeId !== classeId
+              );
+              return [...otherClasses, ...newCreneaux];
+            });
+            // Recharger les données pour récupérer les IDs réels depuis la DB
+            window.location.reload();
           }}
         />
       )}

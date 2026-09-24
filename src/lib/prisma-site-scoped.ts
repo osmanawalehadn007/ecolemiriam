@@ -1,5 +1,5 @@
 /**
- * EcolPro — Wrapper Prisma avec injection automatique du filtre de site
+ * École Miriam — Wrapper Prisma avec injection automatique du filtre de site
  * ====================================================================
  *
  * `prismaSiteScoped()` retourne un Proxy autour du client Prisma qui injecte

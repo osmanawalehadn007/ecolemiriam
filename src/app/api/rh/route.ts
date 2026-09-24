@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
       },
       ficheRH: {
         include: {
+          // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
           // Enfants d'une fiche RH elle-même rattachée à un enseignant déjà
           // borné au périmètre par le `where` racine : aucun chemin de site
           // propre (`BulletinPaie` → `FicheRH` → `Enseignant` → sites).
@@ -36,6 +37,7 @@ export async function GET(req: NextRequest) {
           },
         },
       },
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
       // Même raisonnement : créneaux et classes de CET enseignant, déjà filtré.
       // eslint-disable-next-line ecolpro/require-site-filter
       emploiTemps: {
@@ -45,6 +47,7 @@ export async function GET(req: NextRequest) {
           classe: { select: { nom: true } },
         },
       },
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
       // eslint-disable-next-line ecolpro/require-site-filter
       classesPrincipales: {
         select: { id: true, nom: true, niveau: true },

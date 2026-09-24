@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Settings, Users, GraduationCap, BookOpen, UserCog, Settings2, Calendar, Stamp, Building2,
-  School, UsersRound, BookOpenCheck, ChevronDown, DollarSign, CopyCheck,
+  School, UsersRound, BookOpenCheck, ChevronDown, DollarSign, CopyCheck, ClipboardList, DoorOpen,
+  Shield, HardDriveDownload, CalendarX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EtablissementTab } from "./EtablissementTab";
@@ -18,12 +19,34 @@ import { SignatureCachetManager } from "./SignatureCachetManager";
 import { SitesTab } from "./SitesTab";
 import { TarifsTab } from "./TarifsTab";
 import { DoublonsTab } from "./DoublonsTab";
+import { Security2FA } from "./Security2FA";
+import { SauvegardesTab } from "./SauvegardesTab";
 import { AnneesScolairesTab } from "./AnneesScolairesTab";
+import { EnseignantsAffectationTab } from "./EnseignantsAffectationTab";
+import { EdtPersonnelsTab } from "./EdtPersonnelsTab";
+import { SallesTab } from "./SallesTab";
 
 import type { AvailableTenant } from "@/auth.config";
 
+type Tab =
+  | "etablissement"
+  | "annees"
+  | "utilisateurs"
+  | "parents"
+  | "classes"
+  | "matieres"
+  | "enseignants"
+  | "edtPersonnels"
+  | "salles"
+  | "appreciations"
+  | "periodes"
+  | "signature"
+  | "sites"
+  | "tarifs"
+  | "doublons"
+  | "securite"
+  | "sauvegardes";
 import type { ParametresTab as Tab } from "@/lib/parametres-tabs";
-
 export type { Tab };
 
 type TabDef = { id: Tab; labelKey: string; icon: typeof Settings };
@@ -32,6 +55,8 @@ type TabGroup = {
   groupKey: string;
   icon: typeof Settings;
   tabs: TabDef[];
+  /** Si défini, le groupe n'est visible que pour ces rôles. */
+  adminOnly?: boolean;
 };
 
 const tabGroups: TabGroup[] = [
@@ -60,6 +85,9 @@ const tabGroups: TabGroup[] = [
     tabs: [
       { id: "classes", labelKey: "classes", icon: GraduationCap },
       { id: "matieres", labelKey: "matieres", icon: BookOpen },
+      { id: "enseignants", labelKey: "enseignantsAffectation", icon: ClipboardList },
+      { id: "edtPersonnels", labelKey: "edtPersonnels", icon: CalendarX },
+      { id: "salles", labelKey: "salles", icon: DoorOpen },
       { id: "appreciations", labelKey: "appreciations", icon: Settings2 },
       { id: "periodes", labelKey: "periodes", icon: Calendar },
     ],
@@ -69,6 +97,15 @@ const tabGroups: TabGroup[] = [
     icon: DollarSign,
     tabs: [
       { id: "tarifs", labelKey: "tarifs", icon: DollarSign },
+    ],
+  },
+  {
+    groupKey: "groupSecurite",
+    icon: Shield,
+    adminOnly: true,
+    tabs: [
+      { id: "securite", labelKey: "securite", icon: Shield },
+      { id: "sauvegardes", labelKey: "sauvegardes", icon: HardDriveDownload },
     ],
   },
 ];
@@ -85,6 +122,8 @@ interface ParametresTabsProps {
   sites: Awaited<ReturnType<typeof import("@/lib/actions/parametres").getSitesForSettings>>;
   annees: Awaited<ReturnType<typeof import("@/lib/actions/parametres").getAnneesScolaires>>;
   canManage: boolean;
+  sessionRole?: string;
+  sessionSiteId?: string;
   availableTenants?: AvailableTenant[];
   /**
    * Onglets auxquels l'appelant a droit. Calculé côté serveur depuis la matrice
@@ -106,11 +145,26 @@ export function ParametresTabs({
   sites,
   annees,
   canManage,
+  sessionRole,
+  sessionSiteId,
   availableTenants,
   allowedTabs,
 }: ParametresTabsProps) {
   const t = useTranslations("parametres");
+  // Année courante du tenant : sert de valeur par défaut aux formulaires
+  // (création de classe notamment), à la place d'un libellé écrit en dur.
+  const anneeCourante = annees.find((a) => a.isCurrent)?.libelle ?? annees[0]?.libelle;
+  const [activeTab, setActiveTab] = useState<Tab>("etablissement");
 
+  // ── Filtrage par rôle : le groupe Sécurité (2FA + Sauvegardes) n'est
+  //    visible que pour TENANT_ADMIN et SUPER_ADMIN (le directeur).
+  const isAdmin = sessionRole === "TENANT_ADMIN" || sessionRole === "SUPER_ADMIN";
+  const visibleGroups = tabGroups.filter((g) => !g.adminOnly || isAdmin);
+
+  // Trouver le groupe actif (parmi les groupes visibles seulement)
+  const activeGroup = visibleGroups.find((g) => g.tabs.some((tab) => tab.id === activeTab)) ?? visibleGroups[0];
+  const [activeGroupId, setActiveGroupId] = useState(activeGroup.groupKey);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(activeGroup.groupKey);
   // Groupes réduits aux onglets autorisés — un groupe sans onglet disparaît.
   const groups = tabGroups
     .map((group) => ({
@@ -119,9 +173,7 @@ export function ParametresTabs({
     }))
     .filter((group) => group.tabs.length > 0);
   const firstTab: Tab = groups[0]?.tabs[0]?.id ?? "etablissement";
-
   const [activeTab, setActiveTab] = useState<Tab>(firstTab);
-
   // Trouver le groupe actif
   const activeGroup = groups.find((g) => g.tabs.some((tab) => tab.id === activeTab)) ?? groups[0];
   const [activeGroupId, setActiveGroupId] = useState(activeGroup?.groupKey ?? "");
@@ -140,6 +192,7 @@ export function ParametresTabs({
     <div className="space-y-4">
       {/* Niveau 1: Onglets de groupe */}
       <div className="flex flex-wrap gap-2">
+        {visibleGroups.map((group) => (
         {groups.map((group) => (
           <button
             key={group.groupKey}
@@ -166,6 +219,7 @@ export function ParametresTabs({
       {/* Niveau 2: Sous-onglets du groupe actif */}
       {expandedGroup && (
         <div className="flex flex-wrap gap-1.5 border-b pb-px">
+          {visibleGroups
           {groups
             .find((g) => g.groupKey === expandedGroup)
             ?.tabs.map((tab) => (
@@ -190,10 +244,21 @@ export function ParametresTabs({
       <div>
         {activeTab === "etablissement" && <EtablissementTab etablissement={etablissement} canManage={canManage} />}
         {activeTab === "annees" && <AnneesScolairesTab annees={annees} canManage={canManage} />}
+        {activeTab === "utilisateurs" && <UsersTab users={users} canManage={canManage} sessionRole={sessionRole} sessionSiteId={sessionSiteId} availableTenants={availableTenants} sites={sites} />}
         {activeTab === "utilisateurs" && <UsersTab users={users} canManage={canManage} availableTenants={availableTenants} sites={sites} />}
         {activeTab === "parents" && <ParentsTab parents={parents} eleves={eleves} canManage={canManage} />}
-        {activeTab === "classes" && <ClassesTab classes={classes} canManage={canManage} sites={sites} />}
+        {activeTab === "classes" && (
+          <ClassesTab
+            classes={classes}
+            canManage={canManage}
+            sites={sites}
+            anneeCourante={anneeCourante}
+          />
+        )}
         {activeTab === "matieres" && <MatieresTab matieres={matieres} canManage={canManage} />}
+        {activeTab === "enseignants" && <EnseignantsAffectationTab canManage={canManage} />}
+        {activeTab === "edtPersonnels" && <EdtPersonnelsTab canManage={canManage} />}
+        {activeTab === "salles" && <SallesTab canManage={canManage} sites={sites} />}
         {activeTab === "appreciations" && <ReglesAppreciationManager regles={regles} />}
         {activeTab === "periodes" && (
           <PeriodesClotureManager
@@ -217,12 +282,15 @@ export function ParametresTabs({
               chefEtablissement: etablissement.chefEtablissement,
               signatureUrl: etablissement.signatureUrl,
               cachetUrl: etablissement.cachetUrl,
+              logoUrl: etablissement.logoUrl,
             }}
           />
         )}
         {activeTab === "sites" && <SitesTab sites={sites} canManage={canManage} />}
-        {activeTab === "tarifs" && <TarifsTab />}
+        {activeTab === "tarifs" && <TarifsTab anneeCourante={anneeCourante} />}
         {activeTab === "doublons" && <DoublonsTab />}
+        {activeTab === "securite" && <Security2FA />}
+        {activeTab === "sauvegardes" && <SauvegardesTab />}
       </div>
     </div>
   );

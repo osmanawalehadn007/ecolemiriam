@@ -1,0 +1,10 @@
+# Auto-généré par blue-green-deploy.sh — ne pas éditer manuellement
+# Slot actif : blue (initial)
+#
+# NOTE : Ce fichier est dans .gitignore car il est régénéré à chaque
+# déploiement. Cette version .example sert de référence pour le premier
+# déploiement. Copier en upstream-simple.conf au premier setup :
+#   cp upstream-simple.conf.example upstream-simple.conf
+reverse_proxy app-blue:3000 {
+    header_up X-Forwarded-Proto https
+}

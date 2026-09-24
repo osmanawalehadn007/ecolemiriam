@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyMobileScope, mobileUnauthorized } from "@/lib/mobile-auth";
+import { withMobileScope } from "@/lib/mobile-auth";
 import prisma from "@/lib/prisma";
 import { sendAbsenceAlert } from "@/lib/sms/africasTalking";
 import { sendEmail, renderNotificationEmail } from "@/lib/notifications/email";
 import { sendAbsenceWhatsApp } from "@/lib/notifications/whatsapp";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { anneeFilterForModel } from "@/lib/annee-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { mergeFilters } from "@/lib/site-scope";
 import { isClasseInTeacherScope } from "@/lib/teacher-classes";
 import { revalidateTag } from "next/cache";
 
 export async function POST(req: NextRequest) {
-  const user = await verifyMobileScope(req);
-  if (!user) return mobileUnauthorized();
-  if (!user.tenantId) {
-    return NextResponse.json({ error: "Aucun établissement associé" }, { status: 403 });
-  }
-
+  return withMobileScope(req, async (user) => {
   if (user.role !== "TEACHER" && user.role !== "CLASS_TEACHER" && user.role !== "PRINCIPAL" && user.role !== "TENANT_ADMIN" && user.role !== "SUPER_ADMIN") {
     return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
   }
@@ -43,7 +41,11 @@ export async function POST(req: NextRequest) {
 
   // La classe doit appartenir au tenant ET au périmètre de sites de l'appelant.
   const classe = await prisma.classe.findFirst({
-    where: { id: classeId, tenantId: user.tenantId, ...siteFilterForModel("classe", user) },
+    where: mergeFilters(
+      { id: classeId, tenantId: user.tenantId },
+      siteFilterForModel("classe", user),
+      anneeFilterForModel("classe", await getAnneeCouranteLibelle(user.tenantId)),
+    ),
     select: { id: true, nom: true },
   });
 
@@ -81,7 +83,7 @@ export async function POST(req: NextRequest) {
     where: { id: user.tenantId },
     select: { name: true },
   });
-  const ecoleNom = tenant?.name ?? "EcolPro";
+  const ecoleNom = tenant?.name ?? "École Miriam";
 
   const absentEleveIds = Object.entries(presences as Record<string, string>)
     .filter(([, status]) => status !== "present")
@@ -124,6 +126,7 @@ export async function POST(req: NextRequest) {
     // `absentEleveIds` est un sous-ensemble de `eleveIdsSaisis`, dont l'appartenance
     // à la classe, au tenant et au périmètre de sites vient d'être vérifiée
     // ci-dessus (rejet en 403 sinon) : la portée est acquise en amont.
+    // eslint-disable-next-line ecolemiriam/require-site-filter
     // eslint-disable-next-line ecolpro/require-site-filter
     const eleveParents = await prisma.eleveParent.findMany({
       where: {
@@ -180,11 +183,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  revalidateTag("dashboard-data");
+  revalidateTag("dashboard-data", "max");
 
   return NextResponse.json({
     success: true,
     absencesCreees: created,
     notificationsEnvoyees: notifSent,
+  });
   });
 }

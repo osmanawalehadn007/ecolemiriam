@@ -10,7 +10,7 @@ import {
 } from "@/lib/site-scope";
 
 /**
- * EcolPro — Isolation par site : liaison avec la session
+ * École Miriam — Isolation par site : liaison avec la session
  * =====================================================
  * La logique de décision vit dans `@/lib/site-scope` (module pur, testable
  * sans runtime d'authentification). Ce fichier n'ajoute que les helpers qui
@@ -110,14 +110,5 @@ export async function getCurrentSiteIds(): Promise<string[] | null> {
     case "SITES":
       return scope.siteIds;
   }
-}
-
-/**
- * Site principal de l'utilisateur courant.
- * @deprecated Utiliser `getCurrentSiteIds()` / `getSiteScope()`.
- */
-export async function getCurrentSiteId(): Promise<string | null> {
-  const scope = await getSiteScope();
-  return scope.kind === "SITES" && scope.siteIds.length === 1 ? scope.siteIds[0] : null;
 }
 

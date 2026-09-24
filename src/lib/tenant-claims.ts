@@ -1,9 +1,9 @@
-import prisma from "@/lib/prisma";
+import prismaBase from "@/lib/prisma-base";
 import type { Role } from "@prisma/client";
-import type { AvailableTenant } from "@/auth.config";
+import type { AvailableTenantSlim } from "@/auth.config";
 
 /**
- * EcolPro — Dérivation des revendications tenant/site
+ * École Miriam — Dérivation des revendications tenant/site
  * ===================================================
  * Source unique de vérité pour « dans quel tenant suis-je, sur quels sites
  * ai-je le droit d'être, et avec quel rôle ». Utilisé à la connexion, à chaque
@@ -32,7 +32,7 @@ export interface TenantSiteClaims {
   siteIds: string[];
   /** Le tenant actif possède-t-il au moins un site ? */
   tenantHasSites: boolean;
-  availableTenants: AvailableTenant[];
+  availableTenants: AvailableTenantSlim[];
   claimsVersion: number;
 }
 
@@ -43,10 +43,43 @@ export interface TenantSiteClaims {
  * @param preferredTenantId tenant souhaité ; ignoré si l'utilisateur n'y a pas
  *   accès. À défaut, le tenant `isDefault` puis le premier accessible.
  */
+type UserWithTenants = {
+  id: string;
+  role: Role;
+  isActive: boolean;
+  tenantId: string | null;
+  siteId: string | null;
+  userTenants: {
+    tenantId: string;
+    role: Role;
+    isDefault: boolean;
+    tenant: { id: string; name: string; slug: string };
+  }[];
+};
+
+/**
+ * Variante de `deriveClaims` qui accepte un utilisateur déjà chargé avec ses
+ * relations `userTenants`. Évite un second aller-retour DB au login, où
+ * l'utilisateur a déjà été fetché par `authorize()` avec toutes les relations
+ * nécessaires.
+ *
+ * La seule requête DB restante est le `Promise.all` des 3 requêtes de sites.
+ */
+export async function deriveClaimsFromUser(
+  user: UserWithTenants,
+  preferredTenantId?: string | null
+): Promise<TenantSiteClaims | null> {
+  if (!user.isActive) return null;
+
+  return deriveClaimsFromData(user, preferredTenantId);
+}
+
 export async function deriveClaims(
   userId: string,
   preferredTenantId?: string | null
 ): Promise<TenantSiteClaims | null> {
+   
+  const user = await prismaBase.user.findUnique({
   // eslint-disable-next-line ecolpro/require-site-filter, ecolpro/require-tenant-id -- calcul des revendications lui-même : filtrer par site ou par tenant serait circulaire (c'est cette lecture qui produit le périmètre)
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -62,7 +95,7 @@ export async function deriveClaims(
           tenantId: true,
           role: true,
           isDefault: true,
-          tenant: { select: { id: true, name: true, slug: true, logoUrl: true } },
+          tenant: { select: { id: true, name: true, slug: true } },
         },
       },
     },
@@ -70,6 +103,18 @@ export async function deriveClaims(
 
   if (!user || !user.isActive) return null;
 
+  return deriveClaimsFromData(user, preferredTenantId);
+}
+
+/**
+ * Logique commune de dérivation des claims à partir des données utilisateur
+ * déjà chargées. Ne fait qu'un seul aller-retour DB : les 3 requêtes de sites
+ * en parallèle.
+ */
+async function deriveClaimsFromData(
+  user: UserWithTenants,
+  preferredTenantId?: string | null
+): Promise<TenantSiteClaims | null> {
   const memberships = user.userTenants;
 
   // ---- Tenant actif ------------------------------------------------------
@@ -93,11 +138,10 @@ export async function deriveClaims(
     activeTenantId = user.tenantId ?? null;
   }
 
-  const availableTenants: AvailableTenant[] = memberships.map((m) => ({
+  const availableTenants: AvailableTenantSlim[] = memberships.map((m) => ({
     tenantId: m.tenantId,
     tenantName: m.tenant.name,
     tenantSlug: m.tenant.slug,
-    tenantLogo: m.tenant.logoUrl,
     role: m.role,
     isDefault: m.isDefault,
   }));
@@ -117,25 +161,25 @@ export async function deriveClaims(
   // ---- Sites autorisés DANS le tenant actif ------------------------------
   // La jointure sur `site.tenantId` est la garantie anti-fuite : aucun
   // rattachement d'un autre établissement ne peut franchir la frontière.
-  /* eslint-disable ecolpro/require-site-filter -- claims derivation: resolving site assignments, filtering would be circular */
+   
   const [userSites, enseignantSites, tenantSites] = await Promise.all([
-    prisma.userSite.findMany({
-      where: { userId, site: { tenantId: activeTenantId } },
+    prismaBase.userSite.findMany({
+      where: { userId: user.id, site: { tenantId: activeTenantId } },
       select: { siteId: true, role: true },
     }),
-    prisma.enseignantSite.findMany({
+    prismaBase.enseignantSite.findMany({
       where: {
         site: { tenantId: activeTenantId },
-        enseignant: { userId, tenantId: activeTenantId },
+        enseignant: { userId: user.id, tenantId: activeTenantId },
       },
       select: { siteId: true },
     }),
-    prisma.site.findMany({
+    prismaBase.site.findMany({
       where: { tenantId: activeTenantId },
       select: { id: true },
     }),
   ]);
-  /* eslint-enable ecolpro/require-site-filter */
+   
 
   const tenantSiteIds = new Set(tenantSites.map((s) => s.id));
   const tenantSiteCount = tenantSites.length;
@@ -196,12 +240,14 @@ export async function resolveSiteAccess(
   siteId: string
 ): Promise<{ role: Role } | null> {
   // 1. Le site doit exister DANS ce tenant et être actif.
-  const site = await prisma.site.findFirst({
+  const site = await prismaBase.site.findFirst({
     where: { id: siteId, tenantId, actif: true },
     select: { id: true },
   });
   if (!site) return null;
 
+   
+  const user = await prismaBase.user.findUnique({
   // eslint-disable-next-line ecolpro/require-site-filter, ecolpro/require-tenant-id -- résolution d'accès à un site : la lecture sert précisément à DÉCIDER du périmètre, un filtre serait circulaire
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -209,7 +255,7 @@ export async function resolveSiteAccess(
   });
   if (!user) return null;
 
-  const membership = await prisma.userTenant.findFirst({
+  const membership = await prismaBase.userTenant.findFirst({
     where: { userId, tenantId, isActive: true },
     select: { role: true },
   });
@@ -219,16 +265,16 @@ export async function resolveSiteAccess(
 
   // 2. Rattachement explicite : le rôle du site fait foi s'il est défini.
   //    Si role = NULL, on hérite du rôle global (tenantRole).
-  // eslint-disable-next-line ecolpro/require-site-filter -- site access resolution, filtering would be circular
-  const userSite = await prisma.userSite.findFirst({
+   
+  const userSite = await prismaBase.userSite.findFirst({
     where: { userId, siteId },
     select: { role: true },
   });
   if (userSite) return { role: userSite.role ?? tenantRole };
 
   // 3. Enseignant affecté à ce site, dans ce tenant.
-  // eslint-disable-next-line ecolpro/require-site-filter -- site access resolution, filtering would be circular
-  const enseignantSite = await prisma.enseignantSite.findFirst({
+   
+  const enseignantSite = await prismaBase.enseignantSite.findFirst({
     where: { siteId, enseignant: { userId, tenantId } },
     select: { id: true },
   });

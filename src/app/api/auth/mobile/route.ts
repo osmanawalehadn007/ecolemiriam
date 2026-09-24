@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import prisma from "@/lib/prisma";
+import prismaBase from "@/lib/prisma-base";
 import bcrypt from "bcryptjs";
 import { SignJWT } from "jose";
 import { z } from "zod";
+import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
+import type { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
 import { deriveClaims } from "@/lib/tenant-claims";
 import { rateLimit } from "@/lib/security/rate-limit";
 
@@ -13,6 +15,12 @@ const MobileLoginSchema = z.object({
   tenantSlug: z.string().optional(),
 });
 
+async function signToken(payload: Record<string, unknown>): Promise<string> {
+  const rawSecret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+  if (!rawSecret) {
+    throw new Error("AUTH_SECRET/NEXTAUTH_SECRET est requis pour signer les jetons mobiles");
+  }
+  const secret = new TextEncoder().encode(rawSecret);
 const REFRESH_TOKEN_BYTES = 32;
 const ACCESS_TOKEN_TTL = "24h";
 
@@ -20,9 +28,7 @@ function getSecret(): Uint8Array {
   const raw = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
   if (!raw) {
     throw new Error("AUTH_SECRET ou NEXTAUTH_SECRET doit être configuré");
-  }
   return new TextEncoder().encode(raw);
-}
 
 async function signAccessToken(payload: Record<string, unknown>): Promise<string> {
   return new SignJWT(payload)
@@ -51,6 +57,15 @@ export async function POST(req: NextRequest) {
   if (limited) return limited;
 
   try {
+    const ip = getClientIP(req as unknown as import("next/server").NextRequest);
+    const rl = rateLimit({ max: 5, windowSec: 60, key: `mobile-auth:${ip}` });
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Trop de tentatives. Réessayez dans un instant." },
+        { status: 429, headers: { "Retry-After": "60" } }
+      );
+    }
+
     const body = await req.json();
     const parsed = MobileLoginSchema.safeParse(body);
     if (!parsed.success) {
@@ -62,6 +77,10 @@ export async function POST(req: NextRequest) {
 
     const { email, password, tenantSlug } = parsed.data;
 
+     
+    // Recherche insensible à la casse (voir auth.ts pour le même correctif).
+    const user = await prismaBase.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
     // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter -- auth mobile: lookup before session exists
     const user = await prisma.user.findUnique({
       where: { email },
@@ -72,10 +91,16 @@ export async function POST(req: NextRequest) {
         password: true,
         avatarUrl: true,
         isActive: true,
+        emailVerified: true,
+        tenant: {
+          select: { id: true, name: true, slug: true, currentYear: true, notationMax: true },
+        },
       },
     });
 
     if (!user || !user.password || !user.isActive) {
+      // Anti-énumération : égaliser le temps de réponse avec un bcrypt factice
+      await bcrypt.compare(password, "$2a$12$dummyHashToPreventTimingAttackXXXXXXXXXXXXXXXXXXXX");
       return NextResponse.json({ error: "Identifiants incorrects" }, { status: 401 });
     }
 
@@ -84,15 +109,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Identifiants incorrects" }, { status: 401 });
     }
 
-    // Dériver les claims depuis la source de vérité : tenant actif, rôle, sites.
-    const claims = await deriveClaims(user.id, null);
-    if (!claims || !claims.tenantId) {
+    // ── Vérification de l'email ───────────────────────────────────────
+    // Bloquer la connexion si l'email n'a pas été vérifié.
+    // Exception : SUPER_ADMIN peut toujours se connecter.
+    if (!user.emailVerified && user.role !== "SUPER_ADMIN") {
       return NextResponse.json(
-        { error: "Ce compte n'est rattaché à aucun établissement actif" },
+        { error: "EMAIL_NOT_VERIFIED", message: "Veuillez vérifier votre email avant de vous connecter." },
         { status: 403 }
       );
     }
 
+    const tenant = user.tenant;
+    if (tenantSlug && tenant?.slug !== tenantSlug) {
+      return NextResponse.json({ error: "Cet compte n'appartient pas à cet établissement" }, { status: 403 });
+    }
+
+     
+    await prismaBase.user.update({
+    // Dériver les claims depuis la source de vérité : tenant actif, rôle, sites.
+    const claims = await deriveClaims(user.id, null);
+    if (!claims || !claims.tenantId) {
+        { error: "Ce compte n'est rattaché à aucun établissement actif" },
     // Si un tenantSlug est fourni, vérifier qu'il correspond au tenant dérivé.
     if (tenantSlug) {
       const tenant = await prisma.tenant.findUnique({
@@ -100,13 +137,7 @@ export async function POST(req: NextRequest) {
         select: { slug: true },
       });
       if (tenant?.slug !== tenantSlug) {
-        return NextResponse.json(
           { error: "Cet compte n'appartient pas à cet établissement" },
-          { status: 403 }
-        );
-      }
-    }
-
     // Mise à jour du lastLoginAt (sans filtre tenant, self-update).
     // eslint-disable-next-line ecolpro/require-tenant-id -- self-update après authentification réussie
     await prisma.user.update({

@@ -1,5 +1,5 @@
 /**
- * EcolPro — Vérification d'authenticité des webhooks entrants
+ * École Miriam — Vérification d'authenticité des webhooks entrants
  * ============================================================
  * Ces endpoints sont accessibles sans session (appelés par des tiers).
  * Leur sécurité repose donc sur une signature / un secret partagé.

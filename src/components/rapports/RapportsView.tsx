@@ -9,6 +9,7 @@ import {
   Loader2, CheckCircle2, Users, GraduationCap, BookOpen, School,
   TrendingUp, Calendar,
 } from "lucide-react";
+import { niveauToLabel } from "@/lib/niveau";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
@@ -115,7 +116,7 @@ function PalmaresReport({ data, tenant }: { data: any[]; tenant: any }) {
       )}
 
       <p className="text-xs text-gray-400 mt-8 text-center">
-        {t("docGeneratedOn")} {new Date().toLocaleDateString("fr-FR")} · EcolPro
+        {t("docGeneratedOn")} {new Date().toLocaleDateString("fr-FR")} · École Miriam
       </p>
     </div>
   );
@@ -193,7 +194,7 @@ function StatistiquesReport({ data, tenant }: { data: any; tenant: any }) {
       </div>
 
       <p className="text-xs text-gray-400 mt-8 text-center">
-        {t("docGeneratedOn")} {new Date().toLocaleDateString("fr-FR")} · EcolPro
+        {t("docGeneratedOn")} {new Date().toLocaleDateString("fr-FR")} · École Miriam
       </p>
     </div>
   );
@@ -231,7 +232,7 @@ function InspectionReport({ data, tenant }: { data: any; tenant: any }) {
             {data.classes?.map((c: any, i: number) => (
               <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                 <td className="p-2 border border-gray-200 font-medium">{c.nom}</td>
-                <td className="p-2 border border-gray-200 text-gray-500">{c.niveau}</td>
+                <td className="p-2 border border-gray-200 text-gray-500">{niveauToLabel(c.niveau)}</td>
                 <td className="p-2 border border-gray-200 text-gray-500">{c.filiere ?? "—"}</td>
                 <td className="p-2 border border-gray-200 text-right font-bold">{c._count?.eleves ?? 0}</td>
                 <td className="p-2 border border-gray-200 text-right text-gray-500">{c.effectifMax}</td>
@@ -282,7 +283,7 @@ function InspectionReport({ data, tenant }: { data: any; tenant: any }) {
       </section>
 
       <p className="text-xs text-gray-400 mt-8 text-center">
-        {t("docGeneratedOn")} {new Date().toLocaleDateString("fr-FR")} · EcolPro
+        {t("docGeneratedOn")} {new Date().toLocaleDateString("fr-FR")} · École Miriam
       </p>
     </div>
   );

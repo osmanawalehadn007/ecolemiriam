@@ -40,7 +40,7 @@ export async function GET() {
         nom: "Ndiaye",
         prenom: "Fatou",
         phone: "779876543",
-        email: "fatou.ndiaye@lycee-demo.ecolpro.app",
+        email: "fatou.ndiaye@lycee-demo.ecolemiriam.app",
       },
     });
   }
@@ -48,6 +48,7 @@ export async function GET() {
   // Link each student to this parent if not already linked
   const results: string[] = [];
   for (const eleve of eleves) {
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- route de test/développement, élèves déjà filtrés par site ci-dessus
     // eslint-disable-next-line ecolpro/require-site-filter -- route de test/développement, élèves déjà filtrés par site ci-dessus
     const existing = await prisma.eleveParent.findUnique({
       where: { eleveId_parentId: { eleveId: eleve.id, parentId: parent.id } },

@@ -1,4 +1,6 @@
 import prisma from "@/lib/prisma";
+import { runWithTenant } from "@/lib/prisma";
+import { cached, cacheDel, cacheKey } from "@/lib/redis";
 import type { Session } from "next-auth";
 
 export interface SituationFinanciere {
@@ -29,6 +31,7 @@ export interface SituationFinanciere {
  * Calcule le solde, les retards, les relances et l'exclusion en cours.
  */
 export async function getSituationFinanciere(eleveId: string, tenantId: string): Promise<SituationFinanciere> {
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId : le caller a déjà vérifié l'accès
   // Bibliothèque de domaine, appelée avec un `eleveId` DÉJÀ validé par
   // l'appelant (page élève : `siteFilterForModel("eleve")` + `notFound()`).
   // Le site n'est pas le discriminant ici — un parent peut avoir des enfants
@@ -90,14 +93,54 @@ export async function getSituationFinanciere(eleveId: string, tenantId: string):
 }
 
 /**
- * Vérifie si un élève a accès à la plateforme (non exclu).
- * Utilisé dans le middleware ou les pages élève/parent.
+ * Vérifie si un élève a accès à la plateforme (non exclu) ET que
+ * l'utilisateur appelant a bien le droit d'accéder à CET élève (filiation).
+ *
+ * @param eleveId  L'élève consulté
+ * @param tenantId Le tenant
+ * @param user     Optionnel — { userId, role } du session.user. Si fourni
+ *                 et que le rôle est PARENT ou STUDENT, la filiation est
+ *                 vérifiée en plus de l'exclusion financière. Sans ce
+ *                 paramètre, la fonction conserve son comportement
+ *                 historique (exclusion seulement) pour les callers
+ *                 legacy qui n'ont pas encore été migrés.
  */
-export async function checkEleveAccess(eleveId: string, tenantId: string): Promise<{
+export async function checkEleveAccess(
+  eleveId: string,
+  tenantId: string,
+  user?: { userId: string; role: string }
+): Promise<{
   allowed: boolean;
   reason?: string;
   exclusion?: { id: string; motif: string; dateDebut: Date };
 }> {
+  // 1. Vérification de filiation (PARENT / STUDENT uniquement)
+  if (user && (user.role === "PARENT" || user.role === "STUDENT")) {
+    if (user.role === "STUDENT") {
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- portée déjà close : id + tenantId + userId de l'appelant
+      const own = await prisma.eleve.findFirst({
+        where: { id: eleveId, tenantId, userId: user.userId },
+        select: { id: true },
+      });
+      if (!own) return { allowed: false, reason: "FORBIDDEN" };
+    } else {
+      // PARENT : vérifier le lien parent → enfant
+      // EleveParent est une table de jointure : clé primaire composite
+      // [eleveId, parentId], donc ni `id` ni `tenantId` propres. La frontière
+      // tenant passe par la relation `eleve` — le contrôle est conservé, pas
+      // supprimé, mais les règles de lint ne savent pas le reconnaître à
+      // travers une relation.
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- portée : eleveId + eleve.tenantId + parent.userId
+      const link = await prisma.eleveParent.findFirst({
+        where: { eleveId, eleve: { tenantId }, parent: { userId: user.userId } },
+        select: { eleveId: true },
+      });
+      if (!link) return { allowed: false, reason: "FORBIDDEN" };
+    }
+  }
+
+  // 2. Vérification d'exclusion financière
+   
   const exclusion = await prisma.exclusionEleve.findFirst({
     where: { eleveId, tenantId, dateFin: null },
     select: { id: true, motif: true, dateDebut: true },
@@ -133,6 +176,7 @@ export async function checkUserFinancialBlock(userId: string, tenantId: string):
   excludedEleveIds?: string[];
 }> {
   // Cas 1: l'utilisateur est un élève
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par userId + tenantId : le caller a déjà vérifié l'accès
   // Lecture ciblée par `userId` (le compte connecté) : une seule ligne possible.
   // Le périmètre est déjà celui du compte authentifié, le site n'est pas le
   // discriminant pour ces rôles.
@@ -164,6 +208,7 @@ export async function checkUserFinancialBlock(userId: string, tenantId: string):
   }
 
   // Cas 2: l'utilisateur est un parent
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par userId + tenantId : le caller a déjà vérifié l'accès
   // Enfants du parent CONNECTÉ (lien personnel) : le site n'est pas le
   // discriminant, un parent peut avoir des enfants sur plusieurs sites.
   // eslint-disable-next-line ecolpro/require-site-filter
@@ -206,4 +251,34 @@ export async function checkUserFinancialBlock(userId: string, tenantId: string):
       : "financialBlock.partialExclusionMultiple",
     messageParams: { count: excludedEleveIds.length },
   };
+}
+
+/**
+ * Version cachée de checkUserFinancialBlock pour le layout du dashboard.
+ *
+ * Le blocage financier est vérifié à CHAQUE navigation (layout server
+ * component). Sans cache, cela fait 2-4 requêtes DB par page pour les
+ * PARENT/STUDENT. Avec un cache Redis de 30s, la première navigation paie le
+ * coût et les suivantes sont gratuites — et le cache est partagé entre
+ * instances blue/green.
+ */
+export async function checkUserFinancialBlockCached(
+  userId: string,
+  tenantId: string
+): Promise<Awaited<ReturnType<typeof checkUserFinancialBlock>>> {
+  return cached(
+    cacheKey(tenantId, "financial-block", userId),
+    () => runWithTenant(tenantId, null, () => checkUserFinancialBlock(userId, tenantId)),
+    30 // 30 secondes
+  );
+}
+
+/**
+ * Invalide le cache du blocage financier pour un utilisateur.
+ */
+export async function invalidateFinancialBlock(
+  tenantId: string,
+  userId: string
+): Promise<void> {
+  await cacheDel(cacheKey(tenantId, "financial-block", userId));
 }

@@ -208,6 +208,109 @@ describe("RH Absences API", () => {
       const data = await res.json();
       expect(data.absence.statut).toBe("JUSTIFIEE");
     });
+
+    it("updates to INJUSTIFIEE and triggers ficheRH update", async () => {
+      mockPrisma.absencePersonnel.findFirst.mockResolvedValue({
+        id: "a2",
+        enseignantId: "e1",
+        commentaire: null,
+      });
+      mockPrisma.absencePersonnel.update.mockResolvedValue({
+        id: "a2",
+        statut: "INJUSTIFIEE",
+      });
+      mockPrisma.absencePersonnel.count.mockResolvedValue(3);
+      const req = createMockReq("http://localhost/api/rh/absences/a2", "PATCH", {
+        statut: "INJUSTIFIEE",
+      });
+      const res = await patchAbsence(req as never, {
+        params: Promise.resolve({ id: "a2" }),
+      });
+      const data = await res.json();
+      expect(data.absence.statut).toBe("INJUSTIFIEE");
+      // Vérifie que count est appelé pour INJUSTIFIEE
+      expect(mockPrisma.absencePersonnel.count).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            enseignantId: "e1",
+            statut: "INJUSTIFIEE",
+          }),
+        })
+      );
+      // Vérifie que ficheRH.update est appelé
+      expect(mockPrisma.ficheRH.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { enseignantId: "e1" },
+          data: { absencesCount: 3 },
+        })
+      );
+    });
+
+    it("updates to EN_ATTENTE without triggering ficheRH update", async () => {
+      mockPrisma.absencePersonnel.findFirst.mockResolvedValue({
+        id: "a3",
+        enseignantId: "e1",
+        commentaire: null,
+      });
+      mockPrisma.absencePersonnel.update.mockResolvedValue({
+        id: "a3",
+        statut: "EN_ATTENTE",
+      });
+      const req = createMockReq("http://localhost/api/rh/absences/a3", "PATCH", {
+        statut: "EN_ATTENTE",
+      });
+      await patchAbsence(req as never, {
+        params: Promise.resolve({ id: "a3" }),
+      });
+      // EN_ATTENTE ne déclenche pas count ni ficheRH.update
+      expect(mockPrisma.absencePersonnel.count).not.toHaveBeenCalled();
+      expect(mockPrisma.ficheRH.update).not.toHaveBeenCalled();
+    });
+
+    it("updates with commentaire provided", async () => {
+      mockPrisma.absencePersonnel.findFirst.mockResolvedValue({
+        id: "a4",
+        enseignantId: "e1",
+        commentaire: "ancien commentaire",
+      });
+      mockPrisma.absencePersonnel.update.mockResolvedValue({
+        id: "a4",
+        statut: "JUSTIFIEE",
+      });
+      mockPrisma.absencePersonnel.count.mockResolvedValue(1);
+      const req = createMockReq("http://localhost/api/rh/absences/a4", "PATCH", {
+        statut: "JUSTIFIEE",
+        commentaire: "nouveau commentaire",
+      });
+      const res = await patchAbsence(req as never, {
+        params: Promise.resolve({ id: "a4" }),
+      });
+      const data = await res.json();
+      expect(data.absence.statut).toBe("JUSTIFIEE");
+      // Vérifie que update est appelé avec le nouveau commentaire
+      expect(mockPrisma.absencePersonnel.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            statut: "JUSTIFIEE",
+            commentaire: "nouveau commentaire",
+          }),
+        })
+      );
+    });
+
+    it("returns 403 when permission denied", async () => {
+      const { checkPermission } = await import("@/lib/rbac");
+      (checkPermission as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+        new Response("Forbidden", { status: 403 })
+      );
+      const req = createMockReq("http://localhost/api/rh/absences/a1", "PATCH", {
+        statut: "JUSTIFIEE",
+      });
+      const res = await patchAbsence(req as never, {
+        params: Promise.resolve({ id: "a1" }),
+      });
+      expect(res.status).toBe(403);
+    });
   });
 });
 

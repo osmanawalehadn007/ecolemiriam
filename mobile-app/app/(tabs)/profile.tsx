@@ -122,7 +122,7 @@ export default function ProfileScreen() {
 
         {/* Version */}
         <View className="items-center mt-8">
-          <Text className="text-xs text-gray-400">EcolPro Mobile v1.0.0</Text>
+          <Text className="text-xs text-gray-400">École Miriam Mobile v1.0.0</Text>
         </View>
       </View>
     </SafeAreaView>
