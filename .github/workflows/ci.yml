@@ -225,14 +225,28 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
+      # ⚠️ La suite e2e ÉCRIT en base (connexions, notes, absences, paiements de
+      # test). Elle ne doit donc jamais viser la base de production : elle
+      # utilise un secret dédié. La vérification de seed ci-dessous a révélé que
+      # DATABASE_URL pointait la base de production « ÉTABLISSEMENT PRIVÉ MIRIAM ».
+      - name: Base e2e dédiée configurée
+        run: |
+          if [ -z "${E2E_DATABASE_URL}" ]; then
+            echo "::error title=Secret E2E_DATABASE_URL manquant::La suite e2e écrit en base et ne doit pas viser la production. Créer une base jetable, la seeder (pnpm db:seed), puis ajouter les secrets E2E_DATABASE_URL et E2E_DIRECT_URL."
+            exit 1
+          fi
+          echo "Base e2e dédiée : OK"
+        env:
+          E2E_DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+
       # La suite e2e cible des identifiants/objets créés par `prisma/seed.ts`.
       # Sans ce contrôle, une base non seedée produit des échecs trompeurs
       # (404 partout) ; ici le diagnostic est explicite.
       - name: Vérifier les données seed (prérequis e2e)
         run: pnpm exec tsx scripts/check-e2e-data.ts
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.E2E_DIRECT_URL }}
 
       # `PORT=3001` : `next dev` (lancé par webServer de playwright.config.ts)
       # écoute ce port — sans lui, next démarre sur 3000 alors que `webServer.url`
@@ -242,8 +256,8 @@ jobs:
         env:
           PORT: 3001
           E2E_TIMEOUT: 120000
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.E2E_DIRECT_URL }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
           AUTH_URL: http://localhost:3001
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
