@@ -40,9 +40,14 @@ VPS_HOST="169.58.208.217"
 VPS_USER="root"
 VPS_SSH_PORT="${VPS_SSH_PORT:-22}"
 
-# Supabase config (depuis les sessions précédentes)
-SUPABASE_DATABASE_URL="postgresql://postgres.hyejtirvtdhxseambzyg:Aod%40%401002%40%40@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=30&pool_timeout=15&connect_timeout=15&sslmode=require"
-SUPABASE_DIRECT_URL="postgresql://postgres.hyejtirvtdhxseambzyg:Aod%40%401002%40%40@aws-0-eu-west-1.pooler.supabase.com:5432/postgres?sslmode=require"
+# Supabase config
+# ⚠️ AUCUNE URL en dur ici : le mot de passe de la base de production a été
+# exposé dans l'historique Git de ce fichier. Actions requises :
+#   1. révoquer/régénérer le mot de passe du rôle Supabase ;
+#   2. exporter SUPABASE_DATABASE_URL / SUPABASE_DIRECT_URL avant d'appeler ce
+#      script (elles sont aussi présentes dans /etc/ecolemirlam/app.env).
+: "${SUPABASE_DATABASE_URL:?Définir SUPABASE_DATABASE_URL (pooler Supabase, port 6543)}"
+: "${SUPABASE_DIRECT_URL:?Définir SUPABASE_DIRECT_URL (connexion directe, port 5432)}"
 
 TMP_DIR="/tmp/ecolpro-gcp-setup"
 mkdir -p "$TMP_DIR"

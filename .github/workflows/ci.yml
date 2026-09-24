@@ -3,12 +3,83 @@ name: CI — PR Checks
 # Ce workflow s'exécute sur les PRs vers main.
 # Les tests sur push vers main sont gérés par deploy.yml (job ci-gate).
 # Évite la duplication : une PR doit passer ces tests avant d'être mergée.
+#
+# Cible de production : https://ecolemiriam.com (Cloudflare Tunnel → conteneur
+# GCP). Aucun PaaS : vercel.json a été supprimé (les projets Vercel ne sont plus
+# reliés au dépôt) et scripts/ci/check-deploy-target.mjs échoue s'il réapparaît.
 
 on:
   pull_request:
     branches: [main]
+  # Relance manuelle : `gh workflow run ci.yml --ref <branche>`.
+  workflow_dispatch:
 
 jobs:
+  # ============================================================
+  # JOB 0 — Contrôles statiques, sans secrets ni base de données
+  # ============================================================
+  garde-fous:
+    name: Garde-fous (déploiement, secrets, documentation)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Ces contrôles ne dépendent d'aucun service externe : ils tournent aussi
+      # sur les PR de forks, et échouent vite en cas de régression de cible.
+      - name: Cible de déploiement (Cloudflare / ecolemiriam.com)
+        run: node scripts/ci/check-deploy-target.mjs
+
+      - name: Secrets en dur dans le code versionné
+        run: node scripts/ci/scan-secrets.mjs
+
+      - name: Variables d'environnement documentées
+        run: node scripts/ci/check-env-docs.mjs
+
+  # ============================================================
+  # JOB 0 bis — Build de production + plafond de poids du bundle
+  # ============================================================
+  # Le build ne dépend d'aucune base réelle : la Dockerfile de production
+  # utilise elle aussi une URL factice (`docker/app/Dockerfile`, étape builder).
+  bundle:
+    name: Build de production & plafond de bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production
+        run: npm run build
+        env:
+          DATABASE_URL: postgresql://build:build@localhost:5432/build?schema=public
+          DIRECT_URL: postgresql://build:build@localhost:5432/build?schema=public
+          NEXT_TELEMETRY_DISABLED: "1"
+
+      # Chaque kilo-octet de JavaScript est payé par les élèves sur réseau
+      # mobile : une dépendance lourde ajoutée par erreur fait échouer l'étape.
+      - name: Plafond de poids du bundle client
+        run: node scripts/ci/check-bundle-budget.mjs
+
   test:
     name: Lint, Type-Check & Tests
     runs-on: ubuntu-latest
@@ -45,8 +116,38 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     # EN PAUSE : les tests E2E seront activés plus tard.
-    # Pour réactiver, supprimer la ligne `if: false`.
+    # Pour réactiver, supprimer la ligne `if: false` — MAIS aligner d'abord les
+    # fixtures : tests/e2e/fixtures.ts se connecte en
+    # `admin@lycee-djibouti.ecolemiriam.app`, un compte que `prisma/seed.ts` ne
+    # crée pas (le seed crée `admin@lycee-demo.ecolemiriam.app`).
+    #
+    # La base ciblée n'est plus la production : un PostgreSQL jetable est
+    # démarré sur le runner (schéma poussé puis seedé). Activer ce job n'écrira
+    # donc jamais dans les données réelles — avant, DATABASE_URL pointait la
+    # base de production.
     if: false
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ecolemiriam
+          POSTGRES_PASSWORD: ecolemiriam
+          POSTGRES_DB: ecolemiriam_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ecolemiriam"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ecolemiriam:ecolemiriam@localhost:5432/ecolemiriam_e2e?schema=public
+      DIRECT_URL: postgresql://ecolemiriam:ecolemiriam@localhost:5432/ecolemiriam_e2e?schema=public
+      # Secret de test : la base est jetable, aucune donnée réelle n'est signée.
+      AUTH_SECRET: e2e-ci-secret-jetable-non-production
+      AUTH_URL: http://localhost:3001
+      AUTH_TRUST_HOST: "true"
+      NEXT_PUBLIC_APP_URL: http://localhost:3001
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,26 +161,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # DATABASE_URL / DIRECT_URL viennent de l'env du job (base jetable du runner).
       - name: Generate Prisma client
         run: npx prisma generate
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      # Schéma + fixtures : la base jetable est recréée à chaque exécution.
+      - name: Préparer la base e2e (schéma + fixtures)
+        run: |
+          npx prisma db push --skip-generate
+          npm run db:seed
+
       - name: Run E2E tests
         run: npx playwright test
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
-          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
-          AUTH_URL: http://localhost:3001
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
 
       - name: Upload test results
         if: always()

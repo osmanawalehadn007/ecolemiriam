@@ -91,6 +91,15 @@ jobs:
         run: npm audit --audit-level=high
         continue-on-error: false
 
+      # ── Garde-fous de dépôt (cible de déploiement, secrets, doc env) ────
+      # Les mêmes contrôles que le job `garde-fous` de ci.yml, rejoués ici : un
+      # push direct sur main ne passe pas par la CI de PR.
+      - name: Garde-fous (cible, secrets, documentation)
+        run: |
+          node scripts/ci/check-deploy-target.mjs
+          node scripts/ci/scan-secrets.mjs
+          node scripts/ci/check-env-docs.mjs
+
       # ── SAST : Semgrep scan ─────────────────────────────────────────────
       # Analyse statique du code pour détecter les vulnérabilités OWASP
       # Top 10 (injection, XSS, path traversal, secrets hardcodés, etc.).

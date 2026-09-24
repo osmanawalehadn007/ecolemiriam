@@ -25,7 +25,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "audit:sites": "tsx scripts/audit-site-isolation.ts",
-    "verify": "npm run lint && tsc --noEmit && vitest run",
+    "check:guards": "node scripts/ci/check-deploy-target.mjs && node scripts/ci/scan-secrets.mjs && node scripts/ci/check-env-docs.mjs",
+    "check:bundle": "node scripts/ci/check-bundle-budget.mjs",
+    "verify": "npm run lint && tsc --noEmit && vitest run && npm run check:guards",
     "verify:ci": "npm run lint && tsc --noEmit && vitest run",
     "rls:check": "tsx scripts/check-rls-exemptions.ts"
   },
