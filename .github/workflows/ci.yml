@@ -200,6 +200,33 @@ jobs:
     runs-on: ubuntu-latest
     needs: [garde-fous, qualite]
     timeout-minutes: 40
+    # ⚠️ La suite e2e ÉCRIT en base (connexions, notes, absences, paiements de
+    # test). Elle ne doit donc JAMAIS viser la production : un PostgreSQL
+    # jetable est démarré sur le runner, le schéma est poussé (`prisma db push`)
+    # puis seedé (`prisma/seed.ts`). Aucun secret de base de production n'est
+    # utilisé — avant ce correctif, `DATABASE_URL` pointait la base réelle
+    # « ÉTABLISSEMENT PRIVÉ MIRIAM ».
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ecolpro
+          POSTGRES_PASSWORD: ecolpro
+          POSTGRES_DB: ecolpro_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ecolpro"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ecolpro:ecolpro@localhost:5432/ecolpro_e2e?schema=public
+      DIRECT_URL: postgresql://ecolpro:ecolpro@localhost:5432/ecolpro_e2e?schema=public
+      # Secret de test : la base est jetable, aucune donnée réelle n'est signée.
+      AUTH_SECRET: e2e-ci-secret-jetable-non-production
+      AUTH_URL: http://localhost:3001
+      NEXT_PUBLIC_APP_URL: http://localhost:3001
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -216,37 +243,26 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # DATABASE_URL / DIRECT_URL proviennent de l'env du job (base jetable du runner).
       - name: Generate Prisma client
         run: pnpm exec prisma generate
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
-      # ⚠️ La suite e2e ÉCRIT en base (connexions, notes, absences, paiements de
-      # test). Elle ne doit donc jamais viser la base de production : elle
-      # utilise un secret dédié. La vérification de seed ci-dessous a révélé que
-      # DATABASE_URL pointait la base de production « ÉTABLISSEMENT PRIVÉ MIRIAM ».
-      - name: Base e2e dédiée configurée
+      # Schéma + fixtures : la base jetable est recréée à chaque exécution, ce qui
+      # rend la suite reproductible et garantit qu'elle ne touche aucune donnée
+      # réelle (l'ancien job visait la base de production).
+      - name: Préparer la base e2e (schéma + fixtures)
         run: |
-          if [ -z "${E2E_DATABASE_URL}" ]; then
-            echo "::error title=Secret E2E_DATABASE_URL manquant::La suite e2e écrit en base et ne doit pas viser la production. Créer une base jetable, la seeder (pnpm db:seed), puis ajouter les secrets E2E_DATABASE_URL et E2E_DIRECT_URL."
-            exit 1
-          fi
-          echo "Base e2e dédiée : OK"
-        env:
-          E2E_DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+          pnpm exec prisma db push --skip-generate
+          pnpm run db:seed
 
       # La suite e2e cible des identifiants/objets créés par `prisma/seed.ts`.
       # Sans ce contrôle, une base non seedée produit des échecs trompeurs
       # (404 partout) ; ici le diagnostic est explicite.
       - name: Vérifier les données seed (prérequis e2e)
         run: pnpm exec tsx scripts/check-e2e-data.ts
-        env:
-          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.E2E_DIRECT_URL }}
 
       # `PORT=3001` : `next dev` (lancé par webServer de playwright.config.ts)
       # écoute ce port — sans lui, next démarre sur 3000 alors que `webServer.url`
@@ -256,14 +272,6 @@ jobs:
         env:
           PORT: 3001
           E2E_TIMEOUT: 120000
-          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.E2E_DIRECT_URL }}
-          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
-          AUTH_URL: http://localhost:3001
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          NEXT_PUBLIC_APP_URL: http://localhost:3001
 
       - name: Upload Playwright report
         if: always()
