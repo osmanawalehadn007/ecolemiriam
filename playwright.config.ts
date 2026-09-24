@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { existsSync } from "fs";
 
 /**
  * URL de base : surchargeable par `E2E_BASE_URL`.
@@ -11,6 +12,16 @@ import { defineConfig, devices } from "@playwright/test";
  */
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3001";
 
+/**
+ * Serveur de PRODUCTION si un build existe (démarrage instantané, tests
+ * stables) ; sinon serveur de développement (compilation à la demande).
+ * Les timeouts de la suite sont calibrés pour la prod : en dev, les
+ * recompilations dépassent régulièrement 15 s et font échouer des tests sains.
+ */
+const hasBuild = existsSync(".next/BUILD_ID");
+const webServerCommand = hasBuild ? "npm run start" : "npm run dev";
+const webServerTimeout = hasBuild ? 30000 : 120000;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
@@ -18,9 +29,9 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   reporter: "html",
-  // 30 s suffisent en CI (build chaud) ; en développement à froid, la première
-  // compilation d'une route peut dépasser 15 s : `E2E_TIMEOUT=120000` absorbe
-  // cette latence sans masquer un vrai blocage.
+  // 30 s suffisent sur un serveur de prod (build chaud) ; en développement à
+  // froid, la première compilation d'une route peut dépasser 15 s :
+  // `E2E_TIMEOUT=120000` absorbe cette latence sans masquer un vrai blocage.
   timeout: Number(process.env.E2E_TIMEOUT ?? 30000),
   use: {
     baseURL,
@@ -40,9 +51,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev",
+    command: webServerCommand,
     url: baseURL,
     reuseExistingServer: true,
-    timeout: 60000,
+    timeout: webServerTimeout,
   },
 });

@@ -111,6 +111,24 @@ async function main() {
     },
   });
 
+  // Rattachements multi-sites (`UserSite`) — requis par `resolveSiteScope` :
+  // pour tout rôle autre que TENANT_ADMIN/SUPER_ADMIN et PARENT/STUDENT, le
+  // périmètre de site est lu depuis ces rattachements (et non la colonne
+  // `siteId`). Sans eux, `resolveSiteScope` renvoie NONE (fail-closed) et le
+  // personnel ne voit RIEN — listes vides et 404 dans toute l'application.
+  for (const [user, site] of [
+    [adminUser, siteA],
+    [enseignantUser, siteA],
+    [enseignant2User, siteB],
+  ] as const) {
+    await prisma.userSite.upsert({
+      where: { userId_siteId: { userId: user.id, siteId: site.id } },
+      update: {},
+      create: { userId: user.id, siteId: site.id },
+    });
+  }
+  console.log("✅ Rattachements UserSite créés (admin→A, prof A→A, prof B→B)");
+
   const parentUser = await prisma.user.upsert({
     where: { email: "parent@lycee-demo.ecolpro.app" },
     update: { siteId: siteA.id },

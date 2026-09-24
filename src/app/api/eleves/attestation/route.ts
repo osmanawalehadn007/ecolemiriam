@@ -31,7 +31,12 @@ export async function POST(req: NextRequest) {
     session.user.tenantId,
     honorifique,
     titre,
-    eleveScopeFilter(session.user, "eleve")
+    // `null` : le filtre s'applique au modèle `Eleve` LUI-MÊME (la requête est
+    // sur Eleve, pas sur un modèle parent). Avec la relation "eleve" (défaut),
+    // le fragment produit `{ eleve: { … } }` — un argument qui n'existe pas
+    // sur Eleve — et la requête répondait 500 (PrismaClientValidationError)
+    // au lieu du 404 attendu pour un élève hors périmètre.
+    eleveScopeFilter(session.user, null)
   );
   if (!data) {
     return NextResponse.json({ error: "Élève introuvable" }, { status: 404 });

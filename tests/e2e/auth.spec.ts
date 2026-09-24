@@ -3,11 +3,14 @@ import { test, expect } from "./fixtures";
 test.describe("Authentification", () => {
   test("login avec identifiants valides", async ({ page }) => {
     await page.goto("/login");
-    await page.fill('input[type="email"]', "admin@lycee-djibouti.ecolpro.app");
+    // Compte du tenant de démonstration créé par `prisma/seed.ts`
+    // (l'ancien `lycee-djibouti` n'existe plus).
+    await page.fill('input[type="email"]', "admin@lycee-demo.ecolpro.app");
     await page.fill('input[type="password"]', "Demo@2026!");
     await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/dashboard/);
-    await expect(page.locator("text=Tableau de bord").first()).toBeVisible({ timeout: 10000 });
+    // Un compte mono-tenant passe par /select-tenant puis /dashboard.
+    await expect(page).toHaveURL(/\/(dashboard|select-tenant)/, { timeout: 15000 });
+    await expect(page.locator("text=Tableau de bord").first()).toBeVisible({ timeout: 15000 });
   });
 
   test("login avec identifiants invalides", async ({ page }) => {

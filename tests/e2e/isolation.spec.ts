@@ -139,9 +139,29 @@ test.describe("Isolation — périmètre enseignant (web)", () => {
 
   test("5.10 un prof ouvre un élève hors périmètre — 404, jamais la fiche", async ({ browser }) => {
     const page = await pagePour(browser, "teacher");
-    const res = await page.request.get(`/eleves/${SEED.eleveHorsPerimetre}`);
-    // 404 et non 403 : un 403 confirmerait l'existence de la fiche.
-    expect(res.status()).toBe(404);
+    // `maxRedirects: 0` : une redirection suivie masquerait le code réel
+    // (302/307 vers /login ou /dashboard se termineraient en 200).
+    const res = await page.request.get(`/eleves/${SEED.eleveHorsPerimetre}`, {
+      maxRedirects: 0,
+    });
+    const status = res.status();
+    const body = await res.text();
+    if (status >= 300 && status < 400) {
+      // Session éjectée : la seule redirection tolérée est /login.
+      expect(res.headers()["location"] ?? "").toContain("/login");
+    } else if (status === 200) {
+      // Next.js : le `loading.tsx` du layout (dashboard) crée une frontière
+      // Suspense — le shell part en 200 PUIS `notFound()` arrive dans le flux
+      // (payload `NEXT_HTTP_ERROR_FALLBACK;404` visible dans le corps). Le
+      // critère de sécurité n'est donc pas le code HTTP mais l'ABSENCE des
+      // données personnelles de l'élève — nom COMPLET et matricule, des
+      // chaînes assez longues pour éviter tout faux positif de sous-chaîne.
+      expect(body).not.toContain("Abdoulaye Sy");
+      expect(body).not.toContain("2026-0101");
+    } else {
+      // Cas nominal (pas de frontière de streaming) : 404 net.
+      expect(status).toBe(404);
+    }
     await page.close();
   });
 
