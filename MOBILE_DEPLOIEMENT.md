@@ -26,7 +26,7 @@
 
 La coque mobile pointe vers l'app **déployée** (pas le code local). Déployer le
 front Next.js (cible : conteneur sur GCP derrière Cloudflare Tunnel,
-`https://ecolemirlam.com`) et noter l'URL de production.
+`https://ecolemiriam.com`) et noter l'URL de production.
 
 > **Multi-tenant :** chaque école a un sous-domaine (`lycee-x.ecolpro.app`).
 > Pour le mobile, deux options :
@@ -44,7 +44,7 @@ front Next.js (cible : conteneur sur GCP derrière Cloudflare Tunnel,
 
 ```bash
 # Définir l'URL de prod (sinon valeur par défaut de capacitor.config.ts)
-export CAP_SERVER_URL=https://ecolemirlam.com
+export CAP_SERVER_URL=https://ecolemiriam.com
 
 npm run cap:add:ios       # crée ./ios
 npm run cap:add:android   # crée ./android

@@ -34,6 +34,14 @@ const PATTERNS = [
   },
 ];
 
+/**
+ * Valeurs d'exemple à ignorer : les gabarits de configuration contiennent des
+ * placeholders (« MOT_DE_PASSE », « xxxxx », « <valeur> »). Seul un secret
+ * réellement exploitable doit être signalé.
+ */
+const PLACEHOLDER_RE =
+  /xxxx|XXXX|CHANGEME|CHANGE_ME|MOT_DE_PASSE|PASSWORD|placeholder|<[^>]*>|\.\.\.|votre-|secret-tres-long/i;
+
 /** Fichiers exclus : contenus générés ou de test, jamais des secrets réels. */
 const EXCLUDED = [
   /^pnpm-lock\.yaml$/,
@@ -60,7 +68,10 @@ for (const file of files) {
   }
   content.split("\n").forEach((line, i) => {
     for (const { label, re } of PATTERNS) {
-      if (re.test(line)) findings.push({ file, line: i + 1, label });
+      const match = line.match(re);
+      if (!match) continue;
+      if (PLACEHOLDER_RE.test(match[0])) continue; // valeur d'exemple
+      findings.push({ file, line: i + 1, label, excerpt: match[0].slice(0, 40) });
     }
   });
 }

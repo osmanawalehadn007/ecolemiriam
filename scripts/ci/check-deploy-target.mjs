@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Garde-fou : la cible de déploiement est Cloudflare (ecolemirlam.com → GCP).
+ * Garde-fou : la cible de déploiement est Cloudflare (ecolemiriam.com → GCP).
  * ============================================================
  * Le projet a été déployé successivement sur Netlify puis Vercel ; les deux
  * sont abandonnés. Réintroduire un de leurs fichiers de configuration suffit
@@ -19,7 +19,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
-const PROD_DOMAIN = "ecolemirlam.com";
+const PROD_DOMAIN = "ecolemiriam.com";
 
 /** Lignes de commentaire : peuvent nommer les hébergeurs abandonnés. */
 const COMMENT_RE = /^\s*(\/\/|\/\*|\*|#|<!--)/;

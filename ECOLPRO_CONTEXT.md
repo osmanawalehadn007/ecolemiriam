@@ -138,7 +138,7 @@ GET /api/analytics
 - **Intégrations paiement** : Wave Money / Orange Money (modèle `Paiement` prêt,
   pas d'appel API réel) ; Stripe (champs tenant présents, pas branché).
 - **Déploiement & stores** : build web → conteneur sur GCP derrière Cloudflare
-  Tunnel (`ecolemirlam.com`) ; mobile → comptes Apple (99 $/an)
+  Tunnel (`ecolemiriam.com`) ; mobile → comptes Apple (99 $/an)
   et Google Play (25 $) requis, + Xcode/Android Studio. Voir `MOBILE_DEPLOIEMENT.md`.
 - **Tests automatisés** : aucun pour l'instant (pas de Jest/Playwright).
 

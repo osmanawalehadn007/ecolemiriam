@@ -67,7 +67,7 @@ EcolPro est une plateforme SaaS multi-tenant de nouvelle génération pour la ge
 | **Emails** | Resend + React Email | Templates HTML modernes |
 | **SMS/Push** | Twilio + Firebase FCM | Notifications multicanal |
 | **Paiements** | Stripe | Abonnements SaaS, frais scolaires |
-| **Déploiement** | Conteneur Docker sur GCP + Cloudflare Tunnel | CI/CD GitHub Actions, domaine `ecolemirlam.com` |
+| **Déploiement** | Conteneur Docker sur GCP + Cloudflare Tunnel | CI/CD GitHub Actions, domaine `ecolemiriam.com` |
 | **Monitoring** | Sentry + Datadog | Erreurs, performances, alertes |
 | **Infra as Code** | Terraform | Reproductibilité, scalabilité |
 

@@ -21,7 +21,7 @@ const STATIC_BUDGET_KB = Number(process.env.BUNDLE_BUDGET_KB ?? 6144);
 const CHUNK_BUDGET_KB = Number(process.env.CHUNK_BUDGET_KB ?? 1200);
 
 if (!existsSync(".next/BUILD_ID")) {
-  console.error("❌ .next/BUILD_ID absent — lancer `pnpm build` avant ce contrôle.");
+  console.error("❌ .next/BUILD_ID absent — lancer le build avant ce contrôle (`npm run build` ou `pnpm build`).");
   process.exit(1);
 }
 
