@@ -7,12 +7,16 @@ async function main() {
   console.log("🌱 Seeding École Miriam database...");
 
   // --- Tenant de démonstration ---
+  // Le slug est `lycee-demo-seed`, et non `lycee-demo` : ce dernier appartient
+  // au tenant de PRODUCTION « ÉTABLISSEMENT PRIVÉ MIRIAM ». Un seed qui visait
+  // `lycee-demo` réutilisait donc le tenant réel (upsert) et y insérait les
+  // élèves, classes et comptes de démonstration.
   const tenant = await prisma.tenant.upsert({
-    where: { slug: "lycee-demo" },
+    where: { slug: "lycee-demo-seed" },
     update: {},
     create: {
       name: "Lycée de Démonstration École Miriam",
-      slug: "lycee-demo",
+      slug: "lycee-demo-seed",
       plan: PlanType.PRO,
       country: "SN",
       city: "Dakar",

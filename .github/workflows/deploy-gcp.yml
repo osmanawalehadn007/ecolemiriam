@@ -74,13 +74,24 @@ jobs:
           AUTH_URL: ${{ secrets.AUTH_URL }}
           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
 
+      # ── Tests unitaires ─────────────────────────────────────────────────
+      # `RLS_ACTIVE` n'est volontairement PAS transmis ici. Le test
+      # `src/lib/prisma-rls.test.ts` est un test d'INTÉGRATION : il exige une
+      # base dédiée portant les politiques RLS et le rôle `ecolemiriam_app`, et
+      # il CRÉE des tenants de test. Exécuté dans cette porte avec les
+      # identifiants ambiants, il échouait en
+      #   « Authentication failed … credentials for `postgres` are not valid »
+      # et bloquait TOUT déploiement (run du 24/09/2026 : les jobs
+      # build-and-push / staging / approve / promote restaient en `skipped`).
+      # `ci.yml` ne le transmet pas non plus : les deux workflows sont
+      # désormais alignés. Pour l'exécuter volontairement, avec une base dédiée :
+      #   RLS_ACTIVE=true DATABASE_URL=… DIRECT_URL=… npm run test
       - name: Unit tests
         run: npm run test
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
-          RLS_ACTIVE: ${{ secrets.RLS_ACTIVE }}
 
       # ── Audit de sécurité des dépendances (npm audit) ──────────────────
       # Bloque le CI si une vulnérabilité de niveau high ou critical est

@@ -26,12 +26,14 @@ async function main() {
   console.log(`✅ Super Admin créé: ${superAdmin.email}`);
 
   // --- Tenant de démonstration ---
+  // `lycee-demo-seed` et non `lycee-demo` : ce dernier est le slug du tenant de
+  // PRODUCTION « ÉTABLISSEMENT PRIVÉ MIRIAM » (voir prisma/seed.ts).
   const tenant = await prisma.tenant.upsert({
-    where: { slug: "lycee-demo" },
+    where: { slug: "lycee-demo-seed" },
     update: {},
     create: {
       name: "Lycée de Démonstration École Miriam",
-      slug: "lycee-demo",
+      slug: "lycee-demo-seed",
       plan: PlanType.PRO,
       country: "SN",
       city: "Dakar",
