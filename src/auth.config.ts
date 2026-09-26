@@ -26,6 +26,8 @@ export const authConfig: NextAuthConfig = {
         token.siteIds = (user as { siteIds?: string[] }).siteIds ?? [];
         token.tenantHasSites = (user as { tenantHasSites?: boolean }).tenantHasSites ?? true;
         token.claimsVersion = (user as { claimsVersion?: number }).claimsVersion;
+        token.mustChangePassword =
+          (user as { mustChangePassword?: boolean }).mustChangePassword ?? false;
         // Stocker la liste des tenants accessibles pour le switcher
         const availableTenants = (user as { availableTenants?: AvailableTenant[] }).availableTenants;
         if (availableTenants) {
@@ -46,6 +48,11 @@ export const authConfig: NextAuthConfig = {
         (session.user as { tenantHasSites?: boolean }).tenantHasSites =
           (token.tenantHasSites as boolean | undefined) ?? true;
         (session.user as { availableTenants?: AvailableTenant[] }).availableTenants = token.availableTenants as AvailableTenant[] | undefined;
+        // Par défaut `false` : on n'oblige pas un changement de mot de passe
+        // faute d'information (les comptes provisionnés le portent
+        // explicitement).
+        (session.user as { mustChangePassword?: boolean }).mustChangePassword =
+          (token.mustChangePassword as boolean | undefined) ?? false;
       }
       return session;
     },

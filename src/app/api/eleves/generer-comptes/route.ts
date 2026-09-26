@@ -70,6 +70,8 @@ export async function POST(req: NextRequest) {
         role: "STUDENT",
         tenantId: session.user.tenantId,
         locale: "fr",
+        // Mot de passe généré/administrateur : changement obligatoire.
+        mustChangePassword: true,
       },
     });
 

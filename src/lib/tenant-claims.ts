@@ -21,7 +21,7 @@ import type { AvailableTenant } from "@/auth.config";
  * sémantique des claims change : les JWT émis avec une version antérieure sont
  * alors ré-hydratés depuis la base à la première requête, sans reconnexion.
  */
-export const CLAIMS_VERSION = 2;
+export const CLAIMS_VERSION = 3;
 
 export interface TenantSiteClaims {
   tenantId: string | null;
@@ -34,6 +34,11 @@ export interface TenantSiteClaims {
   tenantHasSites: boolean;
   availableTenants: AvailableTenant[];
   claimsVersion: number;
+  /**
+   * Compte provisionné (mot de passe temporaire) : l'utilisateur doit changer
+   * son mot de passe avant d'accéder à l'application.
+   */
+  mustChangePassword: boolean;
 }
 
 /**
@@ -56,6 +61,7 @@ export async function deriveClaims(
       isActive: true,
       tenantId: true,
       siteId: true,
+      mustChangePassword: true,
       userTenants: {
         where: { isActive: true },
         select: {
@@ -111,6 +117,7 @@ export async function deriveClaims(
       tenantHasSites: false,
       availableTenants,
       claimsVersion: CLAIMS_VERSION,
+      mustChangePassword: user.mustChangePassword,
     };
   }
 
@@ -176,6 +183,7 @@ export async function deriveClaims(
     tenantHasSites: tenantSiteCount > 0,
     availableTenants,
     claimsVersion: CLAIMS_VERSION,
+    mustChangePassword: user.mustChangePassword,
   };
 }
 

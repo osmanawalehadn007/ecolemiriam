@@ -1,5 +1,46 @@
 import { defineConfig, devices } from "@playwright/test";
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
+
+/**
+ * ============================================================
+ * GARDE-FOU ANTI-PRODUCTION
+ * ============================================================
+ * La suite e2e ÉCRIT en base (élèves, absences, factures, isolation…). Le
+ * 24/09/2026, elle visait la base de production et a contribué à la perte des
+ * données de l'établissement. Depuis, la CI utilise une base PostgreSQL jetable
+ * sur le runner — mais en local, `.env` peut pointer la production.
+ *
+ * On refuse donc de démarrer si `DATABASE_URL` ne vise pas une base locale
+ * (localhost / 127.0.0.1). Pour forcer malgré tout :
+ *   E2E_ALLOW_REMOTE_DB=1 npm run test:e2e
+ */
+function resolvedDatabaseUrl(): string {
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  try {
+    const m = readFileSync(".env", "utf8").match(/^DATABASE_URL="?([^"\n]+)"?/m);
+    return m ? m[1] : "";
+  } catch {
+    return "";
+  }
+}
+
+const dbUrl = resolvedDatabaseUrl();
+const isLocalDb = /(localhost|127\.0\.0\.1|\[::1\])/i.test(dbUrl);
+
+if (dbUrl && !isLocalDb && process.env.E2E_ALLOW_REMOTE_DB !== "1") {
+  const hote = dbUrl.replace(/:[^:@/]+@/, ":***@").split("@")[1]?.split("/")[0] ?? "?";
+  throw new Error(
+    [
+      "⛔ Suite e2e interrompue : DATABASE_URL pointe une base DISTANTE (production).",
+      `   Hôte détecté : ${hote}`,
+      "   Les tests e2e écrivent en base et ne doivent jamais viser la production.",
+      "",
+      "   Solutions :",
+      "   • utiliser une base locale dédiée : DATABASE_URL=postgresql://…@localhost:5432/ecolpro_e2e",
+      "   • ou forcer en connaissance de cause : E2E_ALLOW_REMOTE_DB=1 npm run test:e2e",
+    ].join("\n"),
+  );
+}
 
 /**
  * URL de base : surchargeable par `E2E_BASE_URL`.

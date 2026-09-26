@@ -9,6 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 import { EtablissementTab } from "./EtablissementTab";
 import { UsersTab } from "./UsersTab";
+import { InvitationsPanel } from "./InvitationsPanel";
 import { ClassesTab } from "./ClassesTab";
 import { MatieresTab } from "./MatieresTab";
 import { ParentsTab } from "./ParentsTab";
@@ -111,6 +112,10 @@ export function ParametresTabs({
 }: ParametresTabsProps) {
   const t = useTranslations("parametres");
 
+  // Année active de l'établissement : sert de valeur par défaut à la grille
+  // tarifaire (un tarif saisi « 2025-2026 » n'est jamais trouvé en 2026-2027).
+  const anneeCourante = annees.find((a) => a.isCurrent)?.libelle;
+
   // Groupes réduits aux onglets autorisés — un groupe sans onglet disparaît.
   const groups = tabGroups
     .map((group) => ({
@@ -190,7 +195,12 @@ export function ParametresTabs({
       <div>
         {activeTab === "etablissement" && <EtablissementTab etablissement={etablissement} canManage={canManage} />}
         {activeTab === "annees" && <AnneesScolairesTab annees={annees} canManage={canManage} />}
-        {activeTab === "utilisateurs" && <UsersTab users={users} canManage={canManage} availableTenants={availableTenants} sites={sites} />}
+        {activeTab === "utilisateurs" && (
+          <div className="space-y-6">
+            <InvitationsPanel canManage={canManage} sites={sites} />
+            <UsersTab users={users} canManage={canManage} availableTenants={availableTenants} sites={sites} />
+          </div>
+        )}
         {activeTab === "parents" && <ParentsTab parents={parents} eleves={eleves} canManage={canManage} />}
         {activeTab === "classes" && <ClassesTab classes={classes} canManage={canManage} sites={sites} />}
         {activeTab === "matieres" && <MatieresTab matieres={matieres} canManage={canManage} />}
@@ -221,7 +231,14 @@ export function ParametresTabs({
           />
         )}
         {activeTab === "sites" && <SitesTab sites={sites} canManage={canManage} />}
-        {activeTab === "tarifs" && <TarifsTab />}
+        {activeTab === "tarifs" && (
+          <TarifsTab
+            sites={sites}
+            niveauxClasses={Array.from(new Set(classes.map((c) => c.niveau).filter(Boolean)))}
+            canManage={canManage}
+            anneeCourante={anneeCourante}
+          />
+        )}
         {activeTab === "doublons" && <DoublonsTab />}
       </div>
     </div>

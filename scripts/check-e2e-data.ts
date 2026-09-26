@@ -29,10 +29,10 @@ const E2E_IDS = {
 
 async function main() {
   const tenant = await prisma.tenant.findFirst({
-    where: { slug: "lycee-demo" },
+    where: { slug: "lycee-demo-seed" },
     select: { id: true, name: true, slug: true, sites: { select: { id: true, nom: true } } },
   });
-  if (!tenant) throw new Error("Tenant de démo « lycee-demo » absent — lancez `npm run db:seed`");
+  if (!tenant) throw new Error("Tenant de démo « lycee-demo-seed » absent — lancez `npm run db:seed`");
   console.log(`TENANT: ${tenant.name} (${tenant.slug}) — sites: ${tenant.sites.map((s) => s.nom).join(", ") || "aucun"}`);
 
   const users = await prisma.user.findMany({

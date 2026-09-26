@@ -3,6 +3,7 @@ import { Header } from "@/components/layout/Header";
 import { FacturesTable } from "@/components/facturation/FacturesTable";
 import { FacturationActions } from "@/components/facturation/FacturationActions";
 import { getFacturesForTenant } from "@/lib/actions/facture";
+import { getAnneeCouranteLibelle, anneeScolaireParDefaut } from "@/lib/annee-scolaire";
 import { getTranslations } from "next-intl/server";
 import { guardPage } from "@/lib/guard-page";
 
@@ -13,7 +14,13 @@ export default async function FacturationPage() {
   ]);
   guardPage(session, "finance:read");
 
-  const factures = await getFacturesForTenant();
+  // L'année passée au générateur de mensualités était codée en dur
+  // (« 2025-2026 ») : aucune grille tarifaire de l'année en cours n'était donc
+  // jamais trouvée, et la génération ignorait silencieusement tous les élèves.
+  const [factures, anneeCourante] = await Promise.all([
+    getFacturesForTenant(),
+    getAnneeCouranteLibelle(session!.user.tenantId),
+  ]);
 
   const stats = {
     total: factures.length,
@@ -31,7 +38,7 @@ export default async function FacturationPage() {
         userAvatar={session!.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin space-y-4">
-        <FacturationActions currentYear="2025-2026" />
+        <FacturationActions currentYear={anneeCourante ?? anneeScolaireParDefaut()} />
         <FacturesTable factures={factures} />
       </div>
     </div>

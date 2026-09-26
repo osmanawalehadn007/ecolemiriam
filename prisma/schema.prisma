@@ -84,6 +84,7 @@ model Tenant {
   // Relations
   users          User[]
   userTenants    UserTenant[]
+  invitations    Invitation[]
   annees         AnneesScolaires[]
   classes        Classe[]
   matieres       Matiere[]
@@ -169,6 +170,9 @@ model Site {
 
   // Users multi-sites
   userSites UserSite[]
+
+  // Invitations rattachées à ce site
+  invitations Invitation[]
 
   // Tarifs par niveau
   tarifsNiveau TarifNiveau[]
@@ -341,6 +345,10 @@ model User {
   isActive    Boolean   @default(true)
   lastLoginAt DateTime?
 
+  // Compte provisionné (invitation ou mot de passe temporaire) : doit changer
+  // son mot de passe avant d'accéder au reste de l'application.
+  mustChangePassword Boolean @default(false)
+
   // Préférences
   langue        String @default("fr")
   locale        String @default("fr") // FR ou EN pour l'interface
@@ -374,6 +382,10 @@ model User {
 
   // Multi-tenant: liste des tenants accessibles
   userTenants UserTenant[]
+
+  // Invitations émises / acceptées par cet utilisateur
+  invitationsSent     Invitation[] @relation("InvitationInvitedBy")
+  invitationsAccepted Invitation[] @relation("InvitationAcceptedBy")
 
   // Multi-site: liste des sites accessibles
   userSites UserSite[]
@@ -458,6 +470,58 @@ model VerificationToken {
 
   @@unique([identifier, token])
   @@map("verification_tokens")
+}
+
+// ============================================================
+// INVITATIONS (provisionnement d'un compte par jeton à usage unique)
+// ============================================================
+//
+// Le jeton n'est JAMAIS stocké en clair : seule son empreinte SHA-256 est
+// persistée. Le lien envoyé par email porte le jeton brut, que l'on re-hache
+// pour la recherche. Un jeton est à usage unique (statut ACCEPTED) et expire.
+
+enum InvitationStatus {
+  PENDING // Envoyée, en attente d'acceptation
+  ACCEPTED // Consommée par la création/le rattachement du compte
+  REVOKED // Annulée par un administrateur
+}
+
+model Invitation {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Site d'affectation prévu (facultatif : un admin tenant-wide peut inviter
+  // sans borner à un site).
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  email String
+  name  String?
+  role  Role    @default(TEACHER)
+  phone String?
+
+  // Empreinte SHA-256 (hex) du jeton transmis par email — jamais le jeton brut.
+  tokenHash String   @unique
+  status    InvitationStatus @default(PENDING)
+  expiresAt DateTime
+
+  acceptedAt DateTime?
+  revokedAt  DateTime?
+
+  invitedById String?
+  invitedBy   User?   @relation("InvitationInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  acceptedByUserId String?
+  acceptedBy       User?   @relation("InvitationAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, status])
+  @@index([email])
+  @@index([expiresAt])
+  @@map("invitations")
 }
 
 // ============================================================
@@ -1066,6 +1130,15 @@ enum StatutFacture {
   ANNULEE
 }
 
+enum TypeFacture {
+  MENSUALITE
+  INSCRIPTION
+  RENOUVELLEMENT
+  CANTINE
+  TRANSPORT
+  LIBRE
+}
+
 model Facture {
   id       String @id @default(cuid())
   tenantId String
@@ -1082,7 +1155,12 @@ model Facture {
   montant  Float
   devise   String        @default("DJF")
   statut   StatutFacture @default(EN_ATTENTE)
+  // Type de facture et mois de rattachement (« 2026-10 ») : clé du
+  // dédoublonnage mensuel, verrouillée par l'index unique partiel
+  // `factures_unicite_mensuelle` (voir migration_facture_mensualite_unicite.sql).
+  type     TypeFacture   @default(LIBRE)
   echeance DateTime?
+  mois     String?
 
   paiements Paiement[]
   relances  Relance[]
@@ -1096,6 +1174,8 @@ model Facture {
   @@index([tenantId])
   @@index([eleveId])
   @@index([tenantId, statut])
+  @@index([tenantId, mois])
+  @@index([tenantId, eleveId, type, mois])
   @@index([siteId])
   @@map("factures")
 }

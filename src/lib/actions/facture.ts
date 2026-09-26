@@ -5,15 +5,26 @@ import prisma from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { PAYMENT_METHOD_IDS } from "@/lib/payment-methods";
 import { siteFilterForModel, personalScopeFilter } from "@/lib/site-scope";
+import { getTarifPourEleve } from "@/lib/actions/facturation-avancee";
+import { estViolationUnicite } from "@/lib/factures/mensualites";
 import { z } from "zod";
 
-const FactureSchema = z.object({
-  eleveId: z.string().min(1, "L'élève est requis"),
-  libelle: z.string().min(1, "Le libellé est requis"),
-  montant: z.number().min(0.01, "Le montant doit être positif"),
-  devise: z.string().default("DJF"),
-  echeance: z.string().optional(),
-});
+const FactureSchema = z
+  .object({
+    eleveId: z.string().min(1, "L'élève est requis"),
+    libelle: z.string().min(1, "Le libellé est requis"),
+    montant: z.number().min(0, "Le montant doit être positif"),
+    devise: z.string().default("DJF"),
+    echeance: z.string().optional(),
+    // Absent = montant saisi librement. Sinon, `createFacture` relit le montant
+    // dans la grille tarifaire du niveau de la classe de l'élève : le montant
+    // transmis par le formulaire n'est qu'un aperçu, jamais une source de vérité.
+    typeFrais: z.enum(["MENSUALITE", "INSCRIPTION", "RENOUVELLEMENT"]).optional(),
+  })
+  .refine((v) => v.typeFrais !== undefined || v.montant >= 0.01, {
+    message: "Le montant doit être positif",
+    path: ["montant"],
+  });
 
 export type FactureFormData = z.infer<typeof FactureSchema>;
 
@@ -116,24 +127,70 @@ export async function createFacture(data: FactureFormData) {
   if (!eleve) throw new Error("Élève introuvable ou hors de votre périmètre");
   const factureSiteId = eleve.siteId ?? null;
 
-  const facture = await prisma.facture.create({
-    data: {
-      tenantId,
-      siteId: factureSiteId,
-      eleveId: values.eleveId,
-      numero,
-      libelle: values.libelle,
-      montant: values.montant,
-      devise: values.devise || "DJF",
-      statut: "EN_ATTENTE",
-      echeance: values.echeance ? new Date(values.echeance) : null,
-      createdById: session.user.id,
-    },
-  });
+  // Montant : adossé à la grille tarifaire (`typeFrais`) ou saisi librement.
+  // Dans le premier cas il est relu ICI, côté serveur, depuis le niveau de la
+  // classe de l'élève (tarif du site, sinon tarif global) : le montant envoyé
+  // par le formulaire n'est qu'un aperçu affiché à l'utilisateur.
+  let montant = values.montant;
+  let devise = values.devise || "DJF";
+
+  if (values.typeFrais) {
+    const tarif = await getTarifPourEleve(values.eleveId, values.typeFrais);
+    if (!tarif) {
+      throw new Error(
+        "Aucun tarif défini pour le niveau de la classe de cet élève. Complétez la grille dans Paramètres → Tarifs, ou choisissez un montant libre."
+      );
+    }
+    if (tarif.montant <= 0) {
+      throw new Error("Le tarif de ce niveau est à zéro : complétez-le dans Paramètres → Tarifs.");
+    }
+    montant = tarif.montant;
+    devise = tarif.devise;
+  }
+
+  // Type de facture et mois de rattachement. Pour une mensualité, le mois est
+  // déduit de l'échéance (« 2026-10-31 » → « 2026-10 ») : le verrou d'unicité
+  // mensuel s'applique donc aussi à la saisie manuelle.
+  const typeFacture = values.typeFrais ?? "LIBRE";
+  const moisFacture =
+    values.typeFrais === "MENSUALITE" && values.echeance ? values.echeance.slice(0, 7) : null;
+
+  let factureId: string;
+  try {
+    const facture = await prisma.facture.create({
+      data: {
+        tenantId,
+        siteId: factureSiteId,
+        eleveId: values.eleveId,
+        numero,
+        libelle: values.libelle,
+        montant,
+        devise,
+        statut: "EN_ATTENTE",
+        type: typeFacture,
+        mois: moisFacture,
+        echeance: values.echeance ? new Date(values.echeance) : null,
+        createdById: session.user.id,
+      },
+    });
+    factureId = facture.id;
+  } catch (e) {
+    // Index unique partiel `factures_unicite_mensuelle` : une seule facture de
+    // scolarité par élève et par mois. Une facture déjà payée bloque elle aussi
+    // la création d'une seconde facture pour le même mois.
+    if (estViolationUnicite(e)) {
+      throw new Error(
+        moisFacture
+          ? `Une facture de scolarité existe déjà pour cet élève sur ${moisFacture}. Modifiez ou annulez-la plutôt que d'en créer une seconde.`
+          : "Une facture identique existe déjà pour cet élève."
+      );
+    }
+    throw e;
+  }
 
   revalidatePath("/facturation");
   revalidateTag("dashboard-data");
-  return { success: true, id: facture.id };
+  return { success: true, id: factureId };
 }
 
 export async function getFactureByNumero(numero: string) {

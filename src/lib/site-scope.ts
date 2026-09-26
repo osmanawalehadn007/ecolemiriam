@@ -322,6 +322,9 @@ export const SITE_PATHS: Record<string, SitePath> = {
   // Une conversation porte `siteId` (`null` = conversation hors site, par
   // exemple un échange direct entre deux personnes).
   conversation: "column",
+  // Invitation d'utilisateur : `siteId` = site d'affectation prévu (`null` =
+  // invitation émise par un administrateur tenant-wide, non bornée à un site).
+  invitation: "column",
 
   // --- LearnOS : tous les modèles portent `siteId` ---
   // Le référentiel (curriculum, chapitre, compétence) comme les données

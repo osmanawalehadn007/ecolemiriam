@@ -48,6 +48,13 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
+  // Compte provisionné (mot de passe temporaire) : on force le changement de
+  // mot de passe avant tout accès. Le contrôle est fait ici (et non dans le
+  // middleware) car les revendications sont garanties par la base à ce niveau.
+  if (session.user.mustChangePassword) {
+    redirect("/change-password");
+  }
+
   // Blocage financier : rediriger les élèves/parents exclus vers la page d'accès bloqué
   // Pour les parents avec exclusion partielle, on affiche un avertissement mais on ne bloque pas
   let partialBlockMessage: string | null = null;

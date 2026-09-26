@@ -1,4 +1,4 @@
-import { Users, School, ClipboardList, GraduationCap, TrendingUp, TrendingDown } from "lucide-react";
+import { Users, School, ClipboardList, GraduationCap, TrendingUp, TrendingDown, Banknote, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -7,6 +7,8 @@ const iconMap = {
   school: School,
   clipboard: ClipboardList,
   graduation: GraduationCap,
+  banknote: Banknote,
+  alert: AlertTriangle,
 };
 
 const colorMap = {
@@ -14,6 +16,7 @@ const colorMap = {
   blue: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400",
   orange: "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400",
   green: "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400",
+  red: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
 };
 
 interface Stat {
@@ -28,7 +31,8 @@ interface Stat {
 
 export function DashboardStats({ stats }: { stats: Stat[] }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    // 5 cartes quand le KPI financier s'ajoute (rôles avec `finance:read`).
+    <div className={cn("grid grid-cols-1 sm:grid-cols-2 gap-4", stats.length >= 5 ? "xl:grid-cols-5" : "xl:grid-cols-4")}>
       {stats.map((stat) => {
         const Icon = iconMap[stat.icon];
         return (

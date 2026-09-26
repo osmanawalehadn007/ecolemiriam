@@ -7,12 +7,15 @@ async function main() {
   console.log("🌱 Seeding EcolPro database...");
 
   // --- Tenant de démonstration ---
+  // Le slug est `lycee-demo-seed` (et non `lycee-demo`) : ce dernier appartient
+  // au tenant de production « ÉTABLISSEMENT PRIVÉ MIRIAM ». Un seed qui visait
+  // `lycee-demo` réutilisait donc le tenant réel et y créait des élèves de démo.
   const tenant = await prisma.tenant.upsert({
-    where: { slug: "lycee-demo" },
+    where: { slug: "lycee-demo-seed" },
     update: {},
     create: {
       name: "Lycée de Démonstration EcolPro",
-      slug: "lycee-demo",
+      slug: "lycee-demo-seed",
       plan: PlanType.PRO,
       country: "SN",
       city: "Dakar",

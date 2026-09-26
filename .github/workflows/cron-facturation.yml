@@ -1,0 +1,149 @@
+name: Cron — Facturation mensuelle & alerte impayés
+
+# ============================================================
+# Ordonnanceur de la facturation EcolPro
+# ============================================================
+# Ce workflow appelle les deux routes cron de l'application :
+#
+#   1. LE 1ER DU MOIS — /api/cron/facturation-mensuelle
+#      génère les factures de scolarité du mois pour TOUS les élèves actifs,
+#      au statut « impayée » (EN_ATTENTE). L'appel est idempotent : le verrou
+#      d'unicité en base (`factures_unicite_mensuelle`) garantit une seule
+#      facture par élève, par type et par mois — une facture déjà payée
+#      d'avance bloque donc toute nouvelle création pour ce mois.
+#
+#   2. LE 15 DU MOIS — /api/cron/alerte-impayes
+#      envoie à Mme Mouna Mohamed (ALERTE_IMPAYES_DESTINATAIRES) et aux
+#      responsables de l'établissement l'état des factures impayées du mois.
+#      AUCUN envoi si le mois est intégralement encaissé.
+#
+# PRÉREQUIS (une seule fois, côté GitHub) :
+#   Settings → Secrets and variables → Actions → New repository secret
+#     CRON_SECRET = la valeur de CRON_SECRET de l'application (.env de prod)
+#     APP_URL     = https://ecolemiriam.com (sans slash final)
+#
+# Le secret doit être IDENTIQUE dans l'environnement de production de
+# l'application, sinon les routes répondent 401.
+#
+# Alternative sans GitHub Actions (conteneur GCP) — crontab de l'hôte :
+#   0 3 1  * *  curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://ecolemiriam.com/api/cron/facturation-mensuelle
+#   0 6 15 * *  curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://ecolemiriam.com/api/cron/alerte-impayes
+# ============================================================
+
+on:
+  schedule:
+    # 1er du mois, 03:00 UTC = 06:00 à Djibouti → génération des mensualités.
+    - cron: "0 3 1 * *"
+    # 15 du mois, 06:00 UTC = 09:00 à Djibouti → alerte des impayés.
+    - cron: "0 6 15 * *"
+  # Déclenchement manuel : Actions → « Cron — Facturation… » → Run workflow.
+  # Permet un aperçu (aucune écriture) ou un rattrapage d'un mois précis.
+  workflow_dispatch:
+    inputs:
+      tache:
+        description: "Tâche à exécuter"
+        required: true
+        default: apercu
+        type: choice
+        options:
+          - apercu # simulation : compte les factures sans rien créer
+          - mensualites # génère le mois courant
+          - rattrapage # génère un mois précis (renseigner mois/annee)
+          - alerte # envoie l'alerte des impayés du mois
+      mois:
+        description: "Mois 1-12 (rattrapage uniquement)"
+        required: false
+        default: ""
+      annee:
+        description: "Année scolaire, ex. 2026-2027 (rattrapage uniquement)"
+        required: false
+        default: ""
+
+# Deux exécutions ne doivent jamais se chevaucher : la seconde attendrait la
+# première plutôt que de risquer un doublon (le verrou en base le refuserait,
+# mais autant ne pas gaspiller d'appels).
+concurrency:
+  group: cron-facturation
+  cancel-in-progress: false
+
+jobs:
+  facturation:
+    name: Facturation automatique
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_URL: ${{ secrets.APP_URL || 'https://ecolemiriam.com' }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Vérifier la configuration
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::Le secret CRON_SECRET n'est pas défini (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          echo "Cible : $APP_URL"
+
+      - name: Déterminer la tâche du jour
+        id: tache
+        run: |
+          TACHE="${{ inputs.tache }}"
+          if [ -z "$TACHE" ]; then
+            JOUR=$(date -u +%d)
+            if [ "$JOUR" = "15" ]; then
+              TACHE="alerte"
+            else
+              # 1er du mois (ou déclenchement retardé) : la génération est
+              # idempotente, rejouer le mois est donc sans risque.
+              TACHE="mensualites"
+            fi
+          fi
+          echo "tache=$TACHE" >> "$GITHUB_OUTPUT"
+          echo "Tâche retenue : $TACHE"
+
+      - name: Aperçu des mensualités (aucune écriture)
+        if: steps.tache.outputs.tache == 'apercu'
+        run: |
+          curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/facturation-mensuelle?dry=1" | tee reponse.json
+
+      - name: Générer les mensualités du mois
+        if: steps.tache.outputs.tache == 'mensualites'
+        run: |
+          curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/facturation-mensuelle" | tee reponse.json
+
+      - name: Rattraper un mois précis
+        if: steps.tache.outputs.tache == 'rattrapage'
+        run: |
+          if [ -z "${{ inputs.mois }}" ]; then
+            echo "::error::Renseigner le champ « mois » pour un rattrapage."
+            exit 1
+          fi
+          URL="$APP_URL/api/cron/facturation-mensuelle?mois=${{ inputs.mois }}"
+          if [ -n "${{ inputs.annee }}" ]; then
+            URL="$URL&annee=${{ inputs.annee }}"
+          fi
+          curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" "$URL" | tee reponse.json
+
+      - name: Alerter sur les impayés du mois
+        if: steps.tache.outputs.tache == 'alerte'
+        run: |
+          curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/alerte-impayes" | tee reponse.json
+
+      - name: Résumé
+        if: always()
+        run: |
+          {
+            echo "## Facturation — $(date -u +'%Y-%m-%d %H:%M UTC')"
+            echo ""
+            echo "Tâche : ${{ steps.tache.outputs.tache }}"
+            echo ""
+            if [ -f reponse.json ]; then
+              echo '```json'
+              cat reponse.json
+              echo '```'
+            else
+              echo "Aucune réponse (échec d'appel — voir les logs ci-dessus)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

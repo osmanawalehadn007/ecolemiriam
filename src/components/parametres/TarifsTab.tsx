@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,8 @@ import { createTarif, deleteTarif, getTarifsForTenant, type TarifFormData } from
 
 interface TarifItem {
   id: string;
+  siteId: string | null;
+  site?: { nom: string; code: string | null } | null;
   niveau: string;
   annee: string;
   mensualite: number;
@@ -25,14 +27,51 @@ interface TarifItem {
   actif: boolean;
 }
 
-const NIVEAUX_PREDEFINIS = ["Maternelle", "Primaire", "Collège", "Lycée"];
+interface SiteOption {
+  id: string;
+  nom: string;
+  code?: string | null;
+}
+
+/**
+ * Suggestions de niveaux. Une liste fermée (l'ancien select « Maternelle,
+ * Primaire, Collège, Lycée ») rendait impossible la création d'un tarif
+ * correspondant aux niveaux réellement saisis dans les classes — « 1ère »,
+ * « 6ème », « Seconde »… d'où des factures générées sans montant. La saisie est
+ * donc libre, guidée par les niveaux des classes de l'établissement.
+ */
+const NIVEAUX_SUGGERES = [
+  "Maternelle",
+  "1ère",
+  "2ème",
+  "3ème",
+  "4ème",
+  "5ème",
+  "6ème",
+  "7ème",
+  "8ème",
+  "9ème",
+  "Seconde",
+  "Première",
+  "Terminale",
+];
 
 function formatMoney(amount: number, devise: string) {
   const currency = devise === "XOF" ? "DJF" : devise;
   return new Intl.NumberFormat("fr-DJ", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
 }
 
-export function TarifsTab() {
+export function TarifsTab({
+  sites = [],
+  niveauxClasses = [],
+  canManage = false,
+  anneeCourante,
+}: {
+  sites?: SiteOption[];
+  niveauxClasses?: string[];
+  canManage?: boolean;
+  anneeCourante?: string;
+}) {
   const t = useTranslations("parametres");
   const [tarifs, setTarifs] = useState<TarifItem[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -40,7 +79,7 @@ export function TarifsTab() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<TarifFormData>({
     niveau: "",
-    annee: "2025-2026",
+    annee: anneeCourante ?? "2025-2026",
     mensualite: 0,
     fraisInscription: 0,
     fraisRenouvellement: 0,
@@ -54,6 +93,39 @@ export function TarifsTab() {
   useEffect(() => {
     loadTarifs();
   }, []);
+
+  // Suggestions de saisie : niveaux des classes de l'établissement d'abord (ce
+  // sont eux que la facturation compare), puis les niveaux déjà tarifés, puis
+  // les libellés usuels.
+  const niveauxDisponibles = useMemo(() => {
+    const tous = new Set<string>([...niveauxClasses, ...tarifs.map((t) => t.niveau)]);
+    return Array.from(tous)
+      .filter((n) => n.trim().length > 0)
+      .sort((a, b) => a.localeCompare(b, "fr"));
+  }, [niveauxClasses, tarifs]);
+
+  const suggestionsNiveaux = useMemo(
+    () =>
+      Array.from(new Set([...niveauxDisponibles, ...NIVEAUX_SUGGERES])).sort((a, b) =>
+        a.localeCompare(b, "fr")
+      ),
+    [niveauxDisponibles]
+  );
+
+  function rendreFormVide(): TarifFormData {
+    return {
+      niveau: "",
+      annee: anneeCourante ?? "2025-2026",
+      mensualite: 0,
+      fraisInscription: 0,
+      fraisRenouvellement: 0,
+      fraisCantine: undefined,
+      fraisTransport: undefined,
+      devise: "DJF",
+      nbMois: 10,
+      siteId: undefined,
+    };
+  }
 
   async function loadTarifs() {
     try {
@@ -73,7 +145,7 @@ export function TarifsTab() {
       await createTarif(form);
       toast.success(t("tarifCreated"));
       setShowForm(false);
-      setForm({ niveau: "", annee: "2025-2026", mensualite: 0, fraisInscription: 0, fraisRenouvellement: 0, fraisCantine: undefined, fraisTransport: undefined, devise: "DJF", nbMois: 10, siteId: undefined });
+      setForm(rendreFormVide());
       await loadTarifs();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("error"));
@@ -99,10 +171,12 @@ export function TarifsTab() {
         <p className="text-sm text-muted-foreground">
           {t("tarifsDescription")}
         </p>
-        <Button size="sm" className="gap-2" onClick={() => setShowForm(!showForm)}>
-          <Plus className="h-4 w-4" />
-          {t("addTarif")}
-        </Button>
+        {canManage && (
+          <Button size="sm" className="gap-2" onClick={() => setShowForm(!showForm)}>
+            <Plus className="h-4 w-4" />
+            {t("addTarif")}
+          </Button>
+        )}
       </div>
 
       {showForm && (
@@ -114,18 +188,39 @@ export function TarifsTab() {
             <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="niveau">{t("level")} *</Label>
-                <select
+                {/* Saisie libre guidée par les niveaux réellement utilisés :
+                    une liste fermée empêchait de créer le tarif d'une classe
+                    « 1ère » / « 6ème », donc la facturation ne trouvait rien. */}
+                <Input
                   id="niveau"
+                  list="niveaux-tarifs"
+                  placeholder={t("levelPlaceholder")}
                   value={form.niveau}
                   onChange={(e) => setForm({ ...form, niveau: e.target.value })}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                   required
+                />
+                <datalist id="niveaux-tarifs">
+                  {suggestionsNiveaux.map((n) => (
+                    <option key={n} value={n} />
+                  ))}
+                </datalist>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="siteId">{t("tarifSite")}</Label>
+                <select
+                  id="siteId"
+                  value={form.siteId ?? ""}
+                  onChange={(e) => setForm({ ...form, siteId: e.target.value || undefined })}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
-                  <option value="">{t("select")}</option>
-                  {NIVEAUX_PREDEFINIS.map((n) => (
-                    <option key={n} value={n}>{n}</option>
+                  <option value="">{t("tarifAllSites")}</option>
+                  {sites.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.code ? `${s.code} — ${s.nom}` : s.nom}
+                    </option>
                   ))}
                 </select>
+                <p className="text-xs text-muted-foreground">{t("tarifSiteHint")}</p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="annee">{t("schoolYear")} *</Label>
@@ -198,6 +293,7 @@ export function TarifsTab() {
                 <thead className="bg-muted/50 border-b">
                   <tr>
                     <th className="text-left px-4 py-3 font-medium">{t("level")}</th>
+                    <th className="text-left px-4 py-3 font-medium">{t("tarifSite")}</th>
                     <th className="text-left px-4 py-3 font-medium">{t("schoolYear")}</th>
                     <th className="text-right px-4 py-3 font-medium">{t("monthlyFee")}</th>
                     <th className="text-right px-4 py-3 font-medium">{t("inscriptionFee")}</th>
@@ -217,6 +313,13 @@ export function TarifsTab() {
                           {!tarif.actif && <Badge variant="secondary">{t("inactive")}</Badge>}
                         </div>
                       </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {tarif.site
+                          ? tarif.site.code
+                            ? `${tarif.site.code} — ${tarif.site.nom}`
+                            : tarif.site.nom
+                          : t("tarifAllSitesShort")}
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground">{tarif.annee}</td>
                       <td className="px-4 py-3 text-right font-medium">{formatMoney(tarif.mensualite, tarif.devise)}</td>
                       <td className="px-4 py-3 text-right">{formatMoney(tarif.fraisInscription, tarif.devise)}</td>
@@ -225,9 +328,11 @@ export function TarifsTab() {
                       <td className="px-4 py-3 text-right text-muted-foreground">{tarif.fraisTransport ? formatMoney(tarif.fraisTransport, tarif.devise) : "—"}</td>
                       <td className="px-4 py-3 text-center">{tarif.nbMois}</td>
                       <td className="px-4 py-3 text-right">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(tarif.id)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        {canManage && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(tarif.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -66,3 +66,10 @@ next-env.d.ts
 
 # Sauvegardes DB (données sensibles)
 backups/
+
+# Sauvegardes d'environnement — contiennent des identifiants de production.
+# Ne JAMAIS commiter (.env.bak, .env.bak-20260926…, .env.example.bak, etc.).
+.env.bak
+.env.bak-*
+.env.*.bak*
+*.env.bak*

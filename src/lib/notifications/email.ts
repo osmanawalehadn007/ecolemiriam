@@ -4,9 +4,11 @@
  *
  * Variables d'environnement :
  *   RESEND_API_KEY=re_...
- *   EMAIL_FROM="EcolPro <noreply@ecolpro.app>"
+ *   EMAIL_FROM="École Miriam <noreply@ecolemiriam.com>"
  *
- * Si la clé est absente, l'envoi est simulé (utile en dev / sandbox).
+ * ⚠️ L'adresse `from` DOIT appartenir à un domaine vérifié sur le compte Resend
+ * utilisé (resend.com/domains), sinon l'API répond 403 « domain is not
+ * verified » et l'e-mail est refusé. Sans clé, l'envoi est simulé (dev/sandbox).
  */
 
 import { Resend } from "resend";
@@ -17,7 +19,7 @@ export interface EmailResult {
   error?: string;
 }
 
-const FROM = process.env.EMAIL_FROM ?? "EcolPro <noreply@ecolpro.app>";
+const FROM = process.env.EMAIL_FROM ?? "École Miriam <noreply@ecolemiriam.com>";
 const BATCH = 50; // limite Resend par appel
 
 /**

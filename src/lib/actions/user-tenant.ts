@@ -124,6 +124,8 @@ export async function addUserToTenant(params: {
       role: params.role,
       tenantId: params.tenantId,
       isActive: true,
+      // Mot de passe temporaire partagé : changement obligatoire à la 1re connexion.
+      mustChangePassword: true,
       userTenants: {
         create: {
           tenantId: params.tenantId,

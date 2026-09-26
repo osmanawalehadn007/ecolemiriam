@@ -33,7 +33,15 @@ vi.mock("next/cache", () => ({
   revalidateTag: vi.fn(),
 }));
 
+// `createFacture` relit le montant dans la grille tarifaire dès qu'un type de
+// frais est transmis : c'est le point de contrôle serveur qui empêche un
+// formulaire de facturer un montant différent du tarif du niveau de l'élève.
+vi.mock("@/lib/actions/facturation-avancee", () => ({
+  getTarifPourEleve: vi.fn(),
+}));
+
 import { auth } from "@/lib/auth";
+import { getTarifPourEleve } from "@/lib/actions/facturation-avancee";
 import prisma from "@/lib/prisma";
 import {
   getFacturesForTenant,
@@ -44,6 +52,7 @@ import {
 } from "@/lib/actions/facture";
 
 const mockAuth = auth as ReturnType<typeof vi.fn>;
+const mockTarif = getTarifPourEleve as ReturnType<typeof vi.fn>;
 const mockPrisma = prisma as unknown as {
   facture: {
     findMany: ReturnType<typeof vi.fn>;
@@ -205,6 +214,74 @@ describe("facture actions", () => {
       await createFacture({ eleveId: "e1", libelle: "Test", montant: 1000, devise: "DJF" });
       const call = mockPrisma.facture.create.mock.calls[0][0];
       expect(call.data.numero).toMatch(/^FAC-\d{4}-00001$/);
+    });
+  });
+
+  // Tarif appliqué automatiquement : le montant vient de la grille du niveau de
+  // la classe de l'élève, pas du formulaire.
+  describe("createFacture avec tarif", () => {
+    it("reprend le montant et la devise du tarif du niveau", async () => {
+      mockPrisma.facture.count.mockResolvedValue(0);
+      mockPrisma.facture.create.mockResolvedValue({ id: "f-tarif" });
+      mockTarif.mockResolvedValue({
+        montant: 7000,
+        devise: "DJF",
+        niveau: "1",
+        source: "GLOBAL",
+        propreAuSite: false,
+        type: "MENSUALITE",
+      });
+
+      await createFacture({
+        eleveId: "e1",
+        libelle: "Scolarité 2026-2027",
+        montant: 0,
+        devise: "DJF",
+        typeFrais: "MENSUALITE",
+      });
+
+      expect(mockTarif).toHaveBeenCalledWith("e1", "MENSUALITE");
+      const call = mockPrisma.facture.create.mock.calls[0][0];
+      expect(call.data.montant).toBe(7000);
+      expect(call.data.devise).toBe("DJF");
+    });
+
+    it("ignore le montant du formulaire au profit du tarif", async () => {
+      mockPrisma.facture.count.mockResolvedValue(0);
+      mockPrisma.facture.create.mockResolvedValue({ id: "f-tarif" });
+      mockTarif.mockResolvedValue({
+        montant: 6000,
+        devise: "DJF",
+        niveau: "1ère",
+        source: "SITE",
+        propreAuSite: true,
+        type: "INSCRIPTION",
+      });
+
+      await createFacture({
+        eleveId: "e1",
+        libelle: "Frais d'inscription",
+        montant: 99999,
+        devise: "DJF",
+        typeFrais: "INSCRIPTION",
+      });
+
+      const call = mockPrisma.facture.create.mock.calls[0][0];
+      expect(call.data.montant).toBe(6000);
+    });
+
+    it("refuse la facture quand aucun tarif ne couvre le niveau", async () => {
+      mockTarif.mockResolvedValue(null);
+      await expect(
+        createFacture({
+          eleveId: "e1",
+          libelle: "Scolarité",
+          montant: 0,
+          devise: "DJF",
+          typeFrais: "MENSUALITE",
+        })
+      ).rejects.toThrow(/Aucun tarif défini/);
+      expect(mockPrisma.facture.create).not.toHaveBeenCalled();
     });
   });
 

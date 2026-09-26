@@ -5,6 +5,9 @@ import prisma from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { sendPaymentWhatsApp } from "@/lib/notifications/whatsapp";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { choisirTarif, montantPourTypeFrais, type TypeFrais } from "@/lib/tarifs";
+import { genererMensualitesPourTenant } from "@/lib/factures/mensualites";
 import { z } from "zod";
 
 // ============================================================
@@ -30,8 +33,12 @@ export async function getTarifsForTenant() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
   return prisma.tarifNiveau.findMany({
-    where: { tenantId: session.user.tenantId },
-    orderBy: [{ annee: "desc" }, { niveau: "asc" }],
+    // `tarifNiveau` est un modèle « partagé » : un tarif sans site (tarif
+    // global, hérité par tous les sites) reste visible d'un compte site-scopé,
+    // en plus des tarifs propres à ses sites.
+    where: { tenantId: session.user.tenantId, ...siteFilterForModel("tarifNiveau", session.user) },
+    include: { site: { select: { id: true, nom: true, code: true } } },
+    orderBy: [{ annee: "desc" }, { siteId: "asc" }, { niveau: "asc" }],
   });
 }
 
@@ -48,6 +55,24 @@ export async function createTarif(data: TarifFormData) {
   }
 
   const v = parsed.data;
+
+  // `siteId` vient du formulaire : la clé étrangère `Site` est globale, donc un
+  // tarif pouvait être rattaché au site d'un autre établissement. On vérifie
+  // l'appartenance au tenant ET au périmètre de l'utilisateur.
+  if (v.siteId) {
+    const isAdmin = session.user.role === "TENANT_ADMIN" || session.user.role === "SUPER_ADMIN";
+    const site = await prisma.site.findFirst({
+      where: {
+        id: v.siteId,
+        tenantId: session.user.tenantId,
+        deletedAt: null,
+        ...(isAdmin ? {} : { userSites: { some: { userId: session.user.id } } }),
+      },
+      select: { id: true },
+    });
+    if (!site) throw new Error("Site introuvable ou hors de votre périmètre");
+  }
+
   await prisma.tarifNiveau.create({
     data: {
       tenantId: session.user.tenantId,
@@ -107,94 +132,24 @@ export async function genererMensualites(params: {
     throw new Error("Permissions insuffisantes");
   }
 
-  const tenantId = session.user.tenantId;
-  const { mois, annee, inclureCantine = false, inclureTransport = false } = params;
-
-  const moisNoms = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
-  const moisNom = moisNoms[mois - 1] ?? `Mois ${mois}`;
-
-  // Uniquement les élèves du périmètre : sans ce filtre, un administrateur d'un
-  // site générait des mensualités pour TOUS les sites de l'établissement.
-  // `siteId` est relevé pour rattacher chaque facture créée à son site.
-  const eleves = await prisma.eleve.findMany({
-    where: { tenantId, statut: "ACTIF", ...siteFilterForModel("eleve", session.user) },
-    include: { classe: { select: { niveau: true, nom: true } } },
+  // Délégation au cœur partagé (`src/lib/factures/mensualites.ts`), également
+  // utilisé par le cron de début de mois. Le périmètre de sites de
+  // l'utilisateur est transmis en fragments de `where` ; les tarifs globaux
+  // (`siteId = null`) restent visibles d'un compte site-scopé.
+  const resultat = await genererMensualitesPourTenant({
+    tenantId: session.user.tenantId,
+    mois: params.mois,
+    annee: params.annee,
+    inclureCantine: params.inclureCantine,
+    inclureTransport: params.inclureTransport,
+    eleveWhere: siteFilterForModel("eleve", session.user),
+    tarifWhere: siteFilterForModel("tarifNiveau", session.user),
+    acteurId: session.user.id,
   });
-
-  // Récupérer les tarifs par niveau
-  const tarifs = await prisma.tarifNiveau.findMany({
-    where: { tenantId, annee, actif: true },
-  });
-
-  // Indexer les tarifs par niveau
-  const tarifMap = new Map<string, typeof tarifs[0]>();
-  for (const t of tarifs) {
-    tarifMap.set(t.niveau.toLowerCase(), t);
-  }
-
-  let count = 0;
-  let skipped = 0;
-
-  for (const eleve of eleves) {
-    const niveau = eleve.classe?.niveau ?? "Inconnu";
-    const tarif = tarifMap.get(niveau.toLowerCase());
-    if (!tarif) {
-      skipped++;
-      continue;
-    }
-
-    // Vérifier si une facture existe déjà pour cet élève et ce mois
-    const libelle = `Scolarité ${moisNom} ${annee}`;
-    const existing = await prisma.facture.findFirst({
-      where: {
-        tenantId,
-        eleveId: eleve.id,
-        libelle,
-        ...siteFilterForModel("facture", session.user),
-      },
-      select: { id: true },
-    });
-    if (existing) {
-      skipped++;
-      continue;
-    }
-
-    // Calculer le montant total
-    let montant = tarif.mensualite;
-    if (inclureCantine && tarif.fraisCantine) montant += tarif.fraisCantine;
-    if (inclureTransport && tarif.fraisTransport) montant += tarif.fraisTransport;
-
-    // Échéance = fin du mois
-    const echeance = new Date(parseInt(annee.split("-")[0]), mois, 0);
-
-    // Numérotation tenant-wide : `FAC-<année>-<n>` doit rester unique pour tout
-    // l'établissement. Seul un NOMBRE est lu ici.
-    // eslint-disable-next-line ecolpro/require-site-filter
-    const factureCount = await prisma.facture.count({ where: { tenantId } });
-    const numero = `FAC-${annee.split("-")[0]}-${String(factureCount + 1).padStart(5, "0")}`;
-
-    await prisma.facture.create({
-      data: {
-        tenantId,
-        // La facture hérite du site de l'élève : sans cela elle serait créée
-        // « non assignée » et invisible dans toutes les vues filtrées par site.
-        siteId: eleve.siteId,
-        eleveId: eleve.id,
-        numero,
-        libelle,
-        montant,
-        devise: tarif.devise,
-        statut: "EN_ATTENTE",
-        echeance,
-        createdById: session.user.id,
-      },
-    });
-    count++;
-  }
 
   revalidatePath("/facturation");
   revalidateTag("dashboard-data");
-  return { success: true, generated: count, skipped };
+  return { success: true, ...resultat };
 }
 
 // ============================================================
@@ -216,28 +171,41 @@ export async function genererFraisInscription(params: {
   const { eleveIds, type, annee } = params;
 
   const tarifs = await prisma.tarifNiveau.findMany({
-    where: { tenantId, annee, actif: true },
+    where: {
+      tenantId,
+      actif: true,
+      ...siteFilterForModel("tarifNiveau", session.user),
+    },
   });
-  const tarifMap = new Map<string, typeof tarifs[0]>();
+  // Tarifs regroupés par année scolaire (la classe porte la sienne).
+  const tarifsParAnnee = new Map<string, typeof tarifs>();
   for (const t of tarifs) {
-    tarifMap.set(t.niveau.toLowerCase(), t);
+    const liste = tarifsParAnnee.get(t.annee);
+    if (liste) liste.push(t);
+    else tarifsParAnnee.set(t.annee, [t]);
   }
 
   let count = 0;
   let skipped = 0;
+  let sansTarif = 0;
 
   for (const eleveId of eleveIds) {
     // `eleveIds` vient de l'appelant : sans filtre de site, on pouvait facturer
     // des élèves d'un autre site du même établissement.
     const eleve = await prisma.eleve.findFirst({
       where: { id: eleveId, tenantId, ...siteFilterForModel("eleve", session.user) },
-      include: { classe: { select: { niveau: true } } },
+      include: { classe: { select: { niveau: true, annee: true } } },
     });
     if (!eleve) { skipped++; continue; }
 
-    const niveau = eleve.classe?.niveau ?? "Inconnu";
-    const tarif = tarifMap.get(niveau.toLowerCase());
-    if (!tarif) { skipped++; continue; }
+    // Tarif du site de l'élève, sinon tarif global (rapprochement canonique).
+    const choix = choisirTarif(
+      tarifsParAnnee.get(eleve.classe?.annee ?? annee) ?? tarifs,
+      eleve.siteId,
+      eleve.classe?.niveau
+    );
+    if (!choix) { sansTarif++; skipped++; continue; }
+    const tarif = choix.tarif;
 
     const libelle = type === "INSCRIPTION"
       ? `Frais d'inscription ${annee}`
@@ -250,7 +218,7 @@ export async function genererFraisInscription(params: {
     });
     if (existing) { skipped++; continue; }
 
-    const montant = type === "INSCRIPTION" ? tarif.fraisInscription : tarif.fraisRenouvellement;
+    const montant = montantPourTypeFrais(tarif, type);
     // Numérotation tenant-wide (unicité du numéro pour tout l'établissement) :
     // seul un NOMBRE est lu, aucune donnée d'un autre site n'est exposée.
     // eslint-disable-next-line ecolpro/require-site-filter
@@ -268,6 +236,10 @@ export async function genererFraisInscription(params: {
         montant,
         devise: tarif.devise,
         statut: "EN_ATTENTE",
+        // Type tracé pour le dédoublonnage annuel ; `mois` reste vide : les
+        // frais d'inscription ne relèvent pas du verrou mensuel.
+        type,
+        mois: null,
         echeance: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 jours
         createdById: session.user.id,
       },
@@ -277,7 +249,105 @@ export async function genererFraisInscription(params: {
 
   revalidatePath("/facturation");
   revalidateTag("dashboard-data");
-  return { success: true, generated: count, skipped };
+  return { success: true, generated: count, skipped, sansTarif };
+}
+
+/**
+ * Frais d'inscription / renouvellement pour TOUS les élèves du périmètre.
+ * `genererFraisInscription` exige une liste d'élèves ; l'écran Facturation
+ * raisonne sur l'ensemble des élèves actifs — d'où cette enveloppe, qui
+ * applique le même périmètre de sites que le reste de la facturation.
+ */
+export async function genererFraisInscriptionPourTous(params: {
+  type: "INSCRIPTION" | "RENOUVELLEMENT";
+  annee: string;
+}) {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+  if (session.user.role !== "TENANT_ADMIN" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "PRINCIPAL") {
+    throw new Error("Permissions insuffisantes");
+  }
+
+  const eleves = await prisma.eleve.findMany({
+    where: {
+      tenantId: session.user.tenantId,
+      statut: "ACTIF",
+      deletedAt: null,
+      ...siteFilterForModel("eleve", session.user),
+    },
+    select: { id: true },
+  });
+
+  return genererFraisInscription({
+    eleveIds: eleves.map((e) => e.id),
+    type: params.type,
+    annee: params.annee,
+  });
+}
+
+// ============================================================
+// TARIF APPLICABLE À UN ÉLÈVE (remplissage du formulaire de facture)
+// ============================================================
+
+export interface TarifEleve {
+  montant: number;
+  devise: string;
+  /** Niveau de la classe de l'élève (« 1 », « 1ère », « 6ème »…). */
+  niveau: string;
+  /** `SITE` = tarif propre au site de l'élève, `GLOBAL` = tarif hérité. */
+  source: "SITE" | "GLOBAL";
+  /** Vrai si le tarif appliqué est celui du site de l'élève. */
+  propreAuSite: boolean;
+  type: TypeFrais;
+}
+
+/**
+ * Tarif à appliquer à un élève, lu dans la grille du niveau de sa classe.
+ * C'est ce que le formulaire de facture appelle pour pré-remplir le montant,
+ * et ce que `createFacture` réapplique côté serveur (`typeFrais` transmis).
+ */
+export async function getTarifPourEleve(
+  eleveId: string,
+  type: TypeFrais = "MENSUALITE"
+): Promise<TarifEleve | null> {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const tenantId = session.user.tenantId;
+  if (!eleveId) return null;
+
+  const eleve = await prisma.eleve.findFirst({
+    where: { id: eleveId, tenantId, ...siteFilterForModel("eleve", session.user) },
+    select: { siteId: true, classe: { select: { niveau: true, annee: true } } },
+  });
+  if (!eleve) return null;
+
+  const niveau = eleve.classe?.niveau ?? null;
+  if (!niveau) return null;
+
+  const annee =
+    eleve.classe?.annee ?? (await getAnneeCouranteLibelle(tenantId)) ?? null;
+
+  const tarifs = await prisma.tarifNiveau.findMany({
+    where: {
+      tenantId,
+      actif: true,
+      ...(annee ? { annee } : {}),
+      ...siteFilterForModel("tarifNiveau", session.user),
+    },
+  });
+
+  const choix = choisirTarif(tarifs, eleve.siteId, niveau);
+  if (!choix) return null;
+
+  return {
+    montant: montantPourTypeFrais(choix.tarif, type),
+    devise: choix.tarif.devise,
+    niveau,
+    source: choix.source,
+    propreAuSite: choix.source === "SITE",
+    type,
+  };
 }
 
 // ============================================================

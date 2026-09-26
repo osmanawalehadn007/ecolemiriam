@@ -176,6 +176,9 @@ export async function createUser(data: UserFormData) {
       phone: v.phone || null,
       password: hashed,
       isActive: v.isActive,
+      // Mot de passe défini par l'administrateur (ou temporaire) : l'utilisateur
+      // devra le changer à sa première connexion.
+      mustChangePassword: true,
       // Créer l'entrée UserTenant pour le multi-tenant
       userTenants: {
         create: {

@@ -5,7 +5,7 @@ import { authConfig } from "@/auth.config";
 
 const { auth } = NextAuth(authConfig);
 
-const PUBLIC_ROUTES = ["/login", "/register", "/api/auth", "/", "/_next", "/select-tenant"];
+const PUBLIC_ROUTES = ["/login", "/register", "/accept-invitation", "/api/auth", "/", "/_next", "/select-tenant"];
 
 const SELF_AUTH_API = ["/api/auth", "/api/cron", "/api/webhooks"];
 

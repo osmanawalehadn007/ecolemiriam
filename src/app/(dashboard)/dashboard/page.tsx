@@ -16,6 +16,8 @@ import {
   teacherNoteFilter,
 } from "@/lib/teacher-classes";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { roleHasPermission } from "@/lib/rbac";
+import { getImpayesStats } from "@/lib/factures/impayes";
 import type { Prisma } from "@prisma/client";
 
 const getDashboardData = unstable_cache(
@@ -143,6 +145,17 @@ export default async function DashboardPage() {
     getAnneeCouranteLibelle(tenantId),
   ]);
 
+  // KPI « factures impayées » : la gestion financière n'a de sens que pour les
+  // rôles disposant de `finance:read` (un enseignant ou un parent n'a pas à
+  // voir les impayés de l'établissement).
+  const canSeeFinance = roleHasPermission(session.user.role, "finance:read");
+  const impayes = canSeeFinance
+    ? await getImpayesStats({
+        tenantId,
+        factureWhere: siteFilterForModel("facture", session.user),
+      })
+    : null;
+
   const currentSiteId = (session.user as { siteId?: string | null }).siteId ?? null;
   const currentSiteName = currentSiteId
     ? (sites.find((s) => s.id === currentSiteId)?.nom ?? "Site inconnu")
@@ -184,6 +197,26 @@ export default async function DashboardPage() {
       color: "green" as const,
       change: data.prochainExamen?.intitule ?? "",
     },
+    // KPI « gestion des impayés » : nombre de factures non encaissées et reste
+    // à recouvrer. Absent pour les rôles sans `finance:read`.
+    ...(impayes
+      ? [
+          {
+            label: t("unpaidInvoices"),
+            value: impayes.nbFactures.toString(),
+            icon: "banknote" as const,
+            color: (impayes.nbFactures > 0 ? "red" : "green") as "red" | "green",
+            change:
+              impayes.nbFactures > 0
+                ? `${impayes.nbEleves} ${t("totalStudents").toLowerCase()} · ${new Intl.NumberFormat(
+                    locale === "en" ? "en-US" : "fr-FR",
+                    { maximumFractionDigits: 0 }
+                  ).format(impayes.montantRestant)} ${impayes.devise}`
+                : t("noUnpaid"),
+            changePositive: impayes.nbFactures === 0,
+          },
+        ]
+      : []),
   ];
 
   return (

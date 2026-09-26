@@ -63,6 +63,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           token.tenantHasSites = true;
           token.availableTenants = [];
           token.claimsVersion = CLAIMS_VERSION;
+          token.mustChangePassword = false;
           return token;
         }
 
@@ -73,6 +74,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         token.tenantHasSites = claims.tenantHasSites;
         token.availableTenants = claims.availableTenants;
         token.claimsVersion = claims.claimsVersion;
+        token.mustChangePassword = claims.mustChangePassword;
       }
 
       return token;
@@ -166,6 +168,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           tenantHasSites: claims.tenantHasSites,
           availableTenants: claims.availableTenants,
           claimsVersion: claims.claimsVersion,
+          mustChangePassword: claims.mustChangePassword,
         };
       },
     }),
@@ -189,6 +192,8 @@ declare module "next-auth" {
       /** Le tenant actif possède-t-il au moins un site ? */
       tenantHasSites?: boolean;
       availableTenants?: AvailableTenant[];
+      /** Compte provisionné : changement de mot de passe obligatoire. */
+      mustChangePassword?: boolean;
     };
   }
 }

@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/Header";
 import { FactureForm } from "@/components/facturation/FactureForm";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 
 export default async function NouvelleFacturePage({
   searchParams,
@@ -36,6 +37,9 @@ export default async function NouvelleFacturePage({
   ]);
 
   const params = await searchParams;
+  // Année scolaire de l'établissement : sert au libellé pré-rempli des frais
+  // d'inscription/renouvellement (le tarif, lui, est résolu côté serveur).
+  const annee = await getAnneeCouranteLibelle(session.user.tenantId);
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -46,7 +50,12 @@ export default async function NouvelleFacturePage({
         userAvatar={session.user.image ?? undefined}
       />
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <FactureForm eleves={eleves} classes={classes} eleveIdPreselected={params.eleveId} />
+        <FactureForm
+          eleves={eleves}
+          classes={classes}
+          eleveIdPreselected={params.eleveId}
+          annee={annee ?? undefined}
+        />
       </div>
     </div>
   );

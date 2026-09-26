@@ -7,11 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Zap, AlertTriangle, Ban, Unlock, RefreshCw, Banknote } from "lucide-react";
+import { Loader2, Zap, AlertTriangle, Ban, Unlock, RefreshCw, Banknote, Receipt } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { anneeScolaireParDefaut } from "@/lib/annee-scolaire";
 import {
   genererMensualites,
-  genererFraisInscription,
+  genererFraisInscriptionPourTous,
   detecterFacturesEnRetard,
   envoyerRelance,
   exclureEleve,
@@ -44,7 +45,7 @@ interface ExclusionItem {
 
 const MOIS_NOMS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
-export function FacturationActions({ currentYear = "2025-2026" }: { currentYear?: string }) {
+export function FacturationActions({ currentYear = anneeScolaireParDefaut() }: { currentYear?: string }) {
   const t = useTranslations("facturation");
   const [isPending, setIsPending] = useState(false);
   const [showGenModal, setShowGenModal] = useState(false);
@@ -58,6 +59,11 @@ export function FacturationActions({ currentYear = "2025-2026" }: { currentYear?
   const [genCantine, setGenCantine] = useState(false);
   const [genTransport, setGenTransport] = useState(false);
 
+  // Frais d'inscription / renouvellement (annuels)
+  const [showFeesPanel, setShowFeesPanel] = useState(false);
+  const [feesType, setFeesType] = useState<"INSCRIPTION" | "RENOUVELLEMENT">("INSCRIPTION");
+  const [feesAnnee, setFeesAnnee] = useState(currentYear);
+
   // Factures en retard
   const [facturesRetard, setFacturesRetard] = useState<FactureEnRetard[]>([]);
   const [loadingRetard, setLoadingRetard] = useState(false);
@@ -70,8 +76,31 @@ export function FacturationActions({ currentYear = "2025-2026" }: { currentYear?
     setIsPending(true);
     try {
       const result = await genererMensualites({ mois: genMois, annee: genAnnee, inclureCantine: genCantine, inclureTransport: genTransport });
-      toast.success(t("invoicesGenerated", { generated: result.generated, skipped: result.skipped }));
+      if (result.generated === 0 && result.sansTarif > 0) {
+        // Dire pourquoi rien n'a été facturé : c'est ce silence qui donnait
+        // l'impression que les tarifs n'étaient pas pris en compte.
+        toast.warning(t("invoicesGeneratedNoTarif", { count: result.sansTarif }));
+      } else {
+        toast.success(t("invoicesGenerated", { generated: result.generated, skipped: result.skipped }));
+      }
       setShowGenModal(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("error"));
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function handleGenererFrais() {
+    setIsPending(true);
+    try {
+      const result = await genererFraisInscriptionPourTous({ type: feesType, annee: feesAnnee });
+      if (result.generated === 0 && result.sansTarif > 0) {
+        toast.warning(t("invoicesGeneratedNoTarif", { count: result.sansTarif }));
+      } else {
+        toast.success(t("feesGenerated", { generated: result.generated, skipped: result.skipped }));
+      }
+      setShowFeesPanel(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("error"));
     } finally {
@@ -152,6 +181,10 @@ export function FacturationActions({ currentYear = "2025-2026" }: { currentYear?
           <Zap className="h-4 w-4" />
           {t("generateMonthly")}
         </Button>
+        <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowFeesPanel(!showFeesPanel)}>
+          <Receipt className="h-4 w-4" />
+          {t("generateFees")}
+        </Button>
         <Button size="sm" variant="outline" className="gap-2" onClick={() => setShowPayModal(!showPayModal)}>
           <Banknote className="h-4 w-4" />
           {t("payByInvoiceNumber")}
@@ -213,6 +246,48 @@ export function FacturationActions({ currentYear = "2025-2026" }: { currentYear?
                 {t("generate")}
               </Button>
               <Button type="button" variant="outline" size="sm" onClick={() => setShowGenModal(false)}>{t("cancel")}</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Modal: Frais d'inscription / renouvellement (annuels) */}
+      {showFeesPanel && (
+        <Card className="border-primary/30">
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Receipt className="h-4 w-4 text-primary" />
+              {t("feesTitle")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="fees-type">{t("formFeeType")}</Label>
+                <select
+                  id="fees-type"
+                  value={feesType}
+                  onChange={(e) => setFeesType(e.target.value as "INSCRIPTION" | "RENOUVELLEMENT")}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="INSCRIPTION">{t("feeInscription")}</option>
+                  <option value="RENOUVELLEMENT">{t("feeRenewal")}</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="fees-annee">{t("schoolYear")}</Label>
+                <Input id="fees-annee" value={feesAnnee} onChange={(e) => setFeesAnnee(e.target.value)} />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">{t("feesHint")}</p>
+            <div className="flex gap-2">
+              <Button size="sm" className="gap-2" onClick={handleGenererFrais} disabled={isPending}>
+                {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
+                {t("generate")}
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowFeesPanel(false)}>
+                {t("cancel")}
+              </Button>
             </div>
           </CardContent>
         </Card>

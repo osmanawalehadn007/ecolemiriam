@@ -10,6 +10,18 @@
 import prisma from "@/lib/prisma";
 
 /**
+ * Année scolaire déduite de la date du jour, utilisée en repli quand
+ * l'établissement n'a pas encore déclaré d'année active (`annees_scolaires`).
+ *
+ * La rentrée est en septembre : de janvier à août on est encore sur l'année
+ * commencée l'année civile précédente.
+ */
+export function anneeScolaireParDefaut(date: Date = new Date()): string {
+  const debut = date.getMonth() >= 8 ? date.getFullYear() : date.getFullYear() - 1;
+  return `${debut}-${debut + 1}`;
+}
+
+/**
  * Retourne l'année scolaire courante pour un tenant donné.
  * Lit la table `annees_scolaires` (isCurrent = true) en priorité.
  * Si aucune année n'est marquée comme courante, retourne null
@@ -34,8 +46,12 @@ export async function getAnneeCourante(tenantId: string) {
 /**
  * Retourne le libellé de l'année courante (ex: "2025-2026").
  * Pratique pour les requêtes qui filtrent par `annee` string.
+ * Accepte un tenant absent (session incomplète) et retourne alors null.
  */
-export async function getAnneeCouranteLibelle(tenantId: string): Promise<string | null> {
+export async function getAnneeCouranteLibelle(
+  tenantId: string | null | undefined
+): Promise<string | null> {
+  if (!tenantId) return null;
   const annee = await getAnneeCourante(tenantId);
   return annee?.libelle ?? null;
 }
