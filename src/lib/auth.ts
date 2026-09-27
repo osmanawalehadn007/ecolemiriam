@@ -107,6 +107,7 @@ export const {
           token.tenantHasSites = true;
           token.availableTenants = [];
           token.claimsVersion = CLAIMS_VERSION;
+          token.mustChangePassword = false;
           return token;
         }
 
@@ -117,6 +118,7 @@ export const {
         token.tenantHasSites = claims.tenantHasSites;
         token.availableTenants = claims.availableTenants;
         token.claimsVersion = claims.claimsVersion;
+        token.mustChangePassword = claims.mustChangePassword;
 
         // Mise à jour du flag mfaSetupRequired via unstable_update().
         // Quand un SUPER_ADMIN active la 2FA, la route /api/auth/2fa/enable
@@ -248,6 +250,9 @@ export const {
             role: true,
             tenantId: true,
             siteId: true,
+            // Requis par deriveClaimsFromUser : un compte provisionné doit
+            // déclencher la redirection vers /change-password dès la connexion.
+            mustChangePassword: true,
             userTenants: {
               where: { isActive: true },
               select: {
@@ -411,6 +416,7 @@ export const {
           tenantHasSites: claims.tenantHasSites,
           availableTenants: claims.availableTenants,
           claimsVersion: claims.claimsVersion,
+          mustChangePassword: claims.mustChangePassword,
           mfaSetupRequired,
         };
       },
@@ -462,6 +468,8 @@ declare module "next-auth" {
       availableTenants?: AvailableTenantSlim[];
       /** SUPER_ADMIN sans 2FA : doit configurer la 2FA avant tout autre accès. */
       mfaSetupRequired?: boolean;
+      /** Compte provisionné : changement de mot de passe obligatoire. */
+      mustChangePassword?: boolean;
     };
   }
 }

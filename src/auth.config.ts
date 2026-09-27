@@ -138,6 +138,8 @@ export const authConfig: NextAuthConfig = {
         token.siteIds = (user as { siteIds?: string[] }).siteIds ?? [];
         token.tenantHasSites = (user as { tenantHasSites?: boolean }).tenantHasSites ?? true;
         token.claimsVersion = (user as { claimsVersion?: number }).claimsVersion;
+        token.mustChangePassword =
+          (user as { mustChangePassword?: boolean }).mustChangePassword ?? false;
         // 2FA obligatoire pour SUPER_ADMIN : flag posé à la connexion si
         // la 2FA n'est pas activée. Le middleware redirige vers la page
         // de configuration tant que le flag est présent.
@@ -164,6 +166,11 @@ export const authConfig: NextAuthConfig = {
         (session.user as { availableTenants?: AvailableTenantSlim[] }).availableTenants = token.availableTenants as AvailableTenantSlim[] | undefined;
         (session.user as { mfaSetupRequired?: boolean }).mfaSetupRequired =
           (token.mfaSetupRequired as boolean | undefined) ?? false;
+        // Par défaut `false` : on n'oblige pas un changement de mot de passe
+        // faute d'information (les comptes provisionnés le portent
+        // explicitement).
+        (session.user as { mustChangePassword?: boolean }).mustChangePassword =
+          (token.mustChangePassword as boolean | undefined) ?? false;
       }
       return session;
     },

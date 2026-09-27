@@ -21,6 +21,8 @@ const { auth } = NextAuth(authConfig);
 const PUBLIC_PREFIXES = [
   "/login",
   "/register",
+  // Acceptation d'une invitation : page publique portant un jeton à usage unique.
+  "/accept-invitation",
   "/api/auth",
   "/api/health",
   "/_next",
