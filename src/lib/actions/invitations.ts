@@ -1,7 +1,14 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+// Client Prisma SANS RLS (prisma-base) — CHOIX VOLONTAIRE :
+//  • la page publique /accept-invitation et l'action d'acceptation s'exécutent
+//    SANS session → aucun contexte tenant, et @/lib/prisma est fail-closed
+//    (il lève « contexte tenant manquant ») ;
+//  • l'émission/recherche par jeton est cross-tenant par nature (jeton secret) ;
+//  • l'isolation est assurée explicitement par les clauses `where` (tenantId)
+//    et par `assertCanManageTenant`, contrôlées par les règles ESLint du dépôt.
+import prisma from "@/lib/prisma-base";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
