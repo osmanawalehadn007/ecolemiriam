@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import { EtablissementTab } from "./EtablissementTab";
 import { UsersTab } from "./UsersTab";
+import { InvitationsPanel } from "./InvitationsPanel";
 import { ClassesTab } from "./ClassesTab";
 import { MatieresTab } from "./MatieresTab";
 import { ParentsTab } from "./ParentsTab";
@@ -220,7 +221,12 @@ export function ParametresTabs({
       <div>
         {activeTab === "etablissement" && <EtablissementTab etablissement={etablissement} canManage={canManage} />}
         {activeTab === "annees" && <AnneesScolairesTab annees={annees} canManage={canManage} />}
-        {activeTab === "utilisateurs" && <UsersTab users={users} canManage={canManage} sessionRole={sessionRole} sessionSiteId={sessionSiteId} availableTenants={availableTenants} sites={sites} />}
+        {activeTab === "utilisateurs" && (
+          <div className="space-y-6">
+            <InvitationsPanel canManage={canManage} sites={sites} />
+            <UsersTab users={users} canManage={canManage} sessionRole={sessionRole} sessionSiteId={sessionSiteId} availableTenants={availableTenants} sites={sites} />
+          </div>
+        )}
         {activeTab === "parents" && <ParentsTab parents={parents} eleves={eleves} canManage={canManage} />}
         {activeTab === "classes" && (
           <ClassesTab
