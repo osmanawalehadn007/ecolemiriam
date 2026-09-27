@@ -11,6 +11,7 @@ import { mergeFilters } from "@/lib/site-scope";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { niveauSuivant } from "@/lib/niveau-suivant";
 import { notifyDirection } from "@/lib/notifications/notify-direction";
+import { reserverNumerosFacture } from "@/lib/facture-numero";
 import type { Role } from "@prisma/client";
 
 // ============================================================
@@ -453,15 +454,11 @@ export async function genererFraisRenouvellement(annee: string) {
   });
   const existingSet = new Set(existing.map((f) => f.eleveId));
 
-  // 4. Numérotation
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- count global pour numérotation
-  const baseCount = await prisma.facture.count({ where: { tenantId } });
   const anneePrefix = annee.split("-")[0];
 
   const toCreate: Array<{
     tenantId: string;
     eleveId: string;
-    numero: string;
     libelle: string;
     montant: number;
     devise: string;
@@ -472,7 +469,6 @@ export async function genererFraisRenouvellement(annee: string) {
     createdById: string;
   }> = [];
 
-  let seq = baseCount + 1;
   for (const eleve of elevesAvecTarif) {
     if (existingSet.has(eleve.id)) continue;
     const niveau = eleve.classe?.niveau ?? "Inconnu";
@@ -481,7 +477,6 @@ export async function genererFraisRenouvellement(annee: string) {
     toCreate.push({
       tenantId,
       eleveId: eleve.id,
-      numero: `FAC-${anneePrefix}-${String(seq).padStart(5, "0")}`,
       libelle,
       montant: tarif.fraisRenouvellement,
       devise: tarif.devise,
@@ -491,12 +486,12 @@ export async function genererFraisRenouvellement(annee: string) {
       siteId: eleve.siteId ?? null,
       createdById: session.user.id,
     });
-    seq++;
   }
 
+  // 4. Numérotation atomique, réservée en un seul bloc
   if (toCreate.length > 0) {
-     
-    await prisma.facture.createMany({ data: toCreate });
+    const numeros = await reserverNumerosFacture(tenantId, anneePrefix, toCreate.length);
+    await prisma.facture.createMany({ data: toCreate.map((f, i) => ({ ...f, numero: numeros[i] })) });
   }
 
   await audit({

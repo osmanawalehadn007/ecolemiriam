@@ -6,6 +6,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { sendPaymentWhatsApp } from "@/lib/notifications/whatsapp";
 import { checkPermission } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
+import { reserverNumerosFacture } from "@/lib/facture-numero";
 import { z } from "zod";
 
 // Tarif transport fixe pour tout l'établissement (tous sites confondus)
@@ -249,14 +250,11 @@ export async function genererMensualites(params: {
   ]);
 
   // 3. Construire les données à insérer (en mémoire, 0 requête)
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- count global pour numérotation séquentielle
-  const baseCount = await prisma.facture.count({ where: { tenantId } });
   const anneePrefix = annee.split("-")[0];
 
   const toCreate: Array<{
     tenantId: string;
     eleveId: string;
-    numero: string;
     libelle: string;
     montant: number;
     devise: string;
@@ -268,7 +266,6 @@ export async function genererMensualites(params: {
     createdById: string;
   }> = [];
 
-  let seq = baseCount + 1;
   for (const eleve of elevesAvecTarif) {
     if (existingSet.has(eleve.id)) continue;
 
@@ -286,7 +283,6 @@ export async function genererMensualites(params: {
     toCreate.push({
       tenantId,
       eleveId: eleve.id,
-      numero: `FAC-${anneePrefix}-${String(seq).padStart(5, "0")}`,
       libelle,
       montant,
       devise: tarif.devise,
@@ -297,13 +293,12 @@ export async function genererMensualites(params: {
       siteId: eleve.siteId ?? null,
       createdById: session.user.id,
     });
-    seq++;
   }
 
-  // 4. Bulk insert (1 seule requête)
+  // 4. Numérotation atomique en un bloc, puis bulk insert (1 seule requête)
   if (toCreate.length > 0) {
-     
-    await prisma.facture.createMany({ data: toCreate });
+    const numeros = await reserverNumerosFacture(tenantId, anneePrefix, toCreate.length);
+    await prisma.facture.createMany({ data: toCreate.map((f, i) => ({ ...f, numero: numeros[i] })) });
   }
 
   const skipped = eleves.length - toCreate.length;
@@ -411,13 +406,9 @@ export async function genererFacturesAnnuelles(params: {
     ...existingInscriptions.map((f) => `${f.eleveId}|${f.mois}`),
   ]);
 
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- count global pour numérotation séquentielle
-  const baseCount = await prisma.facture.count({ where: { tenantId } });
-
   const toCreate: Array<{
     tenantId: string;
     eleveId: string;
-    numero: string;
     libelle: string;
     montant: number;
     devise: string;
@@ -429,7 +420,6 @@ export async function genererFacturesAnnuelles(params: {
     createdById: string;
   }> = [];
 
-  let seq = baseCount + 1;
   const moisDetails: Array<{ mois: number; moisNom: string; generated: number; isSeptembre: boolean }> = [];
 
   for (const m of MOIS_SCOLAIRES) {
@@ -461,7 +451,6 @@ export async function genererFacturesAnnuelles(params: {
       toCreate.push({
         tenantId,
         eleveId: eleve.id,
-        numero: `FAC-${anneeStart}-${String(seq).padStart(5, "0")}`,
         libelle,
         montant,
         devise: tarif.devise,
@@ -472,7 +461,6 @@ export async function genererFacturesAnnuelles(params: {
         siteId: eleve.siteId ?? null,
         createdById: session.user.id,
       });
-      seq++;
       generatedThisMonth++;
       existingSet.add(dedupKey); // éviter les doublons intra-batch
     }
@@ -480,10 +468,10 @@ export async function genererFacturesAnnuelles(params: {
     moisDetails.push({ mois: m, moisNom, generated: generatedThisMonth, isSeptembre });
   }
 
-  // Bulk insert
+  // Numérotation atomique en un bloc, puis bulk insert
   if (toCreate.length > 0) {
-     
-    await prisma.facture.createMany({ data: toCreate });
+    const numeros = await reserverNumerosFacture(tenantId, anneeStart, toCreate.length);
+    await prisma.facture.createMany({ data: toCreate.map((f, i) => ({ ...f, numero: numeros[i] })) });
   }
 
   const skipped = eleves.length - elevesAvecTarif.length;
@@ -578,15 +566,11 @@ export async function genererFraisInscription(params: {
   });
   const existingSet = new Set(existingFactures.map((f) => f.eleveId));
 
-  // 4. Numérotation séquentielle (1 count au lieu de N)
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- count global pour numérotation séquentielle
-  const baseCount = await prisma.facture.count({ where: { tenantId } });
   const anneePrefix = annee.split("-")[0];
 
   const toCreate: Array<{
     tenantId: string;
     eleveId: string;
-    numero: string;
     libelle: string;
     montant: number;
     devise: string;
@@ -597,7 +581,6 @@ export async function genererFraisInscription(params: {
     createdById: string;
   }> = [];
 
-  let seq = baseCount + 1;
   for (const eleve of elevesAvecTarif) {
     if (existingSet.has(eleve.id)) continue;
 
@@ -608,7 +591,6 @@ export async function genererFraisInscription(params: {
     toCreate.push({
       tenantId,
       eleveId: eleve.id,
-      numero: `FAC-${anneePrefix}-${String(seq).padStart(5, "0")}`,
       libelle,
       montant,
       devise: tarif.devise,
@@ -618,13 +600,12 @@ export async function genererFraisInscription(params: {
       siteId: eleve.siteId ?? null,
       createdById: session.user.id,
     });
-    seq++;
   }
 
-  // 5. Bulk insert (1 requête)
+  // 4. Numérotation atomique en un bloc, puis bulk insert (1 requête)
   if (toCreate.length > 0) {
-     
-    await prisma.facture.createMany({ data: toCreate });
+    const numeros = await reserverNumerosFacture(tenantId, anneePrefix, toCreate.length);
+    await prisma.facture.createMany({ data: toCreate.map((f, i) => ({ ...f, numero: numeros[i] })) });
   }
 
   const skipped = eleveIds.length - toCreate.length;

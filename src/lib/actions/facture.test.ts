@@ -7,12 +7,13 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/prisma", () => ({
   default: {
+    // Réservation du numéro via la fonction SQL next_facture_numeros.
+    $queryRaw: vi.fn(),
     facture: {
       findMany: vi.fn(),
       findFirst: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
-      count: vi.fn(),
     },
     paiement: {
       create: vi.fn(),
@@ -44,12 +45,12 @@ import {
 
 const mockAuth = auth as ReturnType<typeof vi.fn>;
 const mockPrisma = prisma as unknown as {
+  $queryRaw: ReturnType<typeof vi.fn>;
   facture: {
     findMany: ReturnType<typeof vi.fn>;
     findFirst: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
-    count: ReturnType<typeof vi.fn>;
   };
   paiement: {
     create: ReturnType<typeof vi.fn>;
@@ -167,7 +168,7 @@ describe("facture actions", () => {
     });
 
     it("creates facture with correct data and returns success", async () => {
-      mockPrisma.facture.count.mockResolvedValue(5);
+      mockPrisma.$queryRaw.mockResolvedValue([{ premier: 6 }]);
       mockPrisma.facture.findFirst.mockResolvedValue(null);
       mockPrisma.facture.create.mockResolvedValue({ id: "new-facture-id" });
       const result = await createFacture({
@@ -192,13 +193,13 @@ describe("facture actions", () => {
       );
     });
 
-    it("generates correct invoice number", async () => {
-      mockPrisma.facture.count.mockResolvedValue(0);
+    it("uses the number reserved by the atomic sequence", async () => {
+      mockPrisma.$queryRaw.mockResolvedValue([{ premier: 251 }]);
       mockPrisma.facture.findFirst.mockResolvedValue(null);
       mockPrisma.facture.create.mockResolvedValue({ id: "f1" });
       await createFacture({ eleveId: "e1", libelle: "Test", montant: 1000, devise: "DJF", type: "MENSUALITE" });
       const call = mockPrisma.facture.create.mock.calls[0][0];
-      expect(call.data.numero).toMatch(/^FAC-\d{4}-00001$/);
+      expect(call.data.numero).toBe(`FAC-${new Date().getFullYear()}-00251`);
     });
   });
 

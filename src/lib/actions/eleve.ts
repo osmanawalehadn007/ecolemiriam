@@ -9,6 +9,7 @@ import { anneeFilterForModel } from "@/lib/annee-scope";
 import { mergeFilters } from "@/lib/site-scope";
 import { checkPermission } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
+import { reserverNumeroFacture } from "@/lib/facture-numero";
 import { trouverDoublon, resoudreIdentiteKey, cleDepuisFiche } from "@/lib/eleve-identity-server";
 import { estDateApproximative } from "@/lib/eleve-identity";
 import { z } from "zod";
@@ -313,12 +314,7 @@ export async function createEleve(
   const montantTotal = fraisInscription + mensualite;
   const devise = tarif?.devise ?? "DJF";
 
-  // Générer un numéro de facture
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- count global pour numéro séquentiel
-  const factureCount = await prisma.facture.count({
-    where: { tenantId },
-  });
-  const numeroFacture = `FAC-${new Date().getFullYear()}-${String(factureCount + 1).padStart(5, "0")}`;
+  const numeroFacture = await reserverNumeroFacture(tenantId, new Date().getFullYear());
 
   const facture = await prisma.facture.create({
     data: {

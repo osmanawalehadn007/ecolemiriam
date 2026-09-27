@@ -9,6 +9,7 @@ import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { notifyDirection } from "@/lib/notifications/notify-direction";
 import { piecesRequisesPresentes } from "@/lib/admissions/pieces-justificatives";
 import { niveauToLabel } from "@/lib/niveau";
+import { reserverNumeroFacture } from "@/lib/facture-numero";
 import { formatMoisScolarite, moisScolariteDefaut, isMoisScolariteValide } from "@/lib/admissions/mois-scolarite";
 
 const UpdateSchema = z.object({
@@ -147,12 +148,7 @@ export async function PATCH(
       const moisScolarite = data.moisScolarite ?? moisScolariteDefaut();
       const moisLabel = formatMoisScolarite(moisScolarite);
 
-      // Générer un numéro de facture
-      // eslint-disable-next-line ecolemiriam/require-site-filter -- count global pour numéro séquentiel
-      const factureCount = await prisma.facture.count({
-        where: { tenantId: session.user.tenantId },
-      });
-      const numeroFacture = `FAC-${new Date().getFullYear()}-${String(factureCount + 1).padStart(5, "0")}`;
+      const numeroFacture = await reserverNumeroFacture(session.user.tenantId, new Date().getFullYear());
 
       const facture = await prisma.facture.create({
         data: {

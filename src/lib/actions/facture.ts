@@ -9,6 +9,7 @@ import { z } from "zod";
 import { endOfDay } from "date-fns";
 import { Prisma, TypeFacture } from "@prisma/client";
 import { audit, auditFire } from "@/lib/audit";
+import { reserverNumeroFacture, reserverNumerosFacture } from "@/lib/facture-numero";
 
 const FACTURE_TYPES: [string, ...string[]] = [
   "MENSUALITE",
@@ -203,9 +204,7 @@ export async function createFacture(data: FactureFormData) {
     throw new Error(raison);
   }
 
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
-  const count = await prisma.facture.count({ where: { tenantId } });
-  const numero = `FAC-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
+  const numero = await reserverNumeroFacture(tenantId, new Date().getFullYear());
 
   // Récupérer le siteId de l'élève pour assigner la facture au bon site
   // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-tenant-id -- lookup to get siteId for creation
@@ -300,15 +299,11 @@ export async function createFacturesCombinees(data: FacturesCombineesData) {
   });
   const factureSiteId = eleve?.siteId ?? null;
 
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- TenantId dans le where, site filter géré par le caller
-  const count = await prisma.facture.count({ where: { tenantId } });
-  const year = new Date().getFullYear();
-
   const created = await prisma.$transaction(async (tx) => {
     const results: { id: string; type: TypeFacture }[] = [];
-    let seq = count + 1;
-    for (const f of toCreate) {
-      const numero = `FAC-${year}-${String(seq).padStart(5, "0")}`;
+    const numeros = await reserverNumerosFacture(tenantId, new Date().getFullYear(), toCreate.length, tx);
+    for (const [i, f] of toCreate.entries()) {
+      const numero = numeros[i];
       const facture = await tx.facture.create({
         data: {
           tenantId,
@@ -326,7 +321,6 @@ export async function createFacturesCombinees(data: FacturesCombineesData) {
         },
       });
       results.push({ id: facture.id, type: f.type });
-      seq++;
     }
     return results;
   });
