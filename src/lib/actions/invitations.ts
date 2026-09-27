@@ -80,7 +80,7 @@ async function assertCanManageTenant(
   if (session.user.role === "SUPER_ADMIN") return;
 
   // Inventaire des adhésions de l'appelant — contrôle d'accès, pas lecture métier.
-  // eslint-disable-next-line ecolpro/require-tenant-id
+  // eslint-disable-next-line ecolemiriam/require-tenant-id
   const memberships = await prisma.userTenant.findMany({
     where: { userId: session.user.id, isActive: true },
     select: { tenantId: true, role: true },
@@ -176,13 +176,13 @@ async function createInvitationImpl(input: CreateInvitationInput) {
   // Refuser si le destinataire a déjà un accès actif à cet établissement.
   // La recherche par email est GLOBALE par conception : le compte peut déjà
   // exister dans un autre établissement (on ne s'intéresse qu'à l'existence).
-  // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter
+  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter
   const existingUser = await prisma.user.findUnique({
     where: { email: v.email },
     select: { id: true },
   });
   if (existingUser) {
-    // eslint-disable-next-line ecolpro/require-tenant-id -- rattachement ciblé par sa clé (userId, tenantId)
+    // eslint-disable-next-line ecolemiriam/require-tenant-id -- rattachement ciblé par sa clé (userId, tenantId)
     const activeMembership = await prisma.userTenant.findUnique({
       where: { userId_tenantId: { userId: existingUser.id, tenantId } },
       select: { isActive: true },
@@ -337,8 +337,8 @@ export async function getTenantInvitations() {
   const session = await auth();
   if (!session?.user?.tenantId) return [];
 
-  // eslint-disable-next-line ecolpro/require-site-filter -- liste administrative bornée au tenant courant
-  return prisma.invitation.findMany({
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- liste administrative bornée au tenant courant
+  const rows = await prisma.invitation.findMany({
     where: { tenantId: session.user.tenantId },
     orderBy: { createdAt: "desc" },
     take: 50,
@@ -353,6 +353,11 @@ export async function getTenantInvitations() {
       siteId: true,
     },
   });
+
+  // Expiration calculée CÔTÉ SERVEUR : appeler `Date.now()` pendant le rendu
+  // d'un composant client viole la règle de pureté React.
+  const now = Date.now();
+  return rows.map((row) => ({ ...row, isExpired: row.expiresAt.getTime() <= now }));
 }
 
 
@@ -372,7 +377,7 @@ async function acceptInvitationImpl(input: AcceptInvitationInput) {
   const tokenHash = hashInvitationToken(parsed.data.token);
 
   // Lecture par empreinte de jeton : il n'y a pas encore de session.
-  // eslint-disable-next-line ecolpro/require-tenant-id
+  // eslint-disable-next-line ecolemiriam/require-tenant-id
   const invitation = await prisma.invitation.findUnique({
     where: { tokenHash },
     select: {
@@ -410,7 +415,7 @@ async function acceptInvitationImpl(input: AcceptInvitationInput) {
     if (claimed.count !== 1) throw new InvitationError("Cette invitation a déjà été utilisée");
 
     // Recherche globale par email (le compte peut déjà exister ailleurs).
-    // eslint-disable-next-line ecolpro/require-tenant-id
+    // eslint-disable-next-line ecolemiriam/require-tenant-id
     let user = await tx.user.findUnique({ where: { email: invitation.email } });
     let created = false;
 
@@ -542,7 +547,7 @@ async function changePasswordImpl(input: {
     throw new InvitationError("Le nouveau mot de passe doit être différent de l'actuel");
   }
 
-  // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter -- le compte est identifié par la session
+  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- le compte est identifié par la session
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { id: true, password: true },
@@ -562,7 +567,7 @@ async function changePasswordImpl(input: {
   }
 
   const hash = await bcrypt.hash(parsed.data.newPassword, 12);
-  // eslint-disable-next-line ecolpro/require-tenant-id, ecolpro/require-site-filter -- compte de la session, mot de passe actuel vérifié juste au-dessus
+  // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- compte de la session, mot de passe actuel vérifié juste au-dessus
   await prisma.user.update({
     where: { id: user.id },
     data: { password: hash, mustChangePassword: false },

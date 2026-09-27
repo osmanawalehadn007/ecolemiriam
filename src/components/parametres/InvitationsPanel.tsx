@@ -28,6 +28,8 @@ interface InvitationRow {
   role: string;
   status: string;
   expiresAt: Date;
+  /** Expiration calculée côté serveur (interdit pendant le rendu React). */
+  isExpired: boolean;
   createdAt: Date;
   siteId: string | null;
 }
@@ -133,9 +135,7 @@ export function InvitationsPanel({
 
   function statusLabel(row: InvitationRow): string {
     if (row.status === "PENDING") {
-      return new Date(row.expiresAt).getTime() <= Date.now()
-        ? t("statusExpired")
-        : t("statusPending");
+      return row.isExpired ? t("statusExpired") : t("statusPending");
     }
     if (row.status === "ACCEPTED") return t("statusAccepted");
     if (row.status === "REVOKED") return t("statusRevoked");

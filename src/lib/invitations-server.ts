@@ -30,7 +30,7 @@ export async function getInvitationByToken(
   // Lecture par empreinte de jeton : la session n'existe pas encore (page
   // publique), la recherche est donc nécessairement transnationale/tenant-blind
   // — mais elle ne peut aboutir qu'avec le jeton secret.
-  // eslint-disable-next-line ecolpro/require-tenant-id
+  // eslint-disable-next-line ecolemiriam/require-tenant-id
   const invitation = await prisma.invitation.findUnique({
     where: { tokenHash: hashInvitationToken(token) },
     select: {
