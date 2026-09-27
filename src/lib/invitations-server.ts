@@ -1,4 +1,10 @@
-import prisma from "@/lib/prisma";
+// Client Prisma SANS RLS (prisma-base) — CHOIX VOLONTAIRE :
+// cette page est PUBLIQUE (aucune session), donc aucun contexte tenant n'existe.
+// Le client de @/lib/prisma est fail-closed et lèverait « contexte tenant
+// manquant » (HTTP 500). La recherche par empreinte de jeton est de toute façon
+// cross-tenant par nature : le jeton est le secret. Même choix que auth.ts,
+// tenant-claims.ts (deriveClaims) et audit.ts.
+import prisma from "@/lib/prisma-base";
 import { hashInvitationToken, isInvitationExpired } from "@/lib/invitations";
 
 /**

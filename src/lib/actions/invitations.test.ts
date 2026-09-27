@@ -42,7 +42,10 @@ const mocks = vi.hoisted(() => {
   return { tx, prisma };
 });
 
-vi.mock("@/lib/prisma", () => ({ default: mocks.prisma }));
+// Le module d'invitations utilise le client SANS RLS (prisma-base) : la page
+// publique et l'acceptation s'exécutent hors session. Le mock porte donc sur
+// `@/lib/prisma-base`.
+vi.mock("@/lib/prisma-base", () => ({ default: mocks.prisma }));
 vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ auditFire: vi.fn(), audit: vi.fn() }));
 vi.mock("@/lib/notifications/email", () => ({ sendEmail: vi.fn() }));
