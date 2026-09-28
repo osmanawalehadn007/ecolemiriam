@@ -3,19 +3,25 @@ name: Cron — Facturation mensuelle
 # ============================================================
 # Ordonnanceur de la génération des mensualités
 # ============================================================
-# Appelle `GET|POST /api/cron/facturation-mensuelle`, protégé par CRON_SECRET.
+# Appelle `/api/cron/facturation-mensuelle` (protégé par CRON_SECRET) DEPUIS
+# l'instance, via le tunnel IAP — jamais par le domaine public.
+#
+# POURQUOI PAS L'URL PUBLIQUE (constat du 28/09/2026) : le runner GitHub recevait
+# un **403** de l'edge (Cloudflare) sur `https://ecolemiriam.com/api/cron/...`
+# alors que la même requête, avec le même jeton, répond **200** depuis l'infra.
+# Un ordonnanceur de facturation ne doit dépendre ni d'une protection anti-bot ni
+# d'une règle WAF : il parle directement à l'application (docker exec).
+#
 # La génération est IDEMPOTENTE : l'unicité (une facture par élève, par type et
 # par mois) est garantie par l'index partiel `factures_unicite_mensuelle` — voir
 # docs/DECISIONS-FACTURATION.md. Rejouer ce workflow ne crée jamais de doublon.
 #
-# PRÉREQUIS (une seule fois, côté GitHub) :
-#   Settings → Secrets and variables → Actions → New repository secret
-#     CRON_SECRET = la valeur de CRON_SECRET de l'application (production)
-#     APP_URL     = https://ecolemiriam.com (sans slash final)
+# PRÉREQUIS : le secret `CRON_SECRET` (Actions) doit porter la MÊME valeur que
+# l'application en production, sinon la route répond 401.
 #
-# Alternative sans GitHub Actions — crontab de l'hôte :
+# Alternative sans GitHub Actions — minuterie de l'hôte :
 #   0 3 1 * *  curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
-#                https://ecolemiriam.com/api/cron/facturation-mensuelle
+#                http://localhost:3000/api/cron/facturation-mensuelle
 # ============================================================
 on:
   schedule:
@@ -48,22 +54,47 @@ concurrency:
   group: cron-facturation
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  id-token: write # Workload Identity Federation (tunnel IAP)
+
+env:
+  GCP_PROJECT: ecole-miriam
+  GCP_ZONE: us-central1-a
+  GCP_INSTANCE: ecolpro-prod
+  WIF_PROVIDER: projects/994656035611/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+  SA_EMAIL: github-actions-deploy@ecole-miriam.iam.gserviceaccount.com
+
 jobs:
   facturation:
     name: Facturation automatique
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      APP_URL: ${{ secrets.APP_URL || 'https://ecolemiriam.com' }}
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      # Conteneur applicatif actif (blue ou green) : `docker exec` évite Caddy,
+      # le domaine public et leurs protections.
+      CIBLE: 'C=$(docker ps --filter name=ecolemiam-app- --format "{{.Names}}" | head -1); [ -n "$C" ] || { echo "aucun conteneur applicatif"; exit 1; }; docker exec "$C" curl -fsS'
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.SA_EMAIL }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
       - name: Vérifier la configuration
         run: |
           if [ -z "$CRON_SECRET" ]; then
             echo "::error::CRON_SECRET absent (Settings → Secrets and variables → Actions)."
             exit 1
           fi
-          echo "Cible : $APP_URL"
+          echo "Cible : $GCP_INSTANCE ($GCP_ZONE) — appel interne via IAP, sans l'edge"
 
       - name: Déterminer la tâche
         id: tache
@@ -76,17 +107,15 @@ jobs:
           echo "tache=$TACHE" >> "$GITHUB_OUTPUT"
           echo "Tâche retenue : $TACHE"
 
-      - name: Aperçu (aucune écriture)
+      - name: Aperçu des mensualités (aucune écriture)
         if: steps.tache.outputs.tache == 'apercu'
         run: |
-          curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
-            "$APP_URL/api/cron/facturation-mensuelle?dry=1" | tee reponse.json
+          .github/scripts/ssh-retry.sh "$CIBLE -H \"Authorization: Bearer $CRON_SECRET\" \"http://localhost:3000/api/cron/facturation-mensuelle?dry=1\""
 
       - name: Générer les mensualités du mois
         if: steps.tache.outputs.tache == 'mensualites'
         run: |
-          curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" \
-            "$APP_URL/api/cron/facturation-mensuelle" | tee reponse.json
+          .github/scripts/ssh-retry.sh "$CIBLE -X POST -H \"Authorization: Bearer $CRON_SECRET\" \"http://localhost:3000/api/cron/facturation-mensuelle\""
 
       - name: Rattraper un mois précis
         if: steps.tache.outputs.tache == 'rattrapage'
@@ -97,15 +126,14 @@ jobs:
           fi
           ARGS="mois=${{ inputs.mois }}"
           if [ -n "${{ inputs.annee }}" ]; then ARGS="$ARGS&annee=${{ inputs.annee }}"; fi
-          curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" \
-            "$APP_URL/api/cron/facturation-mensuelle?$ARGS" | tee reponse.json
+          .github/scripts/ssh-retry.sh "$CIBLE -X POST -H \"Authorization: Bearer $CRON_SECRET\" \"http://localhost:3000/api/cron/facturation-mensuelle?$ARGS\""
 
+      # Journal d'exploitation : la réponse de l'API (nombre de factures, montant
+      # projeté, élèves sans tarif) est lisible dans le résumé du job.
       - name: Résumé
         if: always()
         run: |
-          if [ -f reponse.json ]; then
-            echo '### Réponse du cron' >> "$GITHUB_STEP_SUMMARY"
-            echo '```json' >> "$GITHUB_STEP_SUMMARY"
-            cat reponse.json >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-          fi
+          echo '### Ordonnanceur — compte rendu' >> "$GITHUB_STEP_SUMMARY"
+          echo "- tâche : ${{ steps.tache.outputs.tache }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- cible : $GCP_INSTANCE (appel interne via IAP)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- la réponse JSON de l'API figure dans les logs de l'étape concernée." >> "$GITHUB_STEP_SUMMARY"
