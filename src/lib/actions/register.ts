@@ -1,6 +1,8 @@
 "use server";
 
-import prisma from "@/lib/prisma";
+// Ce parcours est PUBLIC (aucun contexte tenant) : il utilise exclusivement
+// `prismaBase` (client sans RLS). Le client RLS `@/lib/prisma` lèverait
+// « prisma-rls: contexte tenant manquant » sur `user.create`.
 import prismaBase from "@/lib/prisma-base";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -113,7 +115,7 @@ export async function registerTenant(data: RegisterFormData) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
-  const existingSlug = await prisma.tenant.findUnique({ where: { slug } });
+  const existingSlug = await prismaBase.tenant.findUnique({ where: { slug } });
   if (existingSlug) {
     throw new Error("Un établissement avec ce nom existe déjà");
   }
@@ -122,7 +124,7 @@ export async function registerTenant(data: RegisterFormData) {
   const trialEndsAt = new Date();
   trialEndsAt.setDate(trialEndsAt.getDate() + 30);
 
-  const tenant = await prisma.tenant.create({
+  const tenant = await prismaBase.tenant.create({
     data: {
       name: values.schoolName,
       slug,
@@ -137,7 +139,15 @@ export async function registerTenant(data: RegisterFormData) {
     },
   });
 
-  const newUser = await prisma.user.create({
+  // ── Client SANS RLS : parcours public ──────────────────────────────
+  // `/register` s'exécute AVANT toute authentification : aucun contexte tenant
+  // n'existe, donc le client RLS lève « prisma-rls: contexte tenant manquant »
+  // sur `user.create` — l'inscription publique renvoyait un 500 en production
+  // (RLS_ACTIVE=true). Même correctif que pour l'acceptation d'invitation
+  // (src/lib/actions/invitations.ts, PR #25). Aucune lecture cross-tenant
+  // n'est faite ici : les contrôles d'unicité passent par prismaBase et la
+  // création concerne un établissement neuf.
+  const newUser = await prismaBase.user.create({
     data: {
       tenantId: tenant.id,
       email: values.adminEmail,

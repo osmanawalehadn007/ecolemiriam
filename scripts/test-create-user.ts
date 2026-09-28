@@ -1,8 +1,18 @@
 import { chromium } from "playwright";
 
 const BASE_URL = "https://ecolemiriam.com";
-const ADMIN_EMAIL = "mohamed.abdi.pk12@gmail.com";
-const ADMIN_PASSWORD = "EcolPro@2026";
+// Identifiants lus dans l'environnement : ce script s'exécute contre un serveur
+// réel, aucun compte ne doit figurer dans le code versionné (cf.
+// scripts/ci/scan-secrets.mjs).
+const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL ?? "";
+const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD ?? "";
+if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+  console.error(
+    "❌ TEST_ADMIN_EMAIL et TEST_ADMIN_PASSWORD sont requis.\n" +
+      "   Exemple : TEST_ADMIN_EMAIL=… TEST_ADMIN_PASSWORD=… npx tsx scripts/test-create-user.ts",
+  );
+  process.exit(1);
+}
 const TEST_EMAIL = `test.create.${Date.now()}@icloud.com`;
 const TEST_NAME = "Test User Flow";
 

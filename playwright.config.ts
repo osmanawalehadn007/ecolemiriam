@@ -58,7 +58,10 @@ export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: 0,
+  // En CI, une seule relance absorbe les aléas du serveur de dev (compilation à
+  // la demande : une première visite peut dépasser le délai d'un test). En
+  // local, on veut voir la flakiness telle quelle.
+  retries: process.env.CI ? 1 : 0,
   workers: 1,
   reporter: "html",
   timeout: 60000,

@@ -36,11 +36,14 @@ test.describe("Gestion des élèves", () => {
     }
   });
 
-  test("ouvrir le formulaire d'inscription", async ({ authedPage: page }) => {
+  // L'ancien test ouvrait `/eleves/nouveau` et remplissait `#prenom`. Cette URL
+  // redirige désormais vers le workflow d'admissions : la saisie directe d'un
+  // élève n'existe plus (candidature → dossier → admission → facture → paiement
+  // → fiche élève créée automatiquement). On teste le comportement réel.
+  test("l'inscription directe redirige vers le workflow d'admissions", async ({ authedPage: page }) => {
     await page.goto("/eleves/nouveau");
-    await expect(page.locator('input[id="prenom"]')).toBeVisible({ timeout: 30000 });
-    await expect(page.locator('input[id="nom"]')).toBeVisible();
-    await expect(page.locator("text=Télécharger une photo")).toBeVisible();
+    await page.waitForURL(/\/admissions/, { timeout: 30000 });
+    await expect(page.locator("body")).not.toBeEmpty();
   });
 
   test("ouvrir la fiche détail d'un élève", async ({ authedPage: page }) => {

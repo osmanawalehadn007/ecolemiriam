@@ -12,8 +12,10 @@ import { writeFileSync, readFileSync } from "fs";
 import { join } from "path";
 
 const BASE_URL = "http://localhost:3000";
-const TEST_EMAIL = "ahdimounomar@gmail.com";
-const TEST_PASSWORD = "EcolPro@2026";
+// Compte par défaut : celui créé par `prisma/seed.ts` (base locale) ; un compte
+// réel se fournit via TEST_ADMIN_EMAIL / TEST_ADMIN_PASSWORD, jamais dans le code.
+const TEST_EMAIL = process.env.TEST_ADMIN_EMAIL ?? "admin@lycee-demo.ecolemiriam.app";
+const TEST_PASSWORD = process.env.TEST_ADMIN_PASSWORD ?? "Demo@2026!";
 const ORIGIN = "http://localhost:3000";
 
 async function login(): Promise<string> {

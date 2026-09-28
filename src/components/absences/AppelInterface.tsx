@@ -307,6 +307,7 @@ export function AppelInterface({
                   <div key={cat.id} className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                     {/* Niveau 1 : Catégorie (structure pédagogique) */}
                     <button
+                      data-testid="appel-categorie"
                       onClick={() => toggleCat(cat.id)}
                       className={cn(
                         "w-full flex items-center gap-2 px-3 py-2.5 text-sm font-semibold transition-colors",
@@ -328,6 +329,7 @@ export function AppelInterface({
                         {cat.classes.map((classe) => (
                           <button
                             key={classe.id}
+                            data-testid="appel-classe"
                             onClick={() => selectClasse(classe.id)}
                             className={cn(
                               "w-full flex items-center justify-between pl-10 pr-3 py-2.5 text-sm font-medium transition-colors",
@@ -482,6 +484,8 @@ export function AppelInterface({
                       </div>
                       <div className="flex gap-1 flex-shrink-0">
                         <button
+                          data-testid="presence-present"
+                          aria-pressed={status === "present"}
                           onClick={() => setPresence(eleve.id, "present")}
                           title={t("appelPresent")}
                           className={cn(

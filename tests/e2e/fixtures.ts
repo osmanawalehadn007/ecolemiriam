@@ -1,4 +1,68 @@
 import { test as base, expect, type Page } from "@playwright/test";
+import { PrismaClient } from "@prisma/client";
+
+// ============================================================
+// Comptes de test — source de vérité : `prisma/seed.ts`
+// ============================================================
+// La CI démarre une base PostgreSQL jetable, applique le schéma puis lance la
+// seed : les tests ne peuvent donc se connecter qu'aux comptes que la seed
+// crée réellement. `admin@lycee-djibouti.ecolemiriam.app` n'a jamais existé
+// dans `prisma/seed.ts` (qui crée `admin@lycee-demo.ecolemiriam.app`) — d'où
+// les échecs « identifiants invalides » qui maintenaient le job E2E désactivé.
+//
+// Règle : tout compte créé par la seed peut servir de valeur par défaut ; tout
+// compte réel (personnel d'un établissement) passe par une variable
+// d'environnement `TEST_*`. Aucun identifiant réel ne doit être versionné.
+export const DEMO_PASSWORD = process.env.TEST_ADMIN_PASSWORD ?? "Demo@2026!";
+
+export const SEED_ADMIN = {
+  email: process.env.TEST_ADMIN_EMAIL ?? "admin@lycee-demo.ecolemiriam.app",
+  password: DEMO_PASSWORD,
+} as const;
+
+export const SEED_TEACHER = {
+  email: process.env.TEST_TEACHER_EMAIL ?? "enseignant@lycee-demo.ecolemiriam.app",
+  password: process.env.TEST_TEACHER_PASSWORD ?? "Demo@2026!",
+} as const;
+
+/**
+ * Marque un compte comme « email vérifié », exactement comme le fait
+ * `/api/auth/verify-email` (src/lib/security/email-verification.ts :
+ * `User.emailVerified = new Date()`).
+ *
+ * Indispensable en e2e : la vérification passe par un email (Resend) qui n'est
+ * pas configuré dans la base jetable de la CI. Le clic réel sur le lien est
+ * couvert par les tests d'intégration ; ici on applique le même changement
+ * d'état pour pouvoir tester la suite du parcours.
+ */
+export async function markEmailVerified(email: string): Promise<void> {
+  const prisma = new PrismaClient();
+  try {
+    await prisma.user.updateMany({
+      where: { email },
+      data: { emailVerified: new Date() },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+/**
+ * Nombre de sites déclarés dans l'établissement.
+ *
+ * `prisma/seed.ts` n'en crée AUCUN : les parcours qui comparent des libellés de
+ * site (import d'enseignants, affectations) n'ont alors rien à confronter. Ils
+ * doivent être skippés explicitement au lieu d'échouer sur la base de
+ * démonstration.
+ */
+export async function countSites(): Promise<number> {
+  const prisma = new PrismaClient();
+  try {
+    return await prisma.site.count();
+  } finally {
+    await prisma.$disconnect();
+  }
+}
 
 // Shared auth fixture — logs in via l'API NextAuth directement (contourne
 // le problème d'hydratation React du serveur dev où le formulaire se soumet
@@ -24,8 +88,8 @@ async function login(page: Page) {
   // 2. Soumettre les credentials via l'API NextAuth
   await page.request.post("/api/auth/callback/credentials", {
     form: {
-      email: "admin@lycee-djibouti.ecolemiriam.app",
-      password: "Demo@2026!",
+      email: SEED_ADMIN.email,
+      password: SEED_ADMIN.password,
       csrfToken,
       callbackUrl: "/dashboard",
       json: "true",
@@ -44,20 +108,16 @@ async function login(page: Page) {
 // Login paramétré par rôle
 // ============================================================
 //
-// Map des credentials de test. Les valeurs par défaut proviennent des
-// variables d'environnement ; si une variable est absente, on retombe sur
-// une valeur codée en dur (uniquement pour ADMIN/TEACHER qui ont des
-// comptes connus). Pour PARENT/STUDENT/ACCOUNTANT, si les variables
-// d'environnement ne sont pas définies, l'email/password restent vides et
-// les tests qui les utilisent doivent être skippés (voir
-// parent-student-isolation.spec.ts).
+// Map des credentials de test. Les valeurs par défaut proviennent des comptes
+// créés par `prisma/seed.ts` (ADMIN, TEACHER) ; si une variable
+// d'environnement est fournie, elle a priorité. Pour PARENT/STUDENT/
+// ACCOUNTANT, les comptes dépendent d'un établissement réel : sans variables
+// d'environnement, l'email/password restent vides et les tests qui les
+// utilisent doivent être skippés (voir parent-student-isolation.spec.ts).
 export type TestRole = "ADMIN" | "PARENT" | "STUDENT" | "TEACHER" | "ACCOUNTANT";
 
 export const ROLE_CREDENTIALS: Record<TestRole, { email: string; password: string }> = {
-  ADMIN: {
-    email: process.env.TEST_ADMIN_EMAIL ?? "admin@lycee-djibouti.ecolemiriam.app",
-    password: process.env.TEST_ADMIN_PASSWORD ?? "Demo@2026!",
-  },
+  ADMIN: { ...SEED_ADMIN },
   PARENT: {
     email: process.env.TEST_PARENT_EMAIL ?? "",
     password: process.env.TEST_PARENT_PASSWORD ?? "",
@@ -66,10 +126,7 @@ export const ROLE_CREDENTIALS: Record<TestRole, { email: string; password: strin
     email: process.env.TEST_STUDENT_EMAIL ?? "",
     password: process.env.TEST_STUDENT_PASSWORD ?? "",
   },
-  TEACHER: {
-    email: process.env.TEST_TEACHER_EMAIL ?? "awaleh.osman.adn@gmail.com",
-    password: process.env.TEST_TEACHER_PASSWORD ?? "Ttestt@@",
-  },
+  TEACHER: { ...SEED_TEACHER },
   ACCOUNTANT: {
     email: process.env.TEST_ACCOUNTANT_EMAIL ?? "",
     password: process.env.TEST_ACCOUNTANT_PASSWORD ?? "",

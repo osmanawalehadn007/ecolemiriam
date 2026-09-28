@@ -115,17 +115,25 @@ jobs:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
     needs: test
-    # EN PAUSE : les tests E2E seront activés plus tard.
-    # Pour réactiver, supprimer la ligne `if: false` — MAIS aligner d'abord les
-    # fixtures : tests/e2e/fixtures.ts se connecte en
-    # `admin@lycee-djibouti.ecolemiriam.app`, un compte que `prisma/seed.ts` ne
-    # crée pas (le seed crée `admin@lycee-demo.ecolemiriam.app`).
+    timeout-minutes: 30
+    # ACTIF depuis le 27/09/2026. Trois blocages ont été levés pour que ces tests
+    # puissent réellement s'exécuter :
+    #   1. les fixtures visaient `admin@lycee-djibouti.ecolemiriam.app`, un compte
+    #      que `prisma/seed.ts` ne crée pas (`admin@lycee-demo.ecolemiriam.app`) ;
+    #   2. les comptes de la seed n'avaient pas `emailVerified`, or `authorize()`
+    #      refuse toute connexion pour un email non vérifié — les trois comptes de
+    #      la seed étaient donc inutilisables ;
+    #   3. `acceptInvitation` créait le compte invité sans `emailVerified` (le lien
+    #      prouve pourtant le contrôle de la boîte mail), ce qui rendait tout
+    #      utilisateur invité définitivement incapable de se connecter.
     #
-    # La base ciblée n'est plus la production : un PostgreSQL jetable est
-    # démarré sur le runner (schéma poussé puis seedé). Activer ce job n'écrira
-    # donc jamais dans les données réelles — avant, DATABASE_URL pointait la
-    # base de production.
-    if: false
+    # La base ciblée n'est pas la production : un PostgreSQL jetable est démarré
+    # sur le runner (schéma poussé puis seedé). Ce job n'écrit donc jamais dans
+    # les données réelles — avant, `DATABASE_URL` pointait la base de production.
+    #
+    # Périmètre : toute la suite (49 tests verts, 23 skippés explicites sur une
+    # base seedée). Les suites qui dépendent d'un établissement réellement peuplé
+    # se skippent d'elles-mêmes au lieu d'échouer — voir tests/e2e/fixtures.ts.
     services:
       postgres:
         image: postgres:16
@@ -174,6 +182,10 @@ jobs:
           npx prisma db push --skip-generate
           npm run db:seed
 
+      # Toute la suite : elle est verte sur une base seedée (49 passés, 23
+      # skippés explicites — comptes réels et sites absents de la démonstration).
+      # Les tests qui ont besoin d'un établissement peuplé se skippent eux-mêmes
+      # (voir tests/e2e/fixtures.ts) au lieu d'échouer.
       - name: Run E2E tests
         run: npx playwright test
 

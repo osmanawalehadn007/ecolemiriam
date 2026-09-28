@@ -129,7 +129,7 @@ const models = {
 // ============================================================
 
 describe("createInvitation", () => {
-  const input = { email: "prof@ecole.com", name: "Prof Test", role: "TEACHER" as const };
+  const input = { email: "prof@ecolemiriam.app", name: "Prof Test", role: "TEACHER" as const };
 
   it("crée l'invitation et le lien dont le jeton correspond à l'empreinte stockée", async () => {
     const result = await createInvitation(input);
@@ -143,7 +143,7 @@ describe("createInvitation", () => {
     const data = models.invitation.create.mock.calls[0][0].data;
     expect(data).toMatchObject({
       tenantId: "tenant-A",
-      email: "prof@ecole.com",
+      email: "prof@ecolemiriam.app",
       role: "TEACHER",
       name: "Prof Test",
     });
@@ -156,7 +156,7 @@ describe("createInvitation", () => {
     // Une éventuelle invitation PENDING antérieure est révoquée (une seule).
     expect(models.invitation.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { tenantId: "tenant-A", email: "prof@ecole.com", status: "PENDING" },
+        where: { tenantId: "tenant-A", email: "prof@ecolemiriam.app", status: "PENDING" },
       })
     );
     expect(mockSendEmail).not.toHaveBeenCalled();
@@ -171,7 +171,7 @@ describe("createInvitation", () => {
     expect(result.inviteUrl).toBeUndefined();
     expect(mockSendEmail).toHaveBeenCalledTimes(1);
     const [to, subject, html] = mockSendEmail.mock.calls[0];
-    expect(to).toEqual(["prof@ecole.com"]);
+    expect(to).toEqual(["prof@ecolemiriam.app"]);
     expect(subject).toContain("École A");
     expect(html).toContain("/accept-invitation?token=");
   });
@@ -230,7 +230,7 @@ function pendingInvitation(overrides: Record<string, unknown> = {}) {
     id: "inv-1",
     tenantId: "tenant-A",
     siteId: null,
-    email: "new@ecole.com",
+    email: "new@ecolemiriam.app",
     name: "Nouveau Prof",
     role: "TEACHER",
     phone: null,
@@ -265,7 +265,7 @@ describe("acceptInvitation", () => {
     const data = tx.user.create.mock.calls[0][0].data;
     expect(data).toMatchObject({
       tenantId: "tenant-A",
-      email: "new@ecole.com",
+      email: "new@ecolemiriam.app",
       name: "Nouveau Prof",
       role: "TEACHER",
       isActive: true,
@@ -396,7 +396,7 @@ describe("revokeInvitation / resendInvitation", () => {
   it("renvoie une invitation en régénérant un jeton (l'ancien lien ne marche plus)", async () => {
     models.invitation.findFirst.mockResolvedValue({
       id: "inv-1",
-      email: "prof@ecole.com",
+      email: "prof@ecolemiriam.app",
       role: "TEACHER",
       status: "PENDING",
       tenant: { name: "École A" },
@@ -417,7 +417,7 @@ describe("revokeInvitation / resendInvitation", () => {
   it("refuse de renvoyer une invitation annulée", async () => {
     models.invitation.findFirst.mockResolvedValue({
       id: "inv-1",
-      email: "prof@ecole.com",
+      email: "prof@ecolemiriam.app",
       role: "TEACHER",
       status: "REVOKED",
       tenant: { name: "École A" },
@@ -436,29 +436,29 @@ describe("revokeInvitation / resendInvitation", () => {
 
 describe("changePassword", () => {
   it("met à jour le mot de passe et lève l'obligation de changement", async () => {
-    const currentHash = await bcrypt.hash("OldPassword2026", 12);
+    const currentHash = await bcrypt.hash("TestOldPassword2026", 12);
     models.user.findUnique.mockResolvedValue({ id: "admin-1", password: currentHash });
 
     const result = await changePassword({
-      currentPassword: "OldPassword2026",
-      newPassword: "NewPassword2026",
+      currentPassword: "TestOldPassword2026",
+      newPassword: "TestNewPassword2026",
     });
     expect(result).toEqual({ success: true });
 
     const data = models.user.update.mock.calls[0][0].data;
     expect(data.mustChangePassword).toBe(false);
-    await expect(bcrypt.compare("NewPassword2026", data.password as string)).resolves.toBe(true);
+    await expect(bcrypt.compare("TestNewPassword2026", data.password as string)).resolves.toBe(true);
     // Le nouveau mot de passe ne doit pas être stocké en clair.
-    expect(data.password).not.toBe("NewPassword2026");
+    expect(data.password).not.toBe("TestNewPassword2026");
   });
 
   it("refuse un mot de passe actuel incorrect", async () => {
-    const currentHash = await bcrypt.hash("OldPassword2026", 12);
+    const currentHash = await bcrypt.hash("TestOldPassword2026", 12);
     models.user.findUnique.mockResolvedValue({ id: "admin-1", password: currentHash });
 
     const result = await changePassword({
-      currentPassword: "MauvaisMotDePasse",
-      newPassword: "NewPassword2026",
+      currentPassword: "TestMauvaisMotDePasse",
+      newPassword: "TestNewPassword2026",
     });
     expect(result).toEqual({ success: false, error: "Mot de passe actuel incorrect" });
     expect(models.user.update).not.toHaveBeenCalled();
@@ -466,8 +466,8 @@ describe("changePassword", () => {
 
   it("refuse un nouveau mot de passe identique à l'actuel", async () => {
     const result = await changePassword({
-      currentPassword: "SamePassword2026",
-      newPassword: "SamePassword2026",
+      currentPassword: "TestSamePassword2026",
+      newPassword: "TestSamePassword2026",
     });
     expect(result).toEqual({
       success: false,
@@ -477,7 +477,7 @@ describe("changePassword", () => {
 
   it("refuse un nouveau mot de passe trop faible", async () => {
     const result = await changePassword({
-      currentPassword: "OldPassword2026",
+      currentPassword: "TestOldPassword2026",
       newPassword: "faible",
     });
     expect(result.success).toBe(false);
@@ -487,8 +487,8 @@ describe("changePassword", () => {
   it("refuse sans session", async () => {
     mockAuth.mockResolvedValue(null);
     const result = await changePassword({
-      currentPassword: "OldPassword2026",
-      newPassword: "NewPassword2026",
+      currentPassword: "TestOldPassword2026",
+      newPassword: "TestNewPassword2026",
     });
     expect(result).toEqual({ success: false, error: "Non autorisé" });
   });

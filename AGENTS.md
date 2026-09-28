@@ -16,28 +16,55 @@ en CI et en statut requis sur les PR.
 une pull request (`gh pr create --fill`, puis `gh pr merge --squash
 --delete-branch`).
 
-## État de la base de données VPS (vérifié 2026-08-23)
+## État des bases de données (vérifié 2026-09-27)
 
-**IMPORTANT:** La base de données VPS contient TOUTES les données métier. Ne JAMAIS supposer que la DB est vide sans vérifier via le rôle owner (DIRECT_URL, port 15432).
+**Il y a DEUX bases. Seule la première est utilisée par l'application :**
 
-- **880 élèves** (791 actifs + 89 supprimés logiquement)
-- **29 classes**, **3 sites**, **28 factures**, **9 users**, **1 tenant**
-- Distribution par site: Campus Central (504 élèves), Annexe Warabaleh (191), ANNEXE PK12 (96)
-- Backups R2: bucket `ecolemiriam`, 34 fichiers du 2026-08-22 au 2026-08-23 (tous valides, 880 élèves)
+| | Base **live** | Vestige |
+|---|---|---|
+| Projet | Supabase `hyejtirvtdhxseambzyg` (`aws-0-eu-west-1`) | Postgres du VPS (`ecolemiriam-postgres`, Hetzner) |
+| Utilisée par | le conteneur applicatif (`ecolemiam-app-blue`) | **personne** depuis la migration du 26/09 |
+| Vérifié le 27/09 | 74 tables, `invitations` + `mustChangePassword` présents, **36 users**, 1 tenant, **692 élèves**, activité le jour même | 71 tables, 34 users, données figées au 23/08 |
+| Rôle | `postgres.hyejtirvtdhxseambzyg` (RLS non applicable) | `ecolemiriam_owner` / `ecolemiriam_app` + PgBouncer (RLS forcé) |
 
-### Piège RLS / PgBouncer
+**Ne JAMAIS supposer qu'une base est vide, et ne jamais présumer laquelle est
+live : la vérifier.** Outil dédié (lecture seule) :
+
+```bash
+export DIRECT_URL="$(grep '^DIRECT_URL=' .env | cut -d= -f2- | tr -d '\"')"
+node scripts/diagnostic-db.mjs
+```
+
+Le Postgres du VPS reste utile comme **copie de secours** (données au 23/08 :
+880 élèves, 29 classes, 3 sites) et via le tunnel SSH
+(`./scripts/start-vps-tunnel.sh`, ports 15432/16432) — mais il ne faut pas y
+écrire : ce serait écrire dans une base morte.
+
+### Version réellement déployée (vérifié 2026-09-27)
+
+- Image `ghcr.io/wilsan007/ecolemiriam-app:latest`, **construite le 07/09/2026**
+  (`BUILD_ID wq5XbfJt…`), conteneur `ecolemiam-app-blue` démarré le 07/09.
+- Elle **ne contient pas** les fonctionnalités d'invitation (`accept-invitation`
+  absent de l'image) alors que la base les connaît déjà : le schéma a été migré
+  avant le code. Une **promotion manuelle** est nécessaire pour aligner les deux.
+- Le garde-fou RLS « fail-closed » (23/08) **est** dans cette version : toute
+  action serveur sans contexte tenant lève une erreur. C'est ce qui rend
+  `/register` inutilisable en production (voir PR #26).
+
+### Piège RLS / PgBouncer (stack du VPS uniquement)
 
 - RLS est **actif et forcé** sur `eleves`, `sites`, `classes`, `factures`
 - Le rôle `ecolemiriam_app` (via PgBouncer, port 16432) retourne **0 lignes** sans contexte RLS
 - Le rôle `ecolemiriam_owner` (via port 15432, DIRECT_URL) contourne RLS → voit toutes les données
 - Pour voir les données via le rôle app, il faut définir: `SET app.tenant_id = 'cms8kt0b40001zbi3o63y7c5v'; SET app.is_super_admin = 'true';`
-- **PgBouncer en mode transaction pooling** peut ne pas persister les `SET app.*` entre transactions — cause probable des échecs E2E
+- **PgBouncer en mode transaction pooling** peut ne pas persister les `SET app.*` entre transactions
+- La base live (Supabase) est atteinte avec le rôle `postgres` : ces politiques ne s'appliquent pas.
 
 ### Connexions DB
 
-- `DIRECT_URL` (port 15432): rôle owner, contourne RLS, pour migrations/admin
-- `DATABASE_URL` (port 16432): rôle app via PgBouncer, filtré par RLS, pour l'application
-- Tunnel SSH: `./scripts/start-vps-tunnel.sh` (VPS: root@169.58.208.217)
+- `DIRECT_URL`: connexion directe (hors pooler) — migrations, admin, diagnostic
+- `DATABASE_URL`: connexion applicative (pooler / PgBouncer), filtrée par RLS
+- Tunnel SSH vers le **VPS** (base vestige): `./scripts/start-vps-tunnel.sh` (VPS: root@169.58.208.217)
 
 ## Infrastructure
 

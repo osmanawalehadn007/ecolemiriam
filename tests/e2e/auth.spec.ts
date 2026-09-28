@@ -1,4 +1,4 @@
-import { test, expect } from "./fixtures";
+import { test, expect, SEED_ADMIN } from "./fixtures";
 
 test.describe("Authentification", () => {
   test("login avec identifiants valides", async ({ page }) => {
@@ -7,8 +7,9 @@ test.describe("Authentification", () => {
     const { csrfToken } = await csrfRes.json();
     await page.request.post("/api/auth/callback/credentials", {
       form: {
-        email: "admin@lycee-djibouti.ecolemiriam.app",
-        password: "Demo@2026!",
+        // Compte créé par `prisma/seed.ts` (jamais un compte réel : voir fixtures.ts).
+        email: SEED_ADMIN.email,
+        password: SEED_ADMIN.password,
         csrfToken,
         callbackUrl: "/dashboard",
         json: "true",

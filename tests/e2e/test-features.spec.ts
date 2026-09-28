@@ -1,7 +1,9 @@
 import { test, expect, Page } from "@playwright/test";
+// Comptes définis une seule fois dans fixtures.ts (créés par `prisma/seed.ts`).
+import { SEED_ADMIN } from "./fixtures";
 
-const ADMIN_EMAIL = "admin@lycee-djibouti.ecolemiriam.app";
-const PASSWORD = "Demo@2026!";
+const ADMIN_EMAIL = SEED_ADMIN.email;
+const PASSWORD = SEED_ADMIN.password;
 
 // Login via l'API NextAuth (contourne le problème d'hydratation React du
 // serveur dev où le formulaire se soumet en HTML GET avant que onSubmit

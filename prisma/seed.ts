@@ -33,14 +33,22 @@ async function main() {
 
   // --- Utilisateurs ---
   const passwordHash = await bcrypt.hash("Demo@2026!", 12);
+  // `emailVerified` est INDISPENSABLE pour se connecter : `authorize()` refuse
+  // tout compte non vérifié (src/lib/auth.ts → « Email non vérifié »). Sans ce
+  // champ, les comptes de la seed ne pouvaient pas se connecter — ce qui rendait
+  // le job e2e (qui s'authentifie avec ces comptes) impossible à activer. Il est
+  // aussi écrit dans `update`, pour qu'un `npm run db:seed` répare une base
+  // locale déjà seedée au lieu d'y laisser des comptes inutilisables.
+  const verifiedAt = new Date();
 
   const adminUser = await prisma.user.upsert({
     where: { email: "admin@lycee-demo.ecolemiriam.app" },
-    update: {},
+    update: { emailVerified: verifiedAt },
     create: {
       tenantId: tenant.id,
       email: "admin@lycee-demo.ecolemiriam.app",
       password: passwordHash,
+      emailVerified: verifiedAt,
       name: "Mamadou Diallo",
       firstName: "Mamadou",
       lastName: "Diallo",
@@ -50,11 +58,12 @@ async function main() {
 
   const enseignantUser = await prisma.user.upsert({
     where: { email: "enseignant@lycee-demo.ecolemiriam.app" },
-    update: {},
+    update: { emailVerified: verifiedAt },
     create: {
       tenantId: tenant.id,
       email: "enseignant@lycee-demo.ecolemiriam.app",
       password: passwordHash,
+      emailVerified: verifiedAt,
       name: "Fatou Ndiaye",
       firstName: "Fatou",
       lastName: "Ndiaye",
@@ -64,11 +73,12 @@ async function main() {
 
   const parentUser = await prisma.user.upsert({
     where: { email: "parent@lycee-demo.ecolemiriam.app" },
-    update: {},
+    update: { emailVerified: verifiedAt },
     create: {
       tenantId: tenant.id,
       email: "parent@lycee-demo.ecolemiriam.app",
       password: passwordHash,
+      emailVerified: verifiedAt,
       name: "Oumar Sow",
       firstName: "Oumar",
       lastName: "Sow",

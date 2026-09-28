@@ -464,6 +464,13 @@ async function acceptInvitationImpl(input: AcceptInvitationInput) {
           isActive: true,
           // Le mot de passe a été choisi par l'utilisateur : pas de changement forcé.
           mustChangePassword: false,
+          // `emailVerified` : accepter l'invitation prouve le contrôle de la
+          // boîte mail (le jeton n'a été envoyé qu'à cette adresse) — c'est
+          // l'équivalent du clic sur un lien de vérification. Sans ce champ,
+          // `authorize()` refuse la connexion (« Email non vérifié ») et le
+          // compte invité reste DÉFINITIVEMENT inaccessible : aucun email de
+          // vérification n'est envoyé par ce parcours.
+          emailVerified: new Date(),
           userTenants: {
             create: {
               tenantId: invitation.tenantId,

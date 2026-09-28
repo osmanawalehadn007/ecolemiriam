@@ -1,4 +1,4 @@
-import { test, expect } from "./fixtures";
+import { test, expect, SEED_ADMIN, markEmailVerified } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /**
@@ -17,6 +17,10 @@ import type { Page } from "@playwright/test";
  * L'« acceptation » est vérifiée pour de vrai : on ouvre un contexte navigateur
  * neuf (cookies vides) et on se connecte avec les identifiants de l'invitation.
  * Le test passe donc par `authorize()` + bcrypt + `deriveClaims`.
+ *
+ * Note : `registerTenant` limite à 3 inscriptions par heure et par IP
+ * (src/lib/actions/register.ts). Le compteur est en mémoire : relancer le
+ * serveur de dev le remet à zéro si vous enchaînez les exécutions locales.
  */
 
 /** Connexion générique avec des identifiants explicites. */
@@ -52,16 +56,27 @@ test.describe("Système d'invitation", () => {
     await page.fill("#adminLastName", "Diop");
     await page.fill("#adminEmail", adminEmail);
     await page.fill("#adminPassword", adminPassword);
-    await page.getByRole("button", { name: "Créer mon espace EcolPro" }).click();
+    // Libellé réel du bouton : `register.submit` dans src/i18n/fr.json.
+    await page.getByRole("button", { name: "Créer mon espace École Miriam" }).click();
 
-    // Écran de confirmation d'inscription.
-    await expect(page.getByText("Espace créé avec succès !")).toBeVisible({
+    // Écran de confirmation d'inscription (`register.successMsg`).
+    await expect(page.getByText(/a été enregistré/)).toBeVisible({
       timeout: 20000,
     });
 
-    // ACCEPTATION : l'administrateur créé se connecte (nouveau contexte).
     const ctx = await browser.newContext();
     const newPage = await ctx.newPage();
+
+    // Tant que l'email n'est pas vérifié, la connexion est REFUSÉE : le compte
+    // est créé avec `emailVerified = null` et `authorize()` bloque ces comptes.
+    await loginWith(newPage, adminEmail, adminPassword);
+    await expect(newPage).toHaveURL(/\/login/, { timeout: 20000 });
+
+    // Clic sur le lien de vérification : la CI n'a aucun fournisseur d'email
+    // (Resend), on applique donc l'état produit par /api/auth/verify-email.
+    await markEmailVerified(adminEmail);
+
+    // ACCEPTATION : l'administrateur créé se connecte (nouveau contexte).
     await loginWith(newPage, adminEmail, adminPassword);
     await expect(newPage).toHaveURL(/\/(dashboard|select-tenant)/, { timeout: 20000 });
     await ctx.close();
@@ -80,10 +95,13 @@ test.describe("Système d'invitation", () => {
     await openUsersTab(page);
 
     // Ouvre le formulaire d'invitation et le remplit.
+    // L'ajout est en deux étapes : choix du rôle, puis identité + mot de passe.
+    // `exact: true` est requis : « Enseignant » matche aussi « Importer
+    // enseignants » et « Enseignants 2 » (filtre de la liste).
     await page.getByRole("button", { name: "Ajouter un utilisateur" }).click();
+    await page.getByRole("button", { name: "Enseignant", exact: true }).click();
     await page.fill("#name", name);
     await page.fill("#email", email);
-    await page.selectOption("#role", "TEACHER");
     await page.fill("#password", password);
     await page.getByRole("button", { name: "Créer", exact: true }).click();
 
@@ -94,6 +112,11 @@ test.describe("Système d'invitation", () => {
     await expect(page.getByText("Utilisateur créé")).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(email)).toBeVisible({ timeout: 15000 });
 
+    // L'admin a défini le mot de passe : le compte doit d'abord être vérifié
+    // (email envoyé via Resend en production ; la base de la CI n'a pas de
+    // fournisseur d'email, on applique donc l'état que produit le lien).
+    await markEmailVerified(email);
+
     // ACCEPTATION : un compte créé par l'admin démarre avec un mot de passe
     // connu de l'admin — le changement est donc OBLIGATOIRE avant tout accès.
     const ctx = await browser.newContext();
@@ -102,13 +125,30 @@ test.describe("Système d'invitation", () => {
     await expect(newPage).toHaveURL(/\/change-password/, { timeout: 20000 });
 
     // Changement de mot de passe forcé.
-    await newPage.fill("#current-password", password);
-    await newPage.fill("#new-password", newPassword);
-    await newPage.fill("#confirm-password", newPassword);
-    await newPage.getByRole("button", { name: "Mettre à jour mon mot de passe" }).click();
+    //
+    // Le formulaire est un composant client : tant que React n'a pas hydraté,
+    // `onSubmit` n'est pas attaché et le navigateur fait un GET natif sur la
+    // page (même piège que celui documenté dans fixtures.ts). On recharge et on
+    // retente, puis on vérifie l'ÉTAT FINAL — la connexion avec le nouveau mot
+    // de passe — plutôt que la navigation déclenchée par `signOut`.
+    let changed = false;
+    for (let attempt = 0; attempt < 3 && !changed; attempt++) {
+      await newPage.goto("/change-password");
+      await newPage.waitForLoadState("networkidle");
+      await newPage.fill("#current-password", password);
+      await newPage.fill("#new-password", newPassword);
+      await newPage.fill("#confirm-password", newPassword);
+      await newPage.getByRole("button", { name: "Mettre à jour mon mot de passe" }).click();
+      try {
+        await newPage.waitForURL(/\/(login|dashboard|select-tenant)/, { timeout: 15000 });
+        changed = true;
+      } catch {
+        // Formulaire non hydraté (GET natif) → nouvelle tentative.
+      }
+    }
+    expect(changed, "le changement de mot de passe forcé doit aboutir").toBe(true);
 
     // Reconnexion avec le nouveau mot de passe → accès à l'application.
-    await newPage.waitForURL(/\/login/, { timeout: 20000 });
     await loginWith(newPage, email, newPassword);
     await expect(newPage).toHaveURL(/\/(dashboard|select-tenant)/, { timeout: 20000 });
     await ctx.close();
@@ -162,9 +202,11 @@ test.describe("Système d'invitation", () => {
   }) => {
     await openUsersTab(page);
     await page.getByRole("button", { name: "Ajouter un utilisateur" }).click();
+    // Étape 1 : le rôle (l'ancien champ `#role` n'existe plus).
+    await page.getByRole("button", { name: "Enseignant", exact: true }).click();
     await page.fill("#name", "Doublon E2E");
     // Email administrateur de la base seedée : déjà utilisé.
-    await page.fill("#email", "admin@lycee-demo.ecolpro.app");
+    await page.fill("#email", SEED_ADMIN.email);
     await page.fill("#password", "InviteE2E2026!");
     await page.getByRole("button", { name: "Créer", exact: true }).click();
 

@@ -10,6 +10,20 @@ import { test, expect, type Page } from "@playwright/test";
 
 const BASE = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3001";
 
+// Les comptes ciblés appartiennent à un établissement réel : ils viennent de
+// variables d'environnement, jamais du code source (un identifiant versionné
+// est un identifiant fuité — c'était le cas de ces deux comptes). Sans
+// variables, les blocs concernés sont skippés au lieu d'échouer.
+const CONSEILLER = {
+  email: process.env.TEST_CONSEILLER_EMAIL ?? "",
+  password: process.env.TEST_CONSEILLER_PASSWORD ?? "",
+};
+
+const PRINCIPAL = {
+  email: process.env.TEST_PRINCIPAL_EMAIL ?? "",
+  password: process.env.TEST_PRINCIPAL_PASSWORD ?? "",
+};
+
 async function login(page: Page, email: string, password: string) {
   // 1. CSRF token
   const csrfRes = await page.request.get(`${BASE}/api/auth/csrf`);
@@ -36,11 +50,16 @@ async function logout(page: Page) {
 }
 
 // ============================================================
-// CONSEILLER — dya.adine@miriam.dj
+// CONSEILLER (compte réel — TEST_CONSEILLER_EMAIL / _PASSWORD)
 // ============================================================
-test.describe("Conseiller (dya.adine@miriam.dj)", () => {
+test.describe("Conseiller", () => {
+  test.skip(
+    !CONSEILLER.email || !CONSEILLER.password,
+    "TEST_CONSEILLER_EMAIL / TEST_CONSEILLER_PASSWORD non définis",
+  );
+
   test.beforeEach(async ({ page }) => {
-    await login(page, "dya.adine@miriam.dj", "dya12345");
+    await login(page, CONSEILLER.email, CONSEILLER.password);
   });
 
   test.afterEach(async ({ page }) => {
@@ -83,11 +102,16 @@ test.describe("Conseiller (dya.adine@miriam.dj)", () => {
 });
 
 // ============================================================
-// PRINCIPAL — ilyasadendjama@gmail.com
+// PRINCIPAL (compte réel — TEST_PRINCIPAL_EMAIL / _PASSWORD)
 // ============================================================
-test.describe("Principal (ilyasadendjama@gmail.com)", () => {
+test.describe("Principal", () => {
+  test.skip(
+    !PRINCIPAL.email || !PRINCIPAL.password,
+    "TEST_PRINCIPAL_EMAIL / TEST_PRINCIPAL_PASSWORD non définis",
+  );
+
   test.beforeEach(async ({ page }) => {
-    await login(page, "ilyasadendjama@gmail.com", "EcolPro@2026");
+    await login(page, PRINCIPAL.email, PRINCIPAL.password);
   });
 
   test.afterEach(async ({ page }) => {

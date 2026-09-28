@@ -1,9 +1,12 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
+// Comptes définis une seule fois dans fixtures.ts. Toute valeur par défaut
+// provient de `prisma/seed.ts` : aucun identifiant réel n'est versionné.
+import { SEED_ADMIN, SEED_TEACHER, countSites } from "./fixtures";
 
 // ─── Auth : login via API NextAuth ────────────────────────────────
 // On utilise le compte TENANT_ADMIN qui a la permission parametres:write
-const ADMIN_EMAIL = "ahdimounomar@gmail.com";
-const ADMIN_PASSWORD = "EcolPro@2026";
+const ADMIN_EMAIL = SEED_ADMIN.email;
+const ADMIN_PASSWORD = SEED_ADMIN.password;
 
 async function login(page: Page) {
   // Retry : en dev, la première requête peut tomber sur une route en cours
@@ -237,6 +240,13 @@ test.describe("Import d'enseignants — Module complet", () => {
 
   // ─── 5. Analyse d'un fichier Excel valide (dry-run) ──────────────
   test("Analyse un fichier Excel valide et affiche le plan", async ({ page }) => {
+    // Prérequis : au moins un site déclaré, pour que l'analyse confronte la
+    // colonne « Site d'affectation » du fichier (`prisma/seed.ts` n'en crée
+    // aucun — voir countSites()).
+    if ((await countSites()) === 0) {
+      test.skip(true, "aucun site déclaré dans l'établissement de démonstration");
+    }
+
     await page.goto("/parametres", { waitUntil: "networkidle", timeout: 60_000 });
     await page.waitForTimeout(2000);
 
@@ -274,8 +284,13 @@ test.describe("Import d'enseignants — Module complet", () => {
     // Le nom du fichier doit s'afficher
     await expect(page.locator(`text=${name}`).first()).toBeVisible({ timeout: 5000 });
 
-    // Cliquer sur "Analyser"
-    const analyzeBtn = page.locator("button:has-text(/Analyser|Analyse|Prévisualiser|Preview/i)").first();
+    // Cliquer sur "Analyser".
+    // `:has-text(/regex/i)` n'est PAS un sélecteur CSS valide (Playwright rejette
+    // le littéral regex et lève « Unexpected token "/" ») : le motif doit être
+    // passé en option `hasText`.
+    const analyzeBtn = page
+      .locator("button", { hasText: /Analyser|Analyse|Prévisualiser|Preview/i })
+      .first();
     if (await analyzeBtn.isVisible({ timeout: 3000 })) {
       await analyzeBtn.click();
     } else {
@@ -389,7 +404,7 @@ test.describe("Import d'enseignants — Tests API", () => {
   // ─── 10. Test API : permission insuffisante → 403 ───────────────
   test("API analyse avec compte TEACHER → 403", async ({ request }) => {
     // S'authentifier avec un compte TEACHER (pas parametres:write)
-    await loginAPI(request, "awaleh.osman.adn@gmail.com", "Ttestt@@");
+    await loginAPI(request, SEED_TEACHER.email, SEED_TEACHER.password);
 
     const { buffer, name } = await createTestExcel(
       null as any,
