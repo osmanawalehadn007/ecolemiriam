@@ -40,16 +40,21 @@ Le Postgres du VPS reste utile comme **copie de secours** (données au 23/08 :
 (`./scripts/start-vps-tunnel.sh`, ports 15432/16432) — mais il ne faut pas y
 écrire : ce serait écrire dans une base morte.
 
-### Version réellement déployée (vérifié 2026-09-27)
+### Version réellement déployée (vérifié 2026-09-28)
 
-- Image `ghcr.io/wilsan007/ecolemiriam-app:latest`, **construite le 07/09/2026**
-  (`BUILD_ID wq5XbfJt…`), conteneur `ecolemiam-app-blue` démarré le 07/09.
-- Elle **ne contient pas** les fonctionnalités d'invitation (`accept-invitation`
-  absent de l'image) alors que la base les connaît déjà : le schéma a été migré
-  avant le code. Une **promotion manuelle** est nécessaire pour aligner les deux.
-- Le garde-fou RLS « fail-closed » (23/08) **est** dans cette version : toute
-  action serveur sans contexte tenant lève une erreur. C'est ce qui rend
-  `/register` inutilisable en production (voir PR #26).
+- **La production tourne sur GCP** (instance `ecolpro-prod`, `us-central1-a`) :
+  `deploy-gcp.yml` construit l'image, la déploie dans le slot de staging, puis
+  bascule Caddy (« Bascule Caddy → app-blue ») après approbation manuelle. Le
+  `10f8b3a` (audit + invitations + facturation) y est en ligne ; vérifié :
+  `/api/health` = 200, `accept-invitation` = 200 et CSP avec *nonce*
+  (absente de l'ancienne image).
+- Le **stack Hetzner/VPS est un vestige** : `ecolemiam-app-blue` y tourne encore
+  l'image du **07/09/2026** (Next 15, sans les invitations) et ne reçoit plus le
+  trafic du domaine. Ne pas y déployer, ne pas s'y fier pour vérifier la
+  production.
+- Le garde-fou RLS « fail-closed » (23/08) est dans toutes les versions
+  postérieures : toute action serveur sans contexte tenant lève une erreur
+  (c'est le bug `/register` corrigé par la PR #26).
 
 ### Piège RLS / PgBouncer (stack du VPS uniquement)
 

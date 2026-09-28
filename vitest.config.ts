@@ -10,6 +10,16 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     pool: "threads", // Évite le crash undici/jsdom sur Node 22+ (markAsUncloneable)
+    // Fiabilité en CI : le moteur de requêtes Prisma peut s'arrêter brutalement
+    // (« fatal runtime error: failed to initiate panic », core dumped) quand
+    // trop de workers l'instancient en parallèle sur un runner 2 vCPU, et les
+    // tests les plus lourds (facture/paiement, bcrypt) dépassent le délai par
+    // défaut de 5 s sur un runner chargé. C'est ce qui a fait échouer le CI Gate
+    // de la promotion du 28/09/2026 alors que le même commit passait quelques
+    // minutes plus tôt (relance : succès, aucune modification de code).
+    // On borne donc le parallélisme, on élargit le délai et on retente en CI ;
+    // en local, on veut voir la flakiness telle quelle.
+    ...(process.env.CI ? { retries: 2, maxWorkers: 2, testTimeout: 15_000 } : {}),
     coverage: {
       provider: "v8",
       reporter: ["text", "text-summary", "lcov"],
