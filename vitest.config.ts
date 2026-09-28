@@ -19,7 +19,14 @@ export default defineConfig({
     // minutes plus tôt (relance : succès, aucune modification de code).
     // On borne donc le parallélisme, on élargit le délai et on retente en CI ;
     // en local, on veut voir la flakiness telle quelle.
-    ...(process.env.CI ? { retries: 2, maxWorkers: 2, testTimeout: 15_000 } : {}),
+    // `fileParallelism: false` : les fichiers de test s'exécutent UN PAR UN. Le
+    // crash observé (28/09/2026, 4 fois dans la journée) vient de plusieurs
+    // workers instanciant le moteur en même temps ; un processus qui s'abandonne
+    // échappe aux `retries` de vitest, d'où la sérialisation — le job retente en
+    // plus l'étape entière (cf. ci.yml et deploy-gcp.yml).
+    ...(process.env.CI
+      ? { retries: 2, maxWorkers: 2, testTimeout: 15_000, fileParallelism: false }
+      : {}),
     coverage: {
       provider: "v8",
       reporter: ["text", "text-summary", "lcov"],

@@ -103,7 +103,17 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
 
       - name: Verify (Lint + Type-check + Unit tests)
-        run: npm run verify:ci
+        # Le moteur de requêtes Prisma peut s'arrêter brutalement (« fatal
+        # runtime error: failed to initiate panic », core dumped, exit 134)
+        # lorsque plusieurs workers l'instancient en parallèle : un processus qui
+        # s'abandonne échappe aux `retries` de vitest. On retente donc l'étape
+        # ENTIÈRE une fois — elle est idempotente ; un échec réel échouera de
+        # nouveau, un incident transitoire passe (constat du 28/09/2026).
+        run: |
+          npm run verify:ci || {
+            echo "::warning::Première exécution en échec (crash moteur Prisma ?) — nouvelle tentative complète…"
+            npm run verify:ci
+          }
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}

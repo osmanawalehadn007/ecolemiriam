@@ -87,7 +87,14 @@ jobs:
       # désormais alignés. Pour l'exécuter volontairement, avec une base dédiée :
       #   RLS_ACTIVE=true DATABASE_URL=… DIRECT_URL=… npm run test
       - name: Unit tests
-        run: npm run test
+        # Même parade que dans ci.yml : un arrêt brutal du moteur Prisma (core
+        # dumped, exit 134) échappe aux `retries` de vitest, on retente l'étape
+        # entière une fois. Cf. commentaire détaillé dans .github/workflows/ci.yml.
+        run: |
+          npm run test || {
+            echo "::warning::Première exécution en échec (crash moteur Prisma ?) — nouvelle tentative complète…"
+            npm run test
+          }
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
