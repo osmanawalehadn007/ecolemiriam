@@ -90,12 +90,6 @@ async function handler(req: NextRequest) {
           return { annee: null as string | null, erreur: "Aucune année scolaire active" };
         }
 
-        if (dryRun) {
-          // Aperçu : aucun écrit. Le détail par élève reste calculé par
-          // `scripts/generer-mensualites.ts --dry` côté exploitation.
-          return { annee, generated: 0, skipped: 0, sansTarif: 0, montantTotal: 0 };
-        }
-
         const r = await genererMensualitesPourTenant({
           tenantId: tenant.id,
           mois,
@@ -103,6 +97,9 @@ async function handler(req: NextRequest) {
           inclureCantine,
           inclureTransport,
           acteurId: null, // tâche planifiée : aucune session utilisateur
+          // `?dry=1` : mêmes calculs, aucune écriture (ni facture, ni numéro,
+          // ni audit). Les compteurs renvoyés sont ceux de la génération réelle.
+          dryRun,
         });
         return { annee, ...r };
       });

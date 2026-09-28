@@ -97,16 +97,24 @@ export interface GenerationMensualitesParams {
   tarifWhere?: Record<string, unknown>;
   /** Utilisateur à l'origine de la génération ; `null` = tâche planifiée. */
   acteurId?: string | null;
+  /**
+   * APERÇU : calcule exactement ce qui SERAIT créé (nombre de factures, montant
+   * total, élèves ignorés ou sans tarif) **sans écrire** — aucune facture, aucune
+   * réservation de numéro, aucune entrée d'audit. C'est le mode utilisé par
+   * `?dry=1` du cron et par l'aperçu du CLI : l'exploitant doit voir les
+   * chiffres réels avant la première génération, pas des zéros.
+   */
+  dryRun?: boolean;
 }
 
 export interface GenerationMensualitesResultat {
-  /** Factures créées. */
+  /** Factures créées — ou, en mode `dryRun`, factures qui SERAIENT créées. */
   generated: number;
   /** Élèves ignorés (facture du mois déjà présente, ou sans tarif). */
   skipped: number;
   /** Dont élèves sans tarif pour leur niveau. */
   sansTarif: number;
-  /** Montant total des factures créées. */
+  /** Montant total des factures créées (ou projeté en `dryRun`). */
   montantTotal: number;
 }
 
@@ -122,6 +130,7 @@ export async function genererMensualitesPourTenant(
     eleveWhere = {},
     tarifWhere = {},
     acteurId = null,
+    dryRun = false,
   } = params;
 
   if (!Number.isInteger(mois) || mois < 1 || mois > 12) {
@@ -200,6 +209,14 @@ export async function genererMensualitesPourTenant(
       cantine: inclureCantine,
       transport: inclureTransport,
     });
+
+    // Aperçu : on s'arrête AVANT toute écriture (pas de numéro réservé, pas de
+    // facture, pas d'audit) — les compteurs reflètent ce qui serait créé.
+    if (dryRun) {
+      generated++;
+      montantTotal += montant;
+      continue;
+    }
 
     // Échéance = dernier jour du mois facturé.
     const echeance = new Date(parseInt(annee.split("-")[0], 10), mois, 0);

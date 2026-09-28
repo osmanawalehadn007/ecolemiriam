@@ -92,6 +92,17 @@ describe("genererMensualitesPourTenant", () => {
     });
   });
 
+  it("en mode aperçu, compte ce qui serait créé sans rien écrire", async () => {
+    const resultat = await genererMensualitesPourTenant({ ...PARAMS, dryRun: true });
+
+    // Les compteurs sont ceux de la génération réelle…
+    expect(resultat.generated).toBe(1);
+    expect(resultat.montantTotal).toBe(7000);
+    // …mais AUCUNE écriture : ni facture, ni réservation de numéro.
+    expect(mockPrisma.facture.create).not.toHaveBeenCalled();
+    expect(mockPrisma.$queryRaw).not.toHaveBeenCalled();
+  });
+
   it("ne recrée pas un mois déjà facturé (parent ayant payé d'avance)", async () => {
     // Le mois existe déjà, quelle que soit sa convention de libellé.
     mockPrisma.facture.findMany.mockResolvedValue([{ eleveId: "e1" }]);
