@@ -290,3 +290,19 @@ Référence complète : **[docs/DECISIONS-FACTURATION.md](docs/DECISIONS-FACTURA
     `cron/relances-auto` (`Facture.relances.niveau`). Ne pas ajouter un second
     système d'alerte : deux moteurs enverraient deux relances au même parent.
 
+
+### Règles d'administration des comptes
+
+22. **Un compte créé par l'administration démarre non vérifié** — et
+    `authorize()` refuse alors toute connexion (« Email non vérifié »). Pour
+    débloquer un compte dont l'adresse est fiable, l'admin dispose de deux
+    leviers dans **Paramètres → Utilisateurs** : « Renvoyer l'email de
+    vérification » (par ligne) ou **« Marquer l'email comme vérifié »**
+    (par ligne, ou globalement via le bandeau qui recense les comptes non
+    vérifiés). L'action serveur `marquerEmailsVerifies` exige
+    `parametres:write`, ne touche que les comptes du périmètre dont
+    `emailVerified` est nul, et journalise `user:email:verify`.
+    Ne JAMAIS court-circuiter ce contrôle par un `update` SQL manuel : le bouton
+    existe précisément pour que l'opération soit permissionnée et tracée
+    (parcours prouvé par `tests/e2e/verification-email-admin.spec.ts`).
+

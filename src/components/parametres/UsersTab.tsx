@@ -7,8 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Trash2, Power, Phone, Edit3, Check, X, Building2, MapPin, AlertTriangle, Search, Shield, GraduationCap, Briefcase, Users as UsersIcon, BookOpen, Users as UsersClass, Upload, Mail } from "lucide-react";
-import { createUser, toggleUserActive, deleteUser, updateUserPhone, assignUserSites, getUserSites, getMatieresForAffectation, getClassesForAffectation, resendVerificationEmail, type UserFormData } from "@/lib/actions/parametres";
+import { Loader2, Plus, Trash2, Power, Phone, Edit3, Check, X, Building2, MapPin, AlertTriangle, Search, Shield, GraduationCap, Briefcase, Users as UsersIcon, BookOpen, Users as UsersClass, Upload, Mail, BadgeCheck } from "lucide-react";
+import { createUser, toggleUserActive, deleteUser, updateUserPhone, assignUserSites, getUserSites, getMatieresForAffectation, getClassesForAffectation, resendVerificationEmail, marquerEmailsVerifies, type UserFormData } from "@/lib/actions/parametres";
 import { addUserToTenant } from "@/lib/actions/user-tenant";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
@@ -109,6 +109,11 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
   const [showImportEnseignants, setShowImportEnseignants] = useState(false);
   const [showImportPersonnel, setShowImportPersonnel] = useState(false);
   const [resendingEmailId, setResendingEmailId] = useState<string | null>(null);
+  // Vérification d'emails : un compte créé par l'administration démarre sans
+  // email vérifié et ne peut donc PAS se connecter (garde-fou `authorize()`).
+  const [showVerifyModal, setShowVerifyModal] = useState(false);
+  const [verifyPending, setVerifyPending] = useState(false);
+  const [verifyingUserId, setVerifyingUserId] = useState<string | null>(null);
 
   const filteredUsers = users.filter((u) => {
     const matchesCategory =
@@ -126,6 +131,9 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
     teachers: users.filter((u) => categoryConfig.teachers.roles.includes(u.role)).length,
     staff: users.filter((u) => categoryConfig.staff.roles.includes(u.role)).length,
   };
+
+  /** Comptes en attente de vérification d'email (ne peuvent pas se connecter). */
+  const nonVerifies = users.filter((u) => !u.emailVerified);
 
   // Multi-tenant: modal d'invitation
   const [showTenantModal, setShowTenantModal] = useState(false);
@@ -339,6 +347,32 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
       toast.error(err instanceof Error ? err.message : t("emailResentFailed"));
     } finally {
       setResendingEmailId(null);
+    }
+  }
+
+  /**
+   * Marque comme vérifiés un compte précis (bouton par ligne) ou tous les
+   * comptes non vérifiés de l'annuaire (bandeau). L'action serveur revérifie la
+   * permission `parametres:write` et le périmètre tenant/sites, ne touche que
+   * les comptes dont `emailVerified` est nul, et journalise l'opération.
+   */
+  async function handleMarquerVerifies(userIds?: string[]) {
+    const parLigne = Boolean(userIds && userIds.length === 1);
+    if (parLigne) setVerifyingUserId(userIds![0]);
+    else setVerifyPending(true);
+    try {
+      const result = await marquerEmailsVerifies(userIds);
+      if (result.modified > 0) {
+        toast.success(t("emailsVerifies", { count: result.modified }));
+      } else {
+        toast.info(t("emailsVerifiesNone"));
+      }
+      setShowVerifyModal(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("genericError"));
+    } finally {
+      setVerifyingUserId(null);
+      setVerifyPending(false);
     }
   }
 
@@ -806,6 +840,20 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
         </div>
       </div>
 
+      {canManage && nonVerifies.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-600" />
+          <div className="min-w-[240px] flex-1">
+            <p className="font-medium">{t("unverifiedTitle", { count: nonVerifies.length })}</p>
+            <p className="text-muted-foreground">{t("unverifiedDesc")}</p>
+          </div>
+          <Button size="sm" className="gap-2" onClick={() => setShowVerifyModal(true)}>
+            <BadgeCheck className="h-4 w-4" />
+            {t("verifyAll")}
+          </Button>
+        </div>
+      )}
+
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -951,6 +999,22 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
                       {canManage && (
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-1">
+                            {!u.emailVerified && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-amber-600"
+                                onClick={() => handleMarquerVerifies([u.id])}
+                                disabled={verifyingUserId === u.id}
+                                title={t("verifyOne")}
+                              >
+                                {verifyingUserId === u.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <BadgeCheck className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                            )}
                             {availableTenants.length > 1 && (
                               <Button
                                 variant="ghost"
@@ -1066,6 +1130,52 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
                 </div>
               </>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Modal: confirmation de vérification d'emails */}
+      {showVerifyModal && (
+        <Card className="border-amber-300">
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <BadgeCheck className="h-4 w-4" />
+              {t("verifyConfirmTitle")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {t("verifyConfirmBody", { count: nonVerifies.length })}
+            </p>
+            <ul className="max-h-40 space-y-1 overflow-y-auto text-xs text-muted-foreground">
+              {nonVerifies.slice(0, 20).map((u) => (
+                <li key={u.id}>{u.email}</li>
+              ))}
+              {nonVerifies.length > 20 && <li>… (+{nonVerifies.length - 20})</li>}
+            </ul>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                className="gap-2"
+                onClick={() => handleMarquerVerifies()}
+                disabled={verifyPending}
+              >
+                {verifyPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <BadgeCheck className="h-4 w-4" />
+                )}
+                {t("verifyConfirm")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowVerifyModal(false)}
+              >
+                {t("cancel")}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}

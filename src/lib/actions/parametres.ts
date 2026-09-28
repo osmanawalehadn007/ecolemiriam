@@ -1943,3 +1943,62 @@ export async function resendVerificationEmail(userId: string) {
   revalidatePath("/parametres");
   return { success: true };
 }
+
+/**
+ * Marque comme vérifiés les emails de comptes qui ne le sont pas encore.
+ * ============================================================
+ * Cas visé : les comptes **provisionnés par l'administration** (saisie directe,
+ * import, création groupée) dont l'email n'a jamais été confirmé. Le garde-fou
+ * de connexion (`authorize()` → « Email non vérifié ») leur refuse l'accès ;
+ * sans cette action, l'administrateur n'avait aucun moyen de débloquer un
+ * compte dont l'adresse est fiable — le renvoi d'email ne suffit pas quand la
+ * boîte est inaccessible ou que le message n'arrive pas.
+ *
+ * Sécurité : permission `parametres:write`, périmètre tenant + sites de
+ * l'appelant, et **seuls** les comptes dont `emailVerified` est nul sont
+ * touchés (aucune régression possible sur un compte déjà vérifié). L'opération
+ * est tracée (`user:email:verify`) avec la liste des adresses concernées.
+ *
+ * @param userIds comptes à traiter. Omis (ou vide) = tous les comptes non
+ *                vérifiés du périmètre — c'est le bouton global de l'annuaire.
+ */
+export async function marquerEmailsVerifies(userIds?: string[]) {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+  const denied = checkPermission(session.user.role, "parametres:write");
+  if (denied) throw new Error("Accès refusé");
+
+  const cibles = await prisma.user.findMany({
+    where: {
+      tenantId: session.user.tenantId,
+      emailVerified: null,
+      ...(userIds && userIds.length > 0 ? { id: { in: userIds } } : {}),
+      ...siteFilterForModel("user", session.user),
+    },
+    select: { id: true, email: true },
+  });
+
+  if (cibles.length === 0) return { success: true, modified: 0 };
+
+  await prisma.user.updateMany({
+    where: { id: { in: cibles.map((c) => c.id) }, tenantId: session.user.tenantId },
+    data: { emailVerified: new Date() },
+  });
+
+  const { auditFire } = await import("@/lib/audit");
+  auditFire({
+    userId: session.user.id,
+    tenantId: session.user.tenantId,
+    action: "user:email:verify",
+    verdict: "ALLOWED",
+    resource: "user",
+    resourceId: cibles.length === 1 ? cibles[0].id : undefined,
+    reason: `${cibles.length} email(s) marqué(s) vérifié(s) par l'administration`,
+    metadata: { total: cibles.length, emails: cibles.map((c) => c.email).slice(0, 50) },
+  });
+
+  revalidatePath("/parametres");
+  revalidateTag("dashboard-data", "max");
+  return { success: true, modified: cibles.length };
+}
+
