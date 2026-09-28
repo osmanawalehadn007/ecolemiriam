@@ -305,4 +305,8 @@ Référence complète : **[docs/DECISIONS-FACTURATION.md](docs/DECISIONS-FACTURA
     Ne JAMAIS court-circuiter ce contrôle par un `update` SQL manuel : le bouton
     existe précisément pour que l'opération soit permissionnée et tracée
     (parcours prouvé par `tests/e2e/verification-email-admin.spec.ts`).
+    Pour un rattrapage massif (import de centaines de comptes) ou une base sans
+    session d'admin, l'outil d'exploitation
+    `scripts/marquer-emails-verifies.ts` applique la même règle et écrit la même
+    trace d'audit (lecture seule par défaut, `--apply` pour écrire).
 
