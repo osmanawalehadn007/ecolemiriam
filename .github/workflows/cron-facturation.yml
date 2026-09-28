@@ -73,8 +73,11 @@ jobs:
     env:
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
       # Conteneur applicatif actif (blue ou green) : `docker exec` évite Caddy,
-      # le domaine public et leurs protections.
-      CIBLE: 'C=$(docker ps --filter name=ecolemiam-app- --format "{{.Names}}" | head -1); [ -n "$C" ] || { echo "aucun conteneur applicatif"; exit 1; }; docker exec "$C" curl -fsS'
+      # le domaine public et leurs protections. Le nom vient du script de
+      # déploiement (`get_container()` → `ecolemiriam-app-<couleur>`) ; en cas
+      # d'absence, on liste les conteneurs présents pour rendre le diagnostic
+      # immédiat (une faute de frappe ici avait produit « aucun conteneur »).
+      CIBLE: 'C=$(docker ps --format "{{.Names}}" | grep "^ecolemiriam-app-" | head -1); [ -n "$C" ] || { echo "aucun conteneur applicatif ; conteneurs presents : $(docker ps --format "{{.Names}}" | tr "\n" " ")"; exit 1; }; docker exec "$C" curl -fsS'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
