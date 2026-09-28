@@ -251,3 +251,37 @@ git push origin main
 16. **Noms normalisés** — Les matières sont écrites en nom complet proprement :
     "Arabe" (pas "ARABE" ni "AE"), "Anglais" (pas "ANGLAIS" ni "AS"),
     "Poésie-Chant" (pas "POESIE/ CHANT"), "Graphisme" (pas "G").
+
+### Règles de facturation (décisions du 27/09/2026)
+
+Référence complète : **[docs/DECISIONS-FACTURATION.md](docs/DECISIONS-FACTURATION.md)**.
+
+17. **Résolution tarifaire canonique** — Le tarif se résout uniquement via
+    `src/lib/tarifs.ts` (`cleNiveau` + `choisirTarif`). « 1ère », « 1er »,
+    « 1ère année » → `an1` ; « Première » (lycée) reste `premiere` : ce sont
+    deux tarifs différents (7 000 vs 15 000 DJF). Le tarif du site de l'élève
+    prime sur le tarif global ; celui d'un autre site n'est jamais utilisé.
+    **Niveau non résolu ⇒ on ne facture pas** (`sansTarif`) — jamais de montant
+    deviné.
+18. **Mensualités idempotentes** — Un seul cœur
+    (`src/lib/factures/mensualites.ts`) alimente le cron
+    `/api/cron/facturation-mensuelle` (`CRON_SECRET`, ordonnancé par
+    `.github/workflows/cron-facturation.yml`) et le CLI
+    `scripts/generer-mensualites.ts` (aperçu par défaut, `--apply` pour écrire).
+    L'unicité `(tenantId, eleveId, type=MENSUALITE, mois)` est garantie par
+    l'**index partiel en base** `factures_unicite_mensuelle` (une facture
+    annulée libère le mois). Ne JAMAIS remplacer ce verrou par un simple test
+    applicatif : deux exécutions simultanées le perdraient.
+19. **Prérequis de déploiement** — La CI ne joue pas les migrations.
+    `migration_facture_mensualite_unicite.sql` doit être appliqué sur la base
+    cible (idempotent), et `select count(*) from factures_mensualites_doublons`
+    doit renvoyer **0** avant d'activer la génération.
+20. **Portail famille** — `/mes-factures` est accessible à PARENT/STUDENT : le
+    périmètre vient obligatoirement de `eleveScopeFilter(user, "eleve")`
+    (`siteFilterForModel` renvoie `{}` pour ces rôles). Un parent ne doit jamais
+    voir la facture d'un autre élève — c'est vérifié par
+    `tests/e2e/mes-factures-isolation.spec.ts`.
+21. **Une seule échelle de relance** — Les rappels d'impayés passent par
+    `cron/relances-auto` (`Facture.relances.niveau`). Ne pas ajouter un second
+    système d'alerte : deux moteurs enverraient deux relances au même parent.
+

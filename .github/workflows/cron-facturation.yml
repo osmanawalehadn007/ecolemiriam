@@ -1,0 +1,111 @@
+name: Cron — Facturation mensuelle
+
+# ============================================================
+# Ordonnanceur de la génération des mensualités
+# ============================================================
+# Appelle `GET|POST /api/cron/facturation-mensuelle`, protégé par CRON_SECRET.
+# La génération est IDEMPOTENTE : l'unicité (une facture par élève, par type et
+# par mois) est garantie par l'index partiel `factures_unicite_mensuelle` — voir
+# docs/DECISIONS-FACTURATION.md. Rejouer ce workflow ne crée jamais de doublon.
+#
+# PRÉREQUIS (une seule fois, côté GitHub) :
+#   Settings → Secrets and variables → Actions → New repository secret
+#     CRON_SECRET = la valeur de CRON_SECRET de l'application (production)
+#     APP_URL     = https://ecolemiriam.com (sans slash final)
+#
+# Alternative sans GitHub Actions — crontab de l'hôte :
+#   0 3 1 * *  curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
+#                https://ecolemiriam.com/api/cron/facturation-mensuelle
+# ============================================================
+on:
+  schedule:
+    # 1er du mois, 03:00 UTC = 06:00 à Djibouti → génération le matin, avant
+    # l'ouverture du secrétariat.
+    - cron: "0 3 1 * *"
+  workflow_dispatch:
+    inputs:
+      tache:
+        description: "Tâche à exécuter"
+        required: true
+        default: apercu
+        type: choice
+        options:
+          - apercu # simulation : compte les factures sans rien créer
+          - mensualites # génère le mois courant
+          - rattrapage # génère un mois précis (renseigner mois/annee)
+      mois:
+        description: "Mois 1-12 (rattrapage uniquement)"
+        required: false
+        default: ""
+      annee:
+        description: "Année scolaire, ex. 2025-2026 (rattrapage uniquement)"
+        required: false
+        default: ""
+
+# Deux exécutions ne doivent pas se chevaucher : la seconde attendrait la
+# première plutôt que de gaspiller des appels (la base refuserait le doublon).
+concurrency:
+  group: cron-facturation
+  cancel-in-progress: false
+
+jobs:
+  facturation:
+    name: Facturation automatique
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_URL: ${{ secrets.APP_URL || 'https://ecolemiriam.com' }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Vérifier la configuration
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET absent (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          echo "Cible : $APP_URL"
+
+      - name: Déterminer la tâche
+        id: tache
+        run: |
+          TACHE="${{ inputs.tache }}"
+          # Déclenchement planifié (inputs vides) : génération du mois courant.
+          # Rejouer est sans risque (idempotence), y compris si le runner a du
+          # retard sur l'ordonnancement.
+          [ -z "$TACHE" ] && TACHE="mensualites"
+          echo "tache=$TACHE" >> "$GITHUB_OUTPUT"
+          echo "Tâche retenue : $TACHE"
+
+      - name: Aperçu (aucune écriture)
+        if: steps.tache.outputs.tache == 'apercu'
+        run: |
+          curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/facturation-mensuelle?dry=1" | tee reponse.json
+
+      - name: Générer les mensualités du mois
+        if: steps.tache.outputs.tache == 'mensualites'
+        run: |
+          curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/facturation-mensuelle" | tee reponse.json
+
+      - name: Rattraper un mois précis
+        if: steps.tache.outputs.tache == 'rattrapage'
+        run: |
+          if [ -z "${{ inputs.mois }}" ]; then
+            echo "::error::Renseigner le champ « mois » pour un rattrapage."
+            exit 1
+          fi
+          ARGS="mois=${{ inputs.mois }}"
+          if [ -n "${{ inputs.annee }}" ]; then ARGS="$ARGS&annee=${{ inputs.annee }}"; fi
+          curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/facturation-mensuelle?$ARGS" | tee reponse.json
+
+      - name: Résumé
+        if: always()
+        run: |
+          if [ -f reponse.json ]; then
+            echo '### Réponse du cron' >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat reponse.json >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi

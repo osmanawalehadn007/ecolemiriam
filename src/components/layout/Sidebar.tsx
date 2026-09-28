@@ -90,6 +90,10 @@ const navGroups: NavGroup[] = [
       { labelKey: "absences", icon: ClipboardList, href: "/absences", color: "text-orange-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "CLASS_TEACHER", "TEACHER", "COUNSELOR", "NURSE", "PARENT", "STUDENT"] },
       { labelKey: "vieScolaire", icon: Shield, href: "/vie-scolaire", color: "text-red-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "CLASS_TEACHER"] },
       { labelKey: "parents", icon: UserCheck, href: "/parents", color: "text-pink-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "SECRETARY", "COUNSELOR", "CLASS_TEACHER"] },
+      // Écran famille : factures et reçus des enfants du compte. La page borne
+      // elle-même via `eleveScopeFilter` (PARENT/STUDENT) ; les rôles finance y
+      // voient leur raccourci.
+      { labelKey: "mesFactures", icon: Receipt, href: "/mes-factures", color: "text-emerald-500", roles: ["SUPER_ADMIN", "TENANT_ADMIN", "PRINCIPAL", "ACCOUNTANT", "SECRETARY", "PARENT", "STUDENT"] },
     ],
   },
   {

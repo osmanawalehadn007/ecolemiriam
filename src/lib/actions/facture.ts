@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { PAYMENT_METHOD_IDS } from "@/lib/payment-methods";
 import { checkPermission } from "@/lib/rbac";
+import { eleveScopeFilter, isRelationScopedRole, siteFilterForModel } from "@/lib/site-scope";
 import { z } from "zod";
 import { endOfDay } from "date-fns";
 import { Prisma, TypeFacture } from "@prisma/client";
@@ -41,23 +42,41 @@ const PaiementSchema = z.object({
 
 export type PaiementFormData = z.infer<typeof PaiementSchema>;
 
+/**
+ * Factures visibles par l'utilisateur courant.
+ *
+ * Deux publics, deux périmètres :
+ *   - **familles** (PARENT/STUDENT, rôles « relationnels ») : portail
+ *     `/mes-factures`, borné à leurs propres enfants par `eleveScopeFilter`
+ *     (site + périmètre personnel). C'est le filtre OBLIGATOIRE pour ces rôles :
+ *     `siteFilterForModel` renvoie `{}` pour eux, l'isolation ne peut venir que
+ *     de la relation `eleve` (AGENTS.md §14) ;
+ *   - **personnel financier** (`finance:read`) : la totalité de son périmètre de
+ *     sites, comme dans `/facturation`.
+ *
+ * Les autres rôles obtiennent une liste vide.
+ */
 export async function getFacturesForTenant(filters?: { statut?: string; eleveId?: string }) {
   const session = await auth();
-  if (!session?.user?.tenantId) return [];
+  if (!session?.user?.tenantId || !session.user.id) return [];
 
-  const denied = checkPermission(session.user.role, "finance:read");
-  if (denied) return [];
+  const famille = isRelationScopedRole(session.user.role);
+  if (!famille && checkPermission(session.user.role, "finance:read")) return [];
 
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId dans le where, site filter géré par le caller
+  const scope = famille
+    ? eleveScopeFilter(session.user, "eleve")
+    : siteFilterForModel("facture", session.user);
+
   return prisma.facture.findMany({
     where: {
       tenantId: session.user.tenantId,
+      ...scope,
       ...(filters?.statut && filters.statut !== "ALL" ? { statut: filters.statut as never } : {}),
       ...(filters?.eleveId ? { eleveId: filters.eleveId } : {}),
     },
     include: {
       eleve: { select: { id: true, nom: true, prenom: true, matricule: true, classeId: true, classe: { select: { nom: true } } } },
-      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur facture)
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (facture déjà bornée)
       paiements: { include: { enregistrePar: { select: { id: true, name: true } } } },
       relances: { select: { id: true, niveau: true, envoyeeLe: true } },
       createdBy: { select: { id: true, name: true } },

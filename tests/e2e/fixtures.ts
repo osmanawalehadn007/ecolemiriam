@@ -26,6 +26,17 @@ export const SEED_TEACHER = {
 } as const;
 
 /**
+ * Compte PARENT de la démonstration : la seed crée `parent@lycee-demo…` et le
+ * rattache au premier élève (`EleveParent`). Il sert aux tests d'ISOLATION —
+ * vérifier qu'un parent ne voit QUE les factures de ses propres enfants — sans
+ * dépendre d'un établissement réel.
+ */
+export const SEED_PARENT = {
+  email: process.env.TEST_PARENT_EMAIL ?? "parent@lycee-demo.ecolemiriam.app",
+  password: process.env.TEST_PARENT_PASSWORD ?? "Demo@2026!",
+} as const;
+
+/**
  * Marque un compte comme « email vérifié », exactement comme le fait
  * `/api/auth/verify-email` (src/lib/security/email-verification.ts :
  * `User.emailVerified = new Date()`).
@@ -152,19 +163,13 @@ export function hasRoleCredentials(role: TestRole): boolean {
  * force pas /dashboard : pour PARENT/STUDENT, /dashboard redirige vers
  * /absences ou /notes, donc on attend l'une des destinations valides.
  */
-export async function loginAsRole(
+export async function loginWithCredentials(
   page: Page,
-  role: TestRole,
-  destPath: string = "/dashboard"
+  email: string,
+  password: string,
+  destPath: string = "/dashboard",
+  options?: { waitForExactPath?: boolean }
 ): Promise<void> {
-  const { email, password } = ROLE_CREDENTIALS[role];
-  if (!email || !password) {
-    throw new Error(
-      `Credentials de test manquants pour le rôle ${role} ` +
-        `(définir TEST_${role}_EMAIL / TEST_${role}_PASSWORD).`
-    );
-  }
-
   // 1. CSRF token (retry x3 — le serveur dev peut compiler à la demande).
   let csrfToken: string | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -191,22 +196,37 @@ export async function loginAsRole(
     maxRedirects: 0,
   });
 
-  // 3. Naviguer vers la destination. Pour PARENT/STUDENT, /dashboard
-  //    redirige côté serveur ; on attend donc une URL finale parmi les
-  //    destinations valides plutôt que /dashboard strictement.
+  // 3. Naviguer vers la destination.
   await page.goto(destPath);
-  if (role === "PARENT" || role === "STUDENT") {
-    // /dashboard redirige PARENT → /absences, STUDENT → /notes.
-    // On accepte aussi la destination explicite si elle n'est pas /dashboard.
+  if (options?.waitForExactPath === false) {
+    // Rôles redirigés par le serveur : on attend une destination valide plutôt
+    // qu'un chemin strict (/dashboard redirige PARENT → /absences, STUDENT → /notes).
     await page.waitForURL(
       (url) =>
-        !url.pathname.endsWith("/login") &&
-        !url.pathname.endsWith("/select-tenant"),
+        !url.pathname.endsWith("/login") && !url.pathname.endsWith("/select-tenant"),
       { timeout: 60_000 }
     );
   } else {
     await page.waitForURL(`**${destPath}`, { timeout: 60_000 });
   }
+}
+
+export async function loginAsRole(
+  page: Page,
+  role: TestRole,
+  destPath: string = "/dashboard"
+): Promise<void> {
+  const { email, password } = ROLE_CREDENTIALS[role];
+  if (!email || !password) {
+    throw new Error(
+      `Credentials de test manquants pour le rôle ${role} ` +
+        `(définir TEST_${role}_EMAIL / TEST_${role}_PASSWORD).`
+    );
+  }
+
+  await loginWithCredentials(page, email, password, destPath, {
+    waitForExactPath: role !== "PARENT" && role !== "STUDENT",
+  });
 }
 
 /**
