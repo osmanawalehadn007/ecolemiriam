@@ -5,6 +5,9 @@ vi.mock("@/lib/prisma", () => ({
     eleve: { findMany: vi.fn() },
     tarifNiveau: { findMany: vi.fn() },
     facture: { findMany: vi.fn(), count: vi.fn(), create: vi.fn() },
+    // La numérotation passe par la fonction SQL atomique `next_facture_numeros`
+    // (src/lib/facture-numero.ts) : on simule la réservation d'un bloc.
+    $queryRaw: vi.fn(),
   },
 }));
 
@@ -23,6 +26,7 @@ const mockPrisma = prisma as unknown as {
     count: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
   };
+  $queryRaw: ReturnType<typeof vi.fn>;
 };
 
 /** Erreur Prisma de violation d'unicité (index partiel mensuel). */
@@ -64,6 +68,7 @@ describe("genererMensualitesPourTenant", () => {
     mockPrisma.tarifNiveau.findMany.mockResolvedValue([TARIF]);
     mockPrisma.facture.findMany.mockResolvedValue([]);
     mockPrisma.facture.count.mockResolvedValue(0);
+    mockPrisma.$queryRaw.mockResolvedValue([{ premier: 1 }]);
     mockPrisma.facture.create.mockResolvedValue({ id: "f1" });
   });
 

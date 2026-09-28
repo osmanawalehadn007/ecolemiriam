@@ -17,6 +17,7 @@
  * jusqu'à l'encaissement complet.
  */
 import prisma from "@/lib/prisma";
+import { reserverNumeroFacture } from "@/lib/facture-numero";
 import { choisirTarif, montantMensuel } from "@/lib/tarifs";
 
 export const MOIS_NOMS = [
@@ -68,11 +69,18 @@ export function estViolationUnicite(e: unknown): boolean {
   return typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
 }
 
-/** Numérotation tenant-wide `FAC-<année>-<n>` (unique pour l'établissement). */
-export async function numeroFactureSuivant(tenantId: string, annee: string): Promise<string> {
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- compteur tenant-wide : seul un NOMBRE est lu, aucune donnée d'un autre site n'est exposée
-  const factureCount = await prisma.facture.count({ where: { tenantId } });
-  return `FAC-${annee.split("-")[0]}-${String(factureCount + 1).padStart(5, "0")}`;
+/**
+ * Préfixe de numérotation d'une année scolaire : « 2026-2027 » → « 2026 ».
+ *
+ * Le numéro lui-même est réservé ATROUILLEMENT en base via
+ * `reserverNumeroFacture` (src/lib/facture-numero.ts, PR #27) : la fonction SQL
+ * `next_facture_numeros` réserve un bloc sous verrou pour tout l'établissement.
+ * L'ancien `prisma.facture.count() + 1` passait par RLS (chaque site repartait
+ * de sa propre séquence) et n'était pas atomique — 322 factures pour 257
+ * numéros distincts constatés le 27/09/2026.
+ */
+export function prefixeNumero(annee: string): string {
+  return annee.split("-")[0];
 }
 
 export interface GenerationMensualitesParams {
@@ -195,7 +203,7 @@ export async function genererMensualitesPourTenant(
 
     // Échéance = dernier jour du mois facturé.
     const echeance = new Date(parseInt(annee.split("-")[0], 10), mois, 0);
-    const numero = await numeroFactureSuivant(tenantId, annee);
+    const numero = await reserverNumeroFacture(tenantId, prefixeNumero(annee));
 
     try {
       await prisma.facture.create({
