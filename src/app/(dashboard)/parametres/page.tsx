@@ -9,6 +9,7 @@ import { runWithTenant } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import {
   siteFilterForModel,
+  siteIdForCreate,
   type SessionSiteClaims,
 } from "@/lib/site-scope";
 import { anneeFilterForModel } from "@/lib/annee-scope";
@@ -200,7 +201,7 @@ export default async function ParametresPage() {
           annees={data.annees}
           canManage={canManage}
           sessionRole={session.user.role}
-          sessionSiteId={session.user.siteId ?? undefined}
+          sessionSiteId={siteIdForCreate(session.user) ?? undefined}
           availableTenants={session.user.availableTenants}
         />
       </div>

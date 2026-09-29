@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
-import { Loader2, Mail, Plus, RefreshCw, Send, X } from "lucide-react";
+import { AlertTriangle, Loader2, Mail, MapPin, Plus, RefreshCw, Send, X } from "lucide-react";
+import { roleRequiresSite } from "@/lib/site-scope";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,9 +51,12 @@ const INVITABLE_ROLES: { value: string; labelKey: string }[] = [
 export function InvitationsPanel({
   canManage,
   sites = [],
+  sessionSiteId,
 }: {
   canManage: boolean;
   sites?: SiteItem[];
+  /** Site sur lequel l'administrateur est positionné (rattachement de l'invité). */
+  sessionSiteId?: string;
 }) {
   const t = useTranslations("invitation");
   const tp = useTranslations("parametres");
@@ -62,12 +66,14 @@ export function InvitationsPanel({
   const [showForm, setShowForm] = useState(false);
   const [pending, setPending] = useState(false);
   const [fallbackLink, setFallbackLink] = useState<string | null>(null);
-  const [form, setForm] = useState<{ email: string; name: string; role: InvitableRole; siteId: string }>({
+  const [form, setForm] = useState<{ email: string; name: string; role: InvitableRole }>({
     email: "",
     name: "",
     role: "TEACHER",
-    siteId: "",
   });
+  // Même règle que `siteForNewMember` côté serveur.
+  const siteRequis = sites.length > 0 && roleRequiresSite(form.role);
+  const siteCreation = sessionSiteId ? sites.find((s) => s.id === sessionSiteId) ?? null : null;
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -95,7 +101,6 @@ export function InvitationsPanel({
         email: form.email,
         name: form.name,
         role: form.role,
-        siteId: form.siteId || null,
       });
       if (!result.success) {
         toast.error(result.error);
@@ -103,7 +108,7 @@ export function InvitationsPanel({
       }
       toast.success(t("invited"));
       setFallbackLink(result.inviteUrl ?? null);
-      setForm({ email: "", name: "", role: "TEACHER", siteId: "" });
+      setForm({ email: "", name: "", role: "TEACHER" });
       setShowForm(false);
       await refresh();
     } finally {
@@ -225,23 +230,23 @@ export function InvitationsPanel({
               ))}
             </select>
           </div>
-          {sites.length > 0 && (
-            <div className="space-y-1.5 md:col-span-2">
-              <Label htmlFor="invite-form-site">{t("site")}</Label>
-              <select
-                id="invite-form-site"
-                value={form.siteId}
-                onChange={(e) => setForm({ ...form, siteId: e.target.value })}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="">{t("allSites")}</option>
-                {sites.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.nom}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {siteRequis && (
+            siteCreation ? (
+              <div className="md:col-span-4 flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/5 p-2.5 text-sm text-green-700">
+                <MapPin className="h-4 w-4 text-green-600" />
+                <span>
+                  L&apos;invité sera rattaché automatiquement au site : <strong>{siteCreation.nom}</strong>
+                </span>
+              </div>
+            ) : (
+              <div className="md:col-span-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-sm text-amber-700">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-600" />
+                <span>
+                  Vous êtes positionné sur « Tous les sites ». Choisissez un site précis dans le sélecteur
+                  en haut de page pour inviter ce compte : il doit être rattaché à un site pour se connecter.
+                </span>
+              </div>
+            )
           )}
           <div className="md:col-span-4 flex gap-2">
             <Button
@@ -249,7 +254,7 @@ export function InvitationsPanel({
               size="sm"
               className="gap-2"
               data-testid="send-invitation"
-              disabled={pending}
+              disabled={pending || (siteRequis && !siteCreation)}
             >
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               {pending ? t("sending") : t("send")}

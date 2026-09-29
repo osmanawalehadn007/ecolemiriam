@@ -223,7 +223,7 @@ export function ParametresTabs({
         {activeTab === "annees" && <AnneesScolairesTab annees={annees} canManage={canManage} />}
         {activeTab === "utilisateurs" && (
           <div className="space-y-6">
-            <InvitationsPanel canManage={canManage} sites={sites} />
+            <InvitationsPanel canManage={canManage} sites={sites} sessionSiteId={sessionSiteId} />
             <UsersTab users={users} canManage={canManage} sessionRole={sessionRole} sessionSiteId={sessionSiteId} availableTenants={availableTenants} sites={sites} />
           </div>
         )}

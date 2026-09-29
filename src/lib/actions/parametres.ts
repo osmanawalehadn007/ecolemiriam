@@ -9,6 +9,8 @@ import bcrypt from "bcryptjs";
 import {
   siteFilterForModel,
   siteIdForCreate,
+  siteForNewMember,
+  roleRequiresSite,
   requireSiteIdForCreate,
   type SessionSiteClaims,
   mergeFilters,
@@ -173,6 +175,12 @@ export async function createUser(data: UserFormData) {
   }
 
   const v = parsed.data;
+  // Le personnel est rattaché automatiquement au site sur lequel l'appelant
+  // est positionné. En « tous les sites », on refuse : le compte n'aurait
+  // aucun site et ne verrait rien une fois connecté.
+  const rattachement = siteForNewMember(session.user, v.role);
+  if (rattachement.error) throw new Error(rattachement.error);
+  const siteIdCreation = rattachement.siteId;
   // `User.email` est unique au niveau de la plateforme entière, pas du tenant :
   // le contrôle d'unicité doit donc être inter-tenants et inter-sites, sinon on
   // laisserait créer un doublon qui échouerait ensuite en base. Seule
@@ -192,7 +200,7 @@ export async function createUser(data: UserFormData) {
   const newUser = await prisma.user.create({
     data: {
       tenantId: session.user.tenantId,
-      siteId: siteIdForCreate(session.user),
+      siteId: siteIdCreation,
       name: v.name,
       email: v.email,
       role: v.role,
@@ -211,6 +219,12 @@ export async function createUser(data: UserFormData) {
           isDefault: true,
         },
       },
+      // Les sites autorisés d'une session se lisent dans UserSite (et
+      // EnseignantSite), pas dans `siteId` : sans cette ligne, le compte se
+      // connecterait sans aucun site.
+      ...(siteIdCreation && roleRequiresSite(v.role)
+        ? { userSites: { create: { siteId: siteIdCreation } } }
+        : {}),
     },
   });
 
@@ -221,6 +235,9 @@ export async function createUser(data: UserFormData) {
         tenantId: session.user.tenantId,
         userId: newUser.id,
         dateEntree: new Date(),
+        // Le périmètre d'un enseignant se lit dans EnseignantSite : sans cette
+        // ligne, il n'apparaît dans aucun site (seulement en « tous les sites »).
+        ...(siteIdCreation ? { sites: { create: { siteId: siteIdCreation } } } : {}),
       },
     });
 
@@ -767,8 +784,8 @@ export type ParentFormData = z.infer<typeof ParentSchema>;
  *
  * Un parent sans aucun enfant reste visible : il ne porte encore aucune donnée
  * d'un autre site, et c'est l'état transitoire d'un parent qu'on vient de créer
- * avant de le rattacher. Même règle que `siteFilterForModel` pour les relations
- * vers-plusieurs (`{ some: … } OR { none: {} }`).
+ * avant de le rattacher (`{ some: … } OR { none: {} }`). Les enseignants, eux,
+ * n'ont pas cette tolérance : leur rattachement EnseignantSite est obligatoire.
  */
 function parentSiteScope(claims: SessionSiteClaims): Record<string, unknown> {
   const filtreEleve = siteFilterForModel("eleve", claims);
@@ -1339,6 +1356,15 @@ export async function assignUserSites(userId: string, sites: { siteId: string; r
     }
   }
 
+  // eslint-disable-next-line ecolemiriam/require-site-filter -- fiche du compte déjà validé ci-dessus (tenantId), on en réécrit justement les sites
+  const enseignant = await prisma.enseignant.findFirst({
+    where: { userId, tenantId: session.user.tenantId },
+    select: { id: true },
+  });
+  if (enseignant && siteIds.length === 0) {
+    throw new Error("Un enseignant doit être rattaché à au moins un site.");
+  }
+
   // Supprimer les anciennes associations
   await prisma.userSite.deleteMany({
     where: { userId },
@@ -1375,6 +1401,17 @@ export async function assignUserSites(userId: string, sites: { siteId: string; r
         },
       });
     }
+  }
+
+  // Un enseignant est rattaché à ses sites par EnseignantSite (c'est ce que lit
+  // le filtre de site) : on l'aligne sur les accès du compte.
+  if (enseignant) {
+    await prisma.$transaction([
+      prisma.enseignantSite.deleteMany({ where: { enseignantId: enseignant.id } }),
+      prisma.enseignantSite.createMany({
+        data: siteIds.map((siteId) => ({ enseignantId: enseignant.id, siteId })),
+      }),
+    ]);
   }
 
   revalidatePath("/parametres");
@@ -1535,10 +1572,16 @@ export async function getEnseignantsWithAffectations() {
     where: { tenantId: session.user.tenantId, ...siteFilter },
     include: {
       user: { select: { id: true, name: true, email: true } },
+      // eslint-disable-next-line ecolemiriam/require-site-filter -- affichage de TOUS les sites d'un enseignant déjà filtré par le where parent
+      sites: { select: { site: { select: { id: true, nom: true } } } },
       matieres: { include: { matiere: { select: { id: true, nom: true, code: true } } } },
+      // `classe` est une relation obligatoire : sous RLS, une classe d'un autre
+      // site revient `null` et fait échouer toute la requête. On ne garde que
+      // les affectations dont la classe est visible dans le contexte courant.
       affectations: {
+        where: { classe: { tenantId: session.user.tenantId } },
         include: {
-          classe: { select: { id: true, nom: true, niveau: true, structureId: true, structure: { select: { type: true } } } },
+          classe: { select: { id: true, nom: true, niveau: true, structureId: true, structure: { select: { type: true } }, site: { select: { id: true, nom: true } } } },
           matiere: { select: { id: true, nom: true, code: true } },
         },
       },

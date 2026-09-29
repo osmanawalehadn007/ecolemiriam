@@ -44,6 +44,7 @@ const getEnseignantsRH = unstable_cache(
             },
             // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
             emploiTemps: {
+              where: { classe: { tenantId } },
               select: {
                 jour: true, heureDebut: true, heureFin: true,
                 matiere: { select: { nom: true, couleur: true } },
@@ -54,7 +55,10 @@ const getEnseignantsRH = unstable_cache(
             classesPrincipales: {
               select: { id: true, nom: true, niveau: true },
             },
+            // Relation `classe` obligatoire : sans ce filtre, une classe masquée
+            // par la RLS (autre site) fait échouer toute la requête.
             affectations: {
+              where: { classe: { tenantId } },
               include: {
                 classe: { select: { id: true, nom: true, niveau: true } },
                 matiere: { select: { id: true, nom: true, code: true } },
