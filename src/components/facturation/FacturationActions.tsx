@@ -61,6 +61,37 @@ export function FacturationActions({ currentYear = "2025-2026", userRole }: { cu
   const [genAnnee, setGenAnnee] = useState(currentYear);
   const [genCantine, setGenCantine] = useState(false);
   const [genTransport, setGenTransport] = useState(false);
+  // Frais de rentrée : appliqués au seul mois de septembre, et seulement si
+  // l'opérateur les coche. Les montants viennent de la grille tarifaire
+  // (Paramètres → Tarifs) : cocher n'ajoute rien si la colonne est vide.
+  const [genFraisInscription, setGenFraisInscription] = useState(false);
+  const [genFraisRenouvellement, setGenFraisRenouvellement] = useState(false);
+
+  /**
+   * Bloc « frais de rentrée » : septembre est le seul mois où l'on peut
+   * ajouter l'inscription / la réinscription, et c'est un choix explicite.
+   * Les montants viennent de la grille tarifaire, jamais d'un forfait.
+   */
+  const blocFraisRentree = (
+    <div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-2">
+      <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+        Frais de rentrée — appliqués au mois de septembre uniquement
+      </p>
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" checked={genFraisInscription} onChange={(e) => setGenFraisInscription(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+        <span className="text-sm">Ajouter les frais d&apos;inscription à la mensualité</span>
+      </label>
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" checked={genFraisRenouvellement} onChange={(e) => setGenFraisRenouvellement(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+        <span className="text-sm">Ajouter les frais de réinscription à la mensualité</span>
+      </label>
+      <p className="text-xs text-amber-700 dark:text-amber-300">
+        Laissés décochés, septembre est facturé comme les autres mois (mensualité
+        seule) — un élève qui a déjà réglé son inscription à l&apos;admission ne
+        doit pas être facturé deux fois.
+      </p>
+    </div>
+  );
 
   // Factures en retard
   const [facturesRetard, setFacturesRetard] = useState<FactureEnRetard[]>([]);
@@ -73,7 +104,14 @@ export function FacturationActions({ currentYear = "2025-2026", userRole }: { cu
   async function handleGenererMensualites() {
     setIsPending(true);
     try {
-      const result = await genererMensualites({ mois: genMois, annee: genAnnee, inclureCantine: genCantine, inclureTransport: genTransport });
+      const result = await genererMensualites({
+        mois: genMois,
+        annee: genAnnee,
+        inclureCantine: genCantine,
+        inclureTransport: genTransport,
+        inclureFraisInscription: genFraisInscription,
+        inclureFraisRenouvellement: genFraisRenouvellement,
+      });
       toast.success(t("invoicesGenerated", { generated: result.generated, skipped: result.skipped }));
       setShowGenModal(false);
     } catch (err) {
@@ -86,7 +124,13 @@ export function FacturationActions({ currentYear = "2025-2026", userRole }: { cu
   async function handleGenererFacturesAnnuelles() {
     setIsPending(true);
     try {
-      const result = await genererFacturesAnnuelles({ annee: genAnnee, inclureCantine: genCantine, inclureTransport: genTransport });
+      const result = await genererFacturesAnnuelles({
+        annee: genAnnee,
+        inclureCantine: genCantine,
+        inclureTransport: genTransport,
+        inclureFraisInscription: genFraisInscription,
+        inclureFraisRenouvellement: genFraisRenouvellement,
+      });
       toast.success(t("annualInvoicesGenerated", { generated: result.generated, skipped: result.skipped }));
       setShowAnnualModal(false);
     } catch (err) {
@@ -223,7 +267,13 @@ export function FacturationActions({ currentYear = "2025-2026", userRole }: { cu
                 <input type="checkbox" checked={genTransport} onChange={(e) => setGenTransport(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
                 <span className="text-sm">{t("includeTransport")}</span>
               </label>
+              <p className="text-xs text-muted-foreground">
+                Cantine et transport sont facturés au montant déclaré dans la grille
+                tarifaire (Paramètres → Tarifs) : si la colonne « frais cantine » ou
+                « frais transport » est vide, cocher l&apos;option n&apos;ajoute rien.
+              </p>
             </div>
+            {blocFraisRentree}
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 space-y-1.5">
               <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
                 {t("annualHintTitle")}
@@ -279,7 +329,20 @@ export function FacturationActions({ currentYear = "2025-2026", userRole }: { cu
                 <input type="checkbox" checked={genTransport} onChange={(e) => setGenTransport(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
                 <span className="text-sm">{t("includeTransport")}</span>
               </label>
+              <p className="text-xs text-muted-foreground">
+                Cantine et transport sont facturés au montant déclaré dans la grille
+                tarifaire (Paramètres → Tarifs) : si la colonne est vide, cocher
+                l&apos;option n&apos;ajoute rien.
+              </p>
             </div>
+            {genMois === 9 ? (
+              blocFraisRentree
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Les frais d&apos;inscription et de réinscription ne s&apos;appliquent
+                qu&apos;au mois de septembre.
+              </p>
+            )}
             <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
               {t("generationHint")}
             </p>

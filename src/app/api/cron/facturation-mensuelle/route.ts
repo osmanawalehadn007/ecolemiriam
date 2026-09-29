@@ -22,7 +22,13 @@ import { genererMensualitesPourTenant } from "@/lib/factures/mensualites";
  *   ?tenantId=...      ne traiter qu'un établissement
  *   ?cantine=1         inclure les frais de cantine
  *   ?transport=1       inclure les frais de transport
+ *   ?inscription=1     ajouter les frais d'inscription à la mensualité de SEPTEMBRE
+ *   ?renouvellement=1  ajouter les frais de réinscription à la mensualité de SEPTEMBRE
  *   ?dry=1             simulation : calcule sans rien écrire
+ *
+ * Les frais de rentrée ne sont JAMAIS appliqués par défaut : une famille qui a
+ * réglé l'inscription à l'admission serait facturée deux fois. Le cron les
+ * ajoute uniquement si on le demande explicitement (et seulement en septembre).
  *
  * Mise en place (exemple crontab de l'hôte) :
  *   0 6 1 * *  curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
@@ -45,6 +51,8 @@ async function handler(req: NextRequest) {
   const tenantIdFiltre = searchParams.get("tenantId");
   const inclureCantine = searchParams.get("cantine") === "1";
   const inclureTransport = searchParams.get("transport") === "1";
+  const inclureFraisInscription = searchParams.get("inscription") === "1";
+  const inclureFraisRenouvellement = searchParams.get("renouvellement") === "1";
   const dryRun = searchParams.get("dry") === "1";
 
   if (!Number.isInteger(mois) || mois < 1 || mois > 12) {
@@ -96,6 +104,8 @@ async function handler(req: NextRequest) {
           annee,
           inclureCantine,
           inclureTransport,
+          inclureFraisInscription,
+          inclureFraisRenouvellement,
           acteurId: null, // tâche planifiée : aucune session utilisateur
           // `?dry=1` : mêmes calculs, aucune écriture (ni facture, ni numéro,
           // ni audit). Les compteurs renvoyés sont ceux de la génération réelle.
@@ -125,6 +135,8 @@ async function handler(req: NextRequest) {
     mois,
     inclureCantine,
     inclureTransport,
+    inclureFraisInscription,
+    inclureFraisRenouvellement,
     dryRun,
     totalGenerated: resultats.reduce((s, r) => s + (r.generated ?? 0), 0),
     resultats,

@@ -8,7 +8,12 @@
 
 import prisma from "@/lib/prisma";
 import prismaBase from "@/lib/prisma-base";
-import { siteFilterForModel, mergeFilters, type SessionSiteClaims } from "@/lib/site-scope";
+import {
+  siteFilterForModel,
+  mergeFilters,
+  resolveSiteScope,
+  type SessionSiteClaims,
+} from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { anneeFilterForModel } from "@/lib/annee-scope";
 import {
@@ -45,6 +50,24 @@ export async function preparerPlan(
   acteur: Acteur,
   buffer: ArrayBuffer,
 ): Promise<ContextePlan> {
+  // Périmètre de sites du demandeur. `site` EST la table des sites : il n'y a
+  // pas de colonne `siteId` à filtrer, on borne donc sur `id`. Sans cette
+  // borne, un comptable rattaché à un seul site pouvait importer un
+  // enseignant — et faire créer sa classe — sur n'importe quel autre site de
+  // l'établissement (constaté le 29/09/2026, 3 comptables mono-site).
+  const scope = resolveSiteScope(acteur);
+  if (scope.kind === "NONE" || scope.kind === "RELATION") {
+    // FAIL-CLOSED : périmètre vide (rattachement manquant) ou périmètre
+    // personnel (parent/élève, sans rôle administratif). L'import est
+    // administratif : on refuse avec un message actionnable plutôt que de
+    // présenter un plan dont chaque ligne serait « site introuvable ».
+    throw new Error(
+      "Votre compte n'est rattaché à aucun site : l'import d'enseignants est impossible. " +
+        "Demandez votre rattachement à un site auprès d'un administrateur.",
+    );
+  }
+  const siteWhere = scope.kind === "SITES" ? { id: { in: scope.siteIds } } : {};
+
   // Charger le contexte de l'établissement en premier — il sert à l'inférence
   // de colonnes (reconnaissance des sites et matières par leurs valeurs).
   const [matieres, sites, classes] = await Promise.all([
@@ -54,7 +77,7 @@ export async function preparerPlan(
     }),
      
     prisma.site.findMany({
-      where: { tenantId: acteur.tenantId },
+      where: { tenantId: acteur.tenantId, ...siteWhere },
       select: { id: true, nom: true },
     }),
     // Charger les classes pour la résolution enseignant ↔ classe

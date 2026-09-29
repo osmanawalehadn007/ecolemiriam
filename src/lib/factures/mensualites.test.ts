@@ -9,14 +9,28 @@ import { libelleMensualite, libellesMensualite, MOIS_NOMS } from "@/lib/factures
  */
 describe("libellesMensualite", () => {
   it("produit le libellé complet puis l'ancien format en repli", () => {
-    expect(libellesMensualite(9, "2026-2027")).toEqual([
+    // Les deux premières entrées sont les libellés de base (index 0 = celui
+    // écrit par le cœur) ; les suivantes sont les variantes enrichies des
+    // frais de rentrée, reconnues pour le dédoublonnage.
+    expect(libellesMensualite(9, "2026-2027").slice(0, 2)).toEqual([
       "Scolarité Septembre 2026-2027",
       "Scolarité Septembre 2026",
     ]);
   });
 
+  it("reconnaît les variantes « + Frais … » (écrites par l'écran ou l'ancien moteur)", () => {
+    const libelles = libellesMensualite(9, "2026-2027");
+
+    expect(libelles).toContain("Scolarité Septembre 2026 + Frais de réinscription");
+    expect(libelles).toContain("Scolarité Septembre 2026-2027 + Frais d'inscription");
+    expect(libelles).toContain(
+      "Scolarité Septembre 2026-2027 + Frais d'inscription + Frais de réinscription"
+    );
+    expect(new Set(libelles).size).toBe(libelles.length);
+  });
+
   it("ne duplique pas le libellé si l'année n'a qu'un millésime", () => {
-    expect(libellesMensualite(9, "2026")).toEqual(["Scolarité Septembre 2026"]);
+    expect(libellesMensualite(9, "2026").slice(0, 1)).toEqual(["Scolarité Septembre 2026"]);
   });
 
   it("couvre les 12 mois de l'année", () => {

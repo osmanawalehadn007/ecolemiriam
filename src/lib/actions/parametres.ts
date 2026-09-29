@@ -16,6 +16,7 @@ import {
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { anneeFilterForModel, requireAnneeForCreate } from "@/lib/annee-scope";
 import { isNiveauPrimaire } from "@/lib/utils-classe";
+import { NIVEAUX_CANONIQUES, normaliserNiveau } from "@/lib/niveau";
 import { ELEVE_NON_ARCHIVE } from "@/lib/eleve-filters";
 import { checkPermission } from "@/lib/rbac";
 import { generateSecurePassword } from "@/lib/security/password";
@@ -419,7 +420,26 @@ export async function deleteUser(userId: string) {
 
 const ClasseSchema = z.object({
   nom: z.string().min(1, "Le nom est requis"),
-  niveau: z.string().min(1, "Le niveau est requis"),
+  // Le niveau est un RÉFÉRENTIEL FERMÉ (src/lib/niveau.ts) : la grille
+  // tarifaire y est indexée. Une saisie libre (« 2 », « 2eme »,
+  // « 2ème année ») créait une classe que plus aucune grille ne facturait —
+  // constaté le 28/09/2026 sur 191 élèves de Campus Central.
+  // Ici on NORMALISE (2 → 2ème) et on REFUSE l'inclassable, au lieu de
+  // stocker un niveau que le moteur tarifaire ne saura pas résoudre.
+  niveau: z
+    .string()
+    .min(1, "Le niveau est requis")
+    .transform((valeur, ctx): string => {
+      const canonique = normaliserNiveau(valeur);
+      if (!canonique) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Niveau « ${valeur} » non reconnu. Valeurs autorisées : ${NIVEAUX_CANONIQUES.join(", ")}.`,
+        });
+        return z.NEVER;
+      }
+      return canonique;
+    }),
   filiere: z.string().optional(),
   effectifMax: z.number().min(1).default(40),
   // Pas de littéral par défaut : « 2025-2026 » restait figé après la rentrée

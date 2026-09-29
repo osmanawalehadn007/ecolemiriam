@@ -112,13 +112,101 @@ describe("genererMensualitesPourTenant", () => {
     expect(resultat.generated).toBe(0);
     expect(resultat.skipped).toBe(1);
     expect(mockPrisma.facture.create).not.toHaveBeenCalled();
-    // Le contrôle porte sur le mois structuré ET sur le libellé.
+    // Le contrôle porte sur le mois structuré (mensualité ET inscription), et
+    // sur les libellés — y compris les variantes « + Frais … ».
     const where = mockPrisma.facture.findMany.mock.calls[0][0].where;
     expect(where.OR).toEqual([
       { type: "MENSUALITE", mois: "2026-10" },
-      { libelle: { in: ["Scolarité Octobre 2026-2027", "Scolarité Octobre 2026"] } },
+      { type: "INSCRIPTION", mois: "2026-10" },
+      {
+        libelle: {
+          in: [
+            "Scolarité Octobre 2026-2027",
+            "Scolarité Octobre 2026",
+            "Scolarité Octobre 2026-2027 + Frais d'inscription",
+            "Scolarité Octobre 2026-2027 + Frais de réinscription",
+            "Scolarité Octobre 2026-2027 + Frais d'inscription + Frais de réinscription",
+            "Scolarité Octobre 2026 + Frais d'inscription",
+            "Scolarité Octobre 2026 + Frais de réinscription",
+            "Scolarité Octobre 2026 + Frais d'inscription + Frais de réinscription",
+          ],
+        },
+      },
     ]);
     expect(where.statut).toEqual({ not: "ANNULEE" });
+  });
+
+  it("ne facture pas la mensualité d'un élève déjà facturé à l'inscription du mois", async () => {
+    // Le flux d'admission écrit « Frais d'inscription + Scolarité Septembre »
+    // dans UNE facture (type=INSCRIPTION, mois=2026-09). La requête de
+    // dédoublonnage doit donc interroger les deux types.
+    mockPrisma.eleve.findMany.mockResolvedValue([
+      { ...ELEVE, classe: { niveau: "1ère", nom: "1ère Année A", annee: "2026-2027" } },
+    ]);
+    mockPrisma.facture.findMany.mockResolvedValue([{ eleveId: "e1" }]);
+
+    const resultat = await genererMensualitesPourTenant({ ...PARAMS, mois: 9 });
+
+    expect(resultat.generated).toBe(0);
+    expect(resultat.skipped).toBe(1);
+    expect(mockPrisma.facture.create).not.toHaveBeenCalled();
+
+    const where = mockPrisma.facture.findMany.mock.calls[0][0].where;
+    expect(where.OR).toContainEqual({ type: "INSCRIPTION", mois: "2026-09" });
+  });
+
+  it("n'ajoute AUCUN frais de rentrée si l'appelant ne les demande pas", async () => {
+    mockPrisma.eleve.findMany.mockResolvedValue([
+      { ...ELEVE, classe: { niveau: "1ère", nom: "1ère Année A", annee: "2026-2027" } },
+    ]);
+
+    const resultat = await genererMensualitesPourTenant({ ...PARAMS, mois: 9 });
+
+    expect(resultat.montantTotal).toBe(7000);
+    expect(mockPrisma.facture.create.mock.calls[0][0].data.libelle).toBe(
+      "Scolarité Septembre 2026-2027"
+    );
+  });
+
+  it("ajoute les frais de rentrée demandés, en septembre seulement", async () => {
+    mockPrisma.eleve.findMany.mockResolvedValue([
+      { ...ELEVE, classe: { niveau: "1ère", nom: "1ère Année A", annee: "2026-2027" } },
+    ]);
+
+    const resultat = await genererMensualitesPourTenant({
+      ...PARAMS,
+      mois: 9,
+      inclureFraisInscription: true,
+      inclureFraisRenouvellement: true,
+    });
+
+    // 7 000 de mensualité + 2 000 d'inscription + 2 000 de réinscription.
+    expect(resultat.montantTotal).toBe(11000);
+    expect(mockPrisma.facture.create.mock.calls[0][0].data).toMatchObject({
+      montant: 11000,
+      libelle:
+        "Scolarité Septembre 2026-2027 + Frais d'inscription + Frais de réinscription",
+      type: "MENSUALITE",
+      mois: "2026-09",
+    });
+  });
+
+  it("ignore les frais de rentrée pour un autre mois que septembre", async () => {
+    mockPrisma.eleve.findMany.mockResolvedValue([
+      { ...ELEVE, classe: { niveau: "1ère", nom: "1ère Année A", annee: "2026-2027" } },
+    ]);
+
+    const resultat = await genererMensualitesPourTenant({
+      ...PARAMS,
+      mois: 11,
+      inclureFraisInscription: true,
+      inclureFraisRenouvellement: true,
+    });
+
+    expect(resultat.montantTotal).toBe(7000);
+    expect(mockPrisma.facture.create.mock.calls[0][0].data.libelle).toBe(
+      "Scolarité Novembre 2026-2027"
+    );
   });
 
   it("encaisse une violation d'unicité comme un doublon, sans échouer", async () => {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { getSchoolGroup } from "@/lib/school-groups";
+import { NIVEAUX_CANONIQUES, normaliserNiveau, type NiveauCanonique } from "@/lib/niveau";
 import type { StructureType, Sexe } from "@prisma/client";
 import { siteFilterForModel, requireSiteIdForCreate, mergeFilters, siteIdForCreate } from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
@@ -208,10 +209,34 @@ export async function POST(req: NextRequest) {
     const classByName = new Map(existingClasses.map((c) => [c.nom, { id: c.id, siteId: c.siteId }]));
 
     const classesToCreate = classesRequises.filter((c) => !classByName.has(c));
-    if (classesToCreate.length > 0) {
+
+    // Avertissements de l'import (classes refusées, lignes ignorées…).
+    const warnings: string[] = [];
+
+    // Le niveau est un RÉFÉRENTIEL FERMÉ (src/lib/niveau.ts) : la grille
+    // tarifaire y est indexée. On normalise donc la saisie du fichier
+    // (« 2 » → « 2ème ») et on REFUSE de créer une classe dont le niveau est
+    // inclassable : elle serait infacturable et invisible du moteur.
+    const classesResolues: { nom: string; niveau: NiveauCanonique }[] = [];
+    const niveauxRefuses: string[] = [];
+    for (const nom of classesToCreate) {
+      const niveau = normaliserNiveau(niveauDe.get(nom)) ?? normaliserNiveau(nom);
+      if (!niveau) {
+        niveauxRefuses.push(`« ${nom} » (niveau « ${niveauDe.get(nom) ?? "absent"} »)`);
+        continue;
+      }
+      classesResolues.push({ nom, niveau });
+    }
+    if (niveauxRefuses.length > 0) {
+      warnings.push(
+        `Classe(s) non créée(s), niveau non reconnu : ${niveauxRefuses.join(", ")}. ` +
+          `Valeurs autorisées : ${NIVEAUX_CANONIQUES.join(", ")}.`
+      );
+    }
+
+    if (classesResolues.length > 0) {
       await prisma.classe.createMany({
-        data: classesToCreate.map((nom) => {
-          const niveau = niveauDe.get(nom) ?? nom;
+        data: classesResolues.map(({ nom, niveau }) => {
           const structType = GROUP_TO_STRUCTURE[getSchoolGroup(niveau, nom)];
           return {
             tenantId,
@@ -226,7 +251,7 @@ export async function POST(req: NextRequest) {
       });
       const created = await prisma.classe.findMany({
         where: mergeFilters(
-          { tenantId, annee, nom: { in: classesToCreate } },
+          { tenantId, annee, nom: { in: classesResolues.map((c) => c.nom) } },
           siteFilterForModel("classe", session.user)
         ),
         select: { id: true, nom: true, siteId: true },
@@ -247,7 +272,6 @@ export async function POST(req: NextRequest) {
     const sexeDe = (v?: string): Sexe =>
       v === "F" || v === "FEMME" || v === "FILLE" ? "F" : "M";
 
-    const warnings: string[] = [];
     // Identifiant du lot : chaque fiche créée le porte, ce qui permet de
     // défaire un import entier d'un seul geste au lieu de trier les fiches
     // une à une — c'est le tri manuel de 78 fiches qu'on veut éviter.

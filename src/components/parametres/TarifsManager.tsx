@@ -13,38 +13,21 @@ import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { hasPermission } from "@/lib/client-permissions";
-import { niveauToLabel } from "@/lib/niveau";
+import { NIVEAUX_CANONIQUES, comparerNiveaux, niveauToLabel } from "@/lib/niveau";
 import {
   createTarif, updateTarif, deleteTarif,
   type TarifFormData,
 } from "@/lib/actions/facturation-avancee";
 
 /**
- * Ordre canonique des niveaux (du primaire au lycée).
- * Utilisé pour trier les niveaux de manière logique.
+ * Référentiel officiel des niveaux — importé, jamais recopié : quatre copies
+ * locales coexistaient dans l'application (`NIVEAUX`, `NIVEAUX_PREDEFINIS`,
+ * `ORDRE_NIVEAUX_CANONIQUE`, `inferNiveauFromClasseName`), dont trois sans
+ * « Maternelle ». Le tri suit désormais l'ordre scolaire partagé.
  */
-const ORDRE_NIVEAUX_CANONIQUE = [
-  "1ère", "2ème", "3ème", "4ème", "5ème",
-  "6ème", "7ème", "8ème", "9ème",
-  "Seconde", "Première", "Terminale",
-];
+const NIVEAUX = NIVEAUX_CANONIQUES;
 
-/**
- * Tri des niveaux : suit l'ordre canonique (1ère → Terminale),
- * puis les niveaux non reconnus par ordre alphabétique.
- */
-function sortNiveaux(a: string, b: string): number {
-  const idxA = ORDRE_NIVEAUX_CANONIQUE.findIndex(
-    (n) => n.toLowerCase() === a.toLowerCase().trim()
-  );
-  const idxB = ORDRE_NIVEAUX_CANONIQUE.findIndex(
-    (n) => n.toLowerCase() === b.toLowerCase().trim()
-  );
-  if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-  if (idxA !== -1) return -1;
-  if (idxB !== -1) return 1;
-  return a.localeCompare(b);
-}
+const sortNiveaux = comparerNiveaux;
 
 interface Tarif {
   id: string;
@@ -72,8 +55,6 @@ interface Classe {
   niveau: string;
   siteId: string | null;
 }
-
-const NIVEAUX = ORDRE_NIVEAUX_CANONIQUE;
 
 function formatMoney(amount: number, devise: string) {
   return new Intl.NumberFormat("fr-DJ", { style: "currency", currency: devise === "XOF" ? "DJF" : devise, maximumFractionDigits: 0 }).format(amount);

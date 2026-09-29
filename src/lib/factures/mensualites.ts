@@ -36,17 +36,38 @@ export const MOIS_NOMS = [
 ];
 
 /**
+ * Mois de rentrée (premier mois de l'année scolaire) : seul mois pour lequel
+ * les frais d'inscription / de réinscription peuvent être ajoutés à la
+ * mensualité, et seulement sur demande explicite de l'appelant.
+ */
+export const MOIS_RENTREE = 9;
+
+/**
  * Libellés acceptés pour une échéance mensuelle. L'ancienne génération écrivait
  * « Scolarité Septembre 2026 » (année seule) et la nouvelle
  * « Scolarité Septembre 2026-2027 » : les deux doivent être reconnus pour que
  * la génération reste idempotente et ne crée pas de facture en double.
+ *
+ * On y ajoute les variantes enrichies des frais de rentrée
+ * (« Scolarité Septembre 2026-2027 + Frais de réinscription »), écrites par
+ * l'écran Facturation ou par les versions antérieures.
+ *
+ * Ces libellés ne sont qu'une OPTIMISATION de lecture : le verrou d'unicité
+ * réel reste l'index partiel `factures_unicite_mensuelle`.
  */
 export function libellesMensualite(mois: number, annee: string): string[] {
   const moisNom = MOIS_NOMS[mois - 1] ?? `Mois ${mois}`;
   const debutAnnee = annee.split("-")[0];
-  const libelles = [`Scolarité ${moisNom} ${annee}`];
-  if (debutAnnee && debutAnnee !== annee) libelles.push(`Scolarité ${moisNom} ${debutAnnee}`);
-  return libelles;
+  const base = [`Scolarité ${moisNom} ${annee}`];
+  if (debutAnnee && debutAnnee !== annee) base.push(`Scolarité ${moisNom} ${debutAnnee}`);
+  return [
+    ...base,
+    ...base.flatMap((b) => [
+      `${b} + Frais d'inscription`,
+      `${b} + Frais de réinscription`,
+      `${b} + Frais d'inscription + Frais de réinscription`,
+    ]),
+  ];
 }
 
 /** Libellé d'une échéance mensuelle — sert aussi de clé d'idempotence. */
@@ -91,6 +112,19 @@ export interface GenerationMensualitesParams {
   annee: string;
   inclureCantine?: boolean;
   inclureTransport?: boolean;
+  /**
+   * MOIS DE RENTRÉE UNIQUEMENT (septembre) : ajouter les frais d'inscription
+   * et/ou de réinscription du niveau à la mensualité.
+   *
+   * Ce choix est EXPLICITE et non automatique : les frais de rentrée ne sont
+   * pas facturés par le cron (une famille qui règle l'inscription à
+   * l'admission ne doit pas être facturée deux fois), et l'établissement peut
+   * préférer les facturer par leur propre flux
+   * (`genererFraisInscription`, facture d'admission). Ignorés pour tout autre
+   * mois que septembre.
+   */
+  inclureFraisInscription?: boolean;
+  inclureFraisRenouvellement?: boolean;
   /** Fragment de périmètre appliqué aux élèves (sites de l'utilisateur). */
   eleveWhere?: Record<string, unknown>;
   /** Fragment de périmètre appliqué à la grille tarifaire. */
@@ -127,6 +161,8 @@ export async function genererMensualitesPourTenant(
     annee,
     inclureCantine = false,
     inclureTransport = false,
+    inclureFraisInscription = false,
+    inclureFraisRenouvellement = false,
     eleveWhere = {},
     tarifWhere = {},
     acteurId = null,
@@ -137,7 +173,15 @@ export async function genererMensualitesPourTenant(
     throw new Error("Mois invalide (1 à 12 attendu)");
   }
 
-  const libelle = libelleMensualite(mois, annee);
+  // Les frais de rentrée ne s'appliquent QU'À septembre (premier mois de
+  // l'année scolaire), et seulement si l'appelant les a demandés.
+  const estRentree = mois === MOIS_RENTREE;
+  const fraisRentree: string[] = [];
+  if (estRentree && inclureFraisInscription) fraisRentree.push("Frais d'inscription");
+  if (estRentree && inclureFraisRenouvellement) fraisRentree.push("Frais de réinscription");
+
+  const libelleBase = libelleMensualite(mois, annee);
+  const libelle = fraisRentree.length > 0 ? `${libelleBase} + ${fraisRentree.join(" + ")}` : libelleBase;
   const libellesDedoublonnage = libellesMensualite(mois, annee);
   const cleMois = moisKey(mois, annee);
 
@@ -157,15 +201,26 @@ export async function genererMensualitesPourTenant(
   });
 
   // Factures déjà émises pour ce mois : le cron peut être rejoué sans doublon.
-  // Trois repères sont testés — le mois structuré (`type` + `mois`), les deux
-  // conventions de libellé — pour couvrir aussi les factures créées par les
-  // versions antérieures (mois vide) ou par l'appel manuel.
+  // Quatre repères sont testés — le mois structuré (`type` + `mois`) pour la
+  // mensualité ET pour l'inscription, plus les conventions de libellé
+  // historiques — pour couvrir les factures créées par les versions
+  // antérieures (mois vide) ou par l'appel manuel.
+  //
+  // L'inscription du mois compte : le flux d'admission facture
+  // « Frais d'inscription + Scolarité Septembre » en UNE facture
+  // (`type=INSCRIPTION, mois=2026-09`). Sans ce repère, la génération de
+  // septembre recréait une mensualité pour ces élèves — double facturation
+  // constatée sur 4 dossiers le 29/09/2026.
   const facturesExistantes = await prisma.facture.findMany({
     where: {
       tenantId,
       statut: { not: "ANNULEE" },
       eleveId: { in: eleves.map((e) => e.id) },
-      OR: [{ type: "MENSUALITE", mois: cleMois }, { libelle: { in: libellesDedoublonnage } }],
+      OR: [
+        { type: "MENSUALITE", mois: cleMois },
+        { type: "INSCRIPTION", mois: cleMois },
+        { libelle: { in: libellesDedoublonnage } },
+      ],
     },
     select: { eleveId: true },
   });
@@ -204,11 +259,18 @@ export async function genererMensualitesPourTenant(
       continue;
     }
 
-    // Montant lu dans la grille tarifaire (mensualité + options demandées).
-    const montant = montantMensuel(choix.tarif, {
-      cantine: inclureCantine,
-      transport: inclureTransport,
-    });
+    // Montant lu dans la grille tarifaire (mensualité + options demandées),
+    // augmenté des frais de rentrée si l'appelant les a explicitement demandés
+    // et que l'on facture septembre.
+    const montant =
+      montantMensuel(choix.tarif, {
+        cantine: inclureCantine,
+        transport: inclureTransport,
+      }) +
+      (estRentree
+        ? (inclureFraisInscription ? choix.tarif.fraisInscription : 0) +
+          (inclureFraisRenouvellement ? choix.tarif.fraisRenouvellement : 0)
+        : 0);
 
     // Aperçu : on s'arrête AVANT toute écriture (pas de numéro réservé, pas de
     // facture, pas d'audit) — les compteurs reflètent ce qui serait créé.

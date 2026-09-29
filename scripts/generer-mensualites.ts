@@ -13,6 +13,11 @@
  *   npx tsx scripts/generer-mensualites.ts --apply
  *   npx tsx scripts/generer-mensualites.ts --apply --mois=10
  *   npx tsx scripts/generer-mensualites.ts --apply --cantine --transport
+ *   npx tsx scripts/generer-mensualites.ts --apply --mois=9 --inscription --renouvellement
+ *
+ * `--inscription` / `--renouvellement` n'ont d'effet QUE sur septembre : ce
+ * sont les frais de rentrée, jamais ajoutés par défaut (une famille qui les a
+ * réglés à l'admission serait facturée deux fois).
  */
 import { PrismaClient } from "@prisma/client";
 import { runWithTenant } from "@/lib/prisma";
@@ -35,6 +40,8 @@ async function main() {
   const tenantFiltre = argValeur("tenant");
   const inclureCantine = process.argv.includes("--cantine");
   const inclureTransport = process.argv.includes("--transport");
+  const inclureFraisInscription = process.argv.includes("--inscription");
+  const inclureFraisRenouvellement = process.argv.includes("--renouvellement");
 
   if (!Number.isInteger(mois) || mois < 1 || mois > 12) {
     console.error("--mois doit être compris entre 1 et 12");
@@ -82,7 +89,9 @@ async function main() {
         `  déjà facturés pour ce mois : ${dejaFactures.size} (libellés reconnus : ${libelles.join(" | ")})\n` +
         `  à facturer : ${facturables.filter((e) => !dejaFactures.has(e.id)).length}` +
         (inclureCantine ? " | + cantine" : "") +
-        (inclureTransport ? " | + transport" : "")
+        (inclureTransport ? " | + transport" : "") +
+        (mois === 9 && inclureFraisInscription ? " | + frais d'inscription" : "") +
+        (mois === 9 && inclureFraisRenouvellement ? " | + frais de réinscription" : "")
     );
 
     if (!apply) continue;
@@ -98,6 +107,8 @@ async function main() {
         annee,
         inclureCantine,
         inclureTransport,
+        inclureFraisInscription,
+        inclureFraisRenouvellement,
         acteurId: null,
       })
     );

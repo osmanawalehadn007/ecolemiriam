@@ -1,23 +1,48 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import prisma, { runWithTenant } from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { sendPaymentWhatsApp } from "@/lib/notifications/whatsapp";
 import { checkPermission } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
+import { eleveScopeFilter, isRelationScopedRole, siteFilterForModel } from "@/lib/site-scope";
+import { MOIS_NOMS, genererMensualitesPourTenant } from "@/lib/factures/mensualites";
+import { NIVEAUX_CANONIQUES, normaliserNiveau } from "@/lib/niveau";
+import { choisirTarif as choixTarif, montantPourTypeFrais } from "@/lib/tarifs";
 import { reserverNumerosFacture } from "@/lib/facture-numero";
 import { z } from "zod";
 
-// Tarif transport fixe pour tout l'établissement (tous sites confondus)
-const TARIF_TRANSPORT_FIXE = 4000;
+// NOTE : le transport n'est plus un forfait codé en dur (4 000 DJF). Le cœur
+// de facturation lit `TarifNiveau.fraisTransport`, comme la cantine : un
+// montant « deviné » dans l'UI contredisait la règle canonique (AGENTS.md §17)
+// et divergeait du cron. Pour refacturer le transport, renseignez
+// « frais transport » dans Paramètres → Tarifs (par niveau et par site).
 
 // ============================================================
 // TARIFS PAR NIVEAU
 // ============================================================
 
 const TarifSchema = z.object({
-  niveau: z.string().min(1, "Le niveau est requis"),
+  // Le niveau est le même RÉFÉRENTIEL FERMÉ que pour les classes
+  // (src/lib/niveau.ts) : il indexe la grille tarifaire. Une grille saisie
+  // « 2 » ne rencontre jamais la classe « 2ème » — et la contrainte en base
+  // (`tarifs_niveau_canonique`) refuse désormais l'écriture. On normalise ici
+  // pour renvoyer un message clair au lieu d'une erreur SQL brute.
+  niveau: z
+    .string()
+    .min(1, "Le niveau est requis")
+    .transform((valeur, ctx): string => {
+      const canonique = normaliserNiveau(valeur);
+      if (!canonique) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Niveau « ${valeur} » non reconnu. Valeurs autorisées : ${NIVEAUX_CANONIQUES.join(", ")}.`,
+        });
+        return z.NEVER;
+      }
+      return canonique;
+    }),
   annee: z.string().min(1, "L'année est requise"),
   mensualite: z.number().min(0, "La mensualité est requise"),
   fraisInscription: z.number().min(0, "Les frais d'inscription sont requis"),
@@ -82,7 +107,7 @@ export async function createTarif(data: TarifFormData) {
   }
 
   const v = parsed.data;
-  await prisma.tarifNiveau.create({
+  const tarif = await prisma.tarifNiveau.create({
     data: {
       tenantId: session.user.tenantId,
       niveau: v.niveau,
@@ -98,6 +123,30 @@ export async function createTarif(data: TarifFormData) {
     },
   });
 
+  // La grille tarifaire fixe ce qui est facturé aux familles : toute
+  // modification doit laisser une trace. Elle était modifiable sans aucune
+  // ligne d'audit (constaté le 29/09/2026 : 5 tarifs créés ou modifiés entre
+  // le 26 et le 28/09, 0 action « tarif » dans journal_audit).
+  await audit({
+    tenantId: session.user.tenantId,
+    userId: session.user.id,
+    action: "tarif:create",
+    verdict: "ALLOWED",
+    resource: "tarif",
+    resourceId: tarif.id,
+    reason: `Tarif ${tarif.niveau} ${tarif.annee} créé (${tarif.mensualite} ${tarif.devise})`,
+    metadata: {
+      niveau: tarif.niveau,
+      annee: tarif.annee,
+      siteId: tarif.siteId,
+      mensualite: tarif.mensualite,
+      fraisInscription: tarif.fraisInscription,
+      fraisRenouvellement: tarif.fraisRenouvellement,
+      fraisCantine: tarif.fraisCantine,
+      fraisTransport: tarif.fraisTransport,
+    },
+  });
+
   revalidatePath("/parametres");
   return { success: true };
 }
@@ -108,9 +157,35 @@ export async function deleteTarif(tarifId: string) {
   const denied = checkPermission(session.user.role, "finance:write");
   if (denied) throw new Error("Accès refusé");
 
-  // eslint-disable-next-line ecolemiriam/require-tenant-id -- ID vérifié par findFirst avec tenantId au-dessus
+  // Relu AVANT suppression : l'audit doit conserver ce qui a été supprimé
+  // (et le `tenantId` garantit qu'on ne touche pas la grille d'un autre
+  // établissement, RLS en second rideau).
+  // eslint-disable-next-line ecolemiriam/require-annee-filter -- tarif ciblé par identifiant : exiger l'année empêcherait de corriger un tarif d'une année révolue
+  const avant = await prisma.tarifNiveau.findFirst({
+    where: { id: tarifId, tenantId: session.user.tenantId },
+  });
+  if (!avant) throw new Error("Tarif introuvable dans cet établissement");
+
   await prisma.tarifNiveau.delete({
     where: { id: tarifId },
+  });
+
+  await audit({
+    tenantId: session.user.tenantId,
+    userId: session.user.id,
+    action: "tarif:delete",
+    verdict: "ALLOWED",
+    resource: "tarif",
+    resourceId: tarifId,
+    reason: `Tarif ${avant.niveau} ${avant.annee} supprimé (${avant.mensualite} ${avant.devise})`,
+    metadata: {
+      niveau: avant.niveau,
+      annee: avant.annee,
+      siteId: avant.siteId,
+      mensualite: avant.mensualite,
+      fraisInscription: avant.fraisInscription,
+      fraisRenouvellement: avant.fraisRenouvellement,
+    },
   });
 
   revalidatePath("/parametres");
@@ -130,8 +205,16 @@ export async function updateTarif(tarifId: string, data: Partial<TarifFormData>)
   }
 
   const v = parsed.data;
-  // eslint-disable-next-line ecolemiriam/require-tenant-id -- ID vérifié par le caller avec tenantId
-  await prisma.tarifNiveau.update({
+
+  // Avant/après : un tarif qui change sans qu'on sache d'où il vient est
+  // introuvable en cas de contestation de facture.
+  // eslint-disable-next-line ecolemiriam/require-annee-filter -- tarif ciblé par identifiant (voir deleteTarif)
+  const avant = await prisma.tarifNiveau.findFirst({
+    where: { id: tarifId, tenantId: session.user.tenantId },
+  });
+  if (!avant) throw new Error("Tarif introuvable dans cet établissement");
+
+  const apres = await prisma.tarifNiveau.update({
     where: { id: tarifId },
     data: {
       ...(v.niveau && { niveau: v.niveau }),
@@ -147,6 +230,35 @@ export async function updateTarif(tarifId: string, data: Partial<TarifFormData>)
     },
   });
 
+  await audit({
+    tenantId: session.user.tenantId,
+    userId: session.user.id,
+    action: "tarif:update",
+    verdict: "ALLOWED",
+    resource: "tarif",
+    resourceId: tarifId,
+    reason: `Tarif ${avant.niveau} ${avant.annee} modifié (champs : ${Object.keys(v).join(", ")})`,
+    metadata: {
+      champs: Object.keys(v),
+      avant: {
+        niveau: avant.niveau,
+        annee: avant.annee,
+        siteId: avant.siteId,
+        mensualite: avant.mensualite,
+        fraisInscription: avant.fraisInscription,
+        fraisRenouvellement: avant.fraisRenouvellement,
+      },
+      apres: {
+        niveau: apres.niveau,
+        annee: apres.annee,
+        siteId: apres.siteId,
+        mensualite: apres.mensualite,
+        fraisInscription: apres.fraisInscription,
+        fraisRenouvellement: apres.fraisRenouvellement,
+      },
+    },
+  });
+
   revalidatePath("/parametres");
   revalidatePath("/parametres/tarifs");
   return { success: true };
@@ -156,11 +268,28 @@ export async function updateTarif(tarifId: string, data: Partial<TarifFormData>)
 // GÉNÉRATION AUTOMATIQUE DE FACTURES (MENSUALITÉS)
 // ============================================================
 
+/**
+ * Génération manuelle des mensualités d'un mois (bouton de l'écran
+ * Facturation, étape 4 de la réinscription).
+ *
+ * Délègue au CŒUR UNIQUE `genererMensualitesPourTenant` — le même que le cron
+ * et le CLI. L'implémentation qui cohabitait comparait les niveaux en chaîne
+ * brute (`niveau.toLowerCase()`) : les classes « 2 » et « 3 » de Campus Central
+ * (191 élèves) ne trouvaient aucun tarif et étaient ignorées en silence. Elle
+ * ajoutait en outre les frais de réinscription à la mensualité de septembre —
+ * deux montants différents pour le même mois selon le déclencheur — et ne
+ * bornait rien : un comptable rattaché à un site facturait les trois sites.
+ *
+ * Périmètre : celui de l'utilisateur (`siteFilterForModel("eleve")`).
+ */
 export async function genererMensualites(params: {
   mois: number; // 1-12
-  annee: string; // "2025-2026"
+  annee: string; // "2026-2027"
   inclureCantine?: boolean;
   inclureTransport?: boolean;
+  /** Frais de rentrée — septembre uniquement (voir paramètres du cœur). */
+  inclureFraisInscription?: boolean;
+  inclureFraisRenouvellement?: boolean;
 }) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
@@ -168,155 +297,77 @@ export async function genererMensualites(params: {
   if (denied) throw new Error("Accès refusé");
 
   const tenantId = session.user.tenantId;
-  const { mois, annee, inclureCantine = false, inclureTransport = false } = params;
+  const {
+    mois,
+    annee,
+    inclureCantine = false,
+    inclureTransport = false,
+    inclureFraisInscription = false,
+    inclureFraisRenouvellement = false,
+  } = params;
 
-  const moisNoms = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
-  const moisNom = moisNoms[mois - 1] ?? `Mois ${mois}`;
-  const moisKey = `${annee.split("-")[0]}-${String(mois).padStart(2, "0")}`;
+  // Parent / élève : `siteFilterForModel` est neutre pour eux, leur périmètre
+  // vient du lien personnel. Ces rôles n'ont pas `finance:write`, mais on
+  // garde le filtre fail-closed (AGENTS.md §14).
+  const eleveWhere = isRelationScopedRole(session.user.role)
+    ? eleveScopeFilter(session.user, "eleve")
+    : siteFilterForModel("eleve", session.user);
 
-  // Récupérer tous les élèves actifs avec leur classe (pour le niveau) et siteId
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId : le caller a déjà vérifié l'accès
-  const eleves = await prisma.eleve.findMany({
-    where: { tenantId, statut: "ACTIF" },
-    include: { classe: { select: { niveau: true, nom: true } } },
-    select: { id: true, siteId: true, classe: { select: { niveau: true, nom: true } } },
-  });
+  const resultat = await runWithTenant(
+    tenantId,
+    session.user.siteId ?? null,
+    () =>
+      genererMensualitesPourTenant({
+        tenantId,
+        mois,
+        annee,
+        inclureCantine,
+        inclureTransport,
+        inclureFraisInscription,
+        inclureFraisRenouvellement,
+        eleveWhere,
+        acteurId: session.user.id,
+      }),
+    session.user.role,
+  );
 
-  // Récupérer les tarifs par niveau
-  // Indexation à deux niveaux : tarifs site-spécifique (prioritaires) + tarifs globaux
-  const tarifs = await prisma.tarifNiveau.findMany({
-    where: { tenantId, annee, actif: true },
-  });
-  const tarifByNiveauSite = new Map<string, typeof tarifs[0]>();
-  const tarifByNiveauGlobal = new Map<string, typeof tarifs[0]>();
-  for (const t of tarifs) {
-    if (t.siteId) {
-      tarifByNiveauSite.set(`${t.niveau.toLowerCase()}|${t.siteId}`, t);
-    } else {
-      tarifByNiveauGlobal.set(t.niveau.toLowerCase(), t);
-    }
-  }
-  // Lookup : tarif site-spécifique en priorité, fallback sur global
-  function findTarif(niveau: string, siteId: string | null) {
-    const key = `${niveau.toLowerCase()}|${siteId}`;
-    return tarifByNiveauSite.get(key) ?? tarifByNiveauGlobal.get(niveau.toLowerCase());
-  }
-
-  // Septembre = premier mois de l'année scolaire : la facture inclut
-  // les frais de réinscription (= frais d'inscription du niveau) en plus
-  // de la mensualité. Ex: niveau 1 → 7000 + 2000 = 9000 FDJ en septembre.
-  const isSeptembre = mois === 9;
-  const libelle = isSeptembre
-    ? `Scolarité ${moisNom} ${annee} + Frais de réinscription`
-    : `Scolarité ${moisNom} ${annee}`;
-  const echeance = new Date(parseInt(annee.split("-")[0]), mois, 0);
-
-  // ── OPTIMISATION : 3 requêtes batch au lieu de 3×N requêtes dans une boucle
-  // Avant : pour 880 élèves → 880 findFirst + 880 count + 880 create = 2640 requêtes
-  // Après : 1 findMany + 1 count + 1 createMany = 3 requêtes
-
-  // 1. Filtrer les élèves qui ont un tarif → éviter les requêtes inutiles
-  const elevesAvecTarif = eleves.filter((e) => {
-    const niveau = e.classe?.niveau ?? "Inconnu";
-    return findTarif(niveau, e.siteId ?? null) !== undefined;
-  });
-
-  // 2. Batch : vérifier quelles factures mensuelles existent déjà pour ce mois
-  //    On vérifie aussi les factures INSCRIPTION qui incluent la mensualité de ce
-  //    mois (mois = moisKey) — sinon l'élève serait double-facturé pour le même mois.
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
-  const existingFactures = await prisma.facture.findMany({
-    where: {
-      tenantId,
-      eleveId: { in: elevesAvecTarif.map((e) => e.id) },
-      type: "MENSUALITE",
-      mois: moisKey,
+  await audit({
+    tenantId,
+    userId: session.user.id,
+    action: "facturation.generer_mensualites",
+    verdict: "ALLOWED",
+    resource: "factures",
+    reason:
+      `Mensualités ${MOIS_NOMS[mois - 1] ?? mois} ${annee} : ${resultat.generated} facture(s) créée(s), ` +
+      `${resultat.skipped} ignorée(s) dont ${resultat.sansTarif} sans tarif`,
+    metadata: {
+      mois,
+      annee,
+      inclureCantine,
+      inclureTransport,
+      inclureFraisInscription,
+      inclureFraisRenouvellement,
+      ...resultat,
     },
-    select: { eleveId: true },
   });
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
-  const existingInscriptions = await prisma.facture.findMany({
-    where: {
-      tenantId,
-      eleveId: { in: elevesAvecTarif.map((e) => e.id) },
-      type: "INSCRIPTION",
-      mois: moisKey,
-    },
-    select: { eleveId: true },
-  });
-  const existingSet = new Set([
-    ...existingFactures.map((f) => f.eleveId),
-    ...existingInscriptions.map((f) => f.eleveId),
-  ]);
-
-  // 3. Construire les données à insérer (en mémoire, 0 requête)
-  const anneePrefix = annee.split("-")[0];
-
-  const toCreate: Array<{
-    tenantId: string;
-    eleveId: string;
-    libelle: string;
-    montant: number;
-    devise: string;
-    statut: "EN_ATTENTE";
-    type: "MENSUALITE";
-    echeance: Date;
-    mois: string;
-    siteId: string | null;
-    createdById: string;
-  }> = [];
-
-  for (const eleve of elevesAvecTarif) {
-    if (existingSet.has(eleve.id)) continue;
-
-    const niveau = eleve.classe?.niveau ?? "Inconnu";
-    const tarif = findTarif(niveau, eleve.siteId ?? null)!;
-
-    let montant = tarif.mensualite;
-    // Septembre : ajouter les frais de réinscription (= frais d'inscription)
-    if (isSeptembre && tarif.fraisRenouvellement > 0) {
-      montant += tarif.fraisRenouvellement;
-    }
-    if (inclureCantine && tarif.fraisCantine) montant += tarif.fraisCantine;
-    if (inclureTransport) montant += TARIF_TRANSPORT_FIXE;
-
-    toCreate.push({
-      tenantId,
-      eleveId: eleve.id,
-      libelle,
-      montant,
-      devise: tarif.devise,
-      statut: "EN_ATTENTE",
-      type: "MENSUALITE",
-      echeance,
-      mois: moisKey,
-      siteId: eleve.siteId ?? null,
-      createdById: session.user.id,
-    });
-  }
-
-  // 4. Numérotation atomique en un bloc, puis bulk insert (1 seule requête)
-  if (toCreate.length > 0) {
-    const numeros = await reserverNumerosFacture(tenantId, anneePrefix, toCreate.length);
-    await prisma.facture.createMany({ data: toCreate.map((f, i) => ({ ...f, numero: numeros[i] })) });
-  }
-
-  const skipped = eleves.length - toCreate.length;
 
   revalidatePath("/facturation");
   revalidateTag("dashboard-data", "max");
-  return { success: true, generated: toCreate.length, skipped };
+  return { success: true, ...resultat };
 }
 
 // ============================================================
 // GÉNÉRATION ANNUELLE COMPLETE (Septembre → Juin, 10 mois)
 // ============================================================
 //
-// Génère d'un coup toutes les factures de l'année scolaire pour tous
-// les élèves actifs. Le mois de Septembre est spécial : il inclut la
-// mensualité + les frais de réinscription (= frais d'inscription du
-// niveau). Les 9 autres mois (Octobre → Juin) ne contiennent que la
-// mensualité.
+// Boucle sur le CŒUR unique (`genererMensualitesPourTenant`), mois par mois :
+// mêmes montants, mêmes numéros atomiques et même idempotence que le cron.
+//
+// ⚠️ Différence assumée avec l'ancienne version : septembre ne contient plus
+// les frais de réinscription. Ceux-ci sont facturés par leur propre flux
+// (`genererFraisInscription`, facture d'admission), et le cron ne les a jamais
+// additionnés à la mensualité. Deux montants différents pour le même mois
+// selon le déclencheur étaient intenables : on aligne tout sur le cœur.
 //
 // Mois scolaires : 9, 10, 11, 12, 1, 2, 3, 4, 5, 6
 
@@ -326,6 +377,9 @@ export async function genererFacturesAnnuelles(params: {
   annee: string; // "2026-2027"
   inclureCantine?: boolean;
   inclureTransport?: boolean;
+  /** Frais de rentrée — appliqués au seul mois de septembre. */
+  inclureFraisInscription?: boolean;
+  inclureFraisRenouvellement?: boolean;
 }) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
@@ -333,148 +387,54 @@ export async function genererFacturesAnnuelles(params: {
   if (denied) throw new Error("Accès refusé");
 
   const tenantId = session.user.tenantId;
-  const { annee, inclureCantine = false, inclureTransport = false } = params;
+  const {
+    annee,
+    inclureCantine = false,
+    inclureTransport = false,
+    inclureFraisInscription = false,
+    inclureFraisRenouvellement = false,
+  } = params;
 
-  const moisNoms = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
-
-  // Récupérer tous les élèves actifs
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId : le caller a déjà vérifié l'accès
-  const eleves = await prisma.eleve.findMany({
-    where: { tenantId, statut: "ACTIF" },
-    include: { classe: { select: { niveau: true, nom: true } } },
-    select: { id: true, siteId: true, classe: { select: { niveau: true, nom: true } } },
-  });
-
-  // Tarifs par niveau (site-spécifique prioritaire + global fallback)
-  const tarifs = await prisma.tarifNiveau.findMany({
-    where: { tenantId, annee, actif: true },
-  });
-  const tarifByNiveauSite = new Map<string, typeof tarifs[0]>();
-  const tarifByNiveauGlobal = new Map<string, typeof tarifs[0]>();
-  for (const t of tarifs) {
-    if (t.siteId) {
-      tarifByNiveauSite.set(`${t.niveau.toLowerCase()}|${t.siteId}`, t);
-    } else {
-      tarifByNiveauGlobal.set(t.niveau.toLowerCase(), t);
-    }
-  }
-  function findTarif(niveau: string, siteId: string | null) {
-    const key = `${niveau.toLowerCase()}|${siteId}`;
-    return tarifByNiveauSite.get(key) ?? tarifByNiveauGlobal.get(niveau.toLowerCase());
-  }
-
-  const elevesAvecTarif = eleves.filter((e) => {
-    const niveau = e.classe?.niveau ?? "Inconnu";
-    return findTarif(niveau, e.siteId ?? null) !== undefined;
-  });
-
-  // Vérifier toutes les factures existantes pour cette année (tous mois confondus)
-  const anneeStart = annee.split("-")[0];
-  const anneeEnd = annee.split("-")[1] ?? anneeStart;
-  const moisKeys = MOIS_SCOLAIRES.map((m) => {
-    // Septembre → Décembre appartiennent à la première année
-    // Janvier → Juin appartiennent à la deuxième année
-    const yearPart = m >= 9 ? anneeStart : anneeEnd;
-    return `${yearPart}-${String(m).padStart(2, "0")}`;
-  });
-
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
-  const existingFactures = await prisma.facture.findMany({
-    where: {
-      tenantId,
-      eleveId: { in: elevesAvecTarif.map((e) => e.id) },
-      type: "MENSUALITE",
-      mois: { in: moisKeys },
-    },
-    select: { eleveId: true, mois: true, libelle: true },
-  });
-  // Vérifier aussi les factures INSCRIPTION qui incluent une mensualité (mois = moisKey)
-  // pour éviter la double facturation du mois de scolarité inclus dans l'inscription.
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
-  const existingInscriptions = await prisma.facture.findMany({
-    where: {
-      tenantId,
-      eleveId: { in: elevesAvecTarif.map((e) => e.id) },
-      type: "INSCRIPTION",
-      mois: { in: moisKeys },
-    },
-    select: { eleveId: true, mois: true },
-  });
-  // Clé de dédoublonnage : eleveId + mois
-  const existingSet = new Set([
-    ...existingFactures.map((f) => `${f.eleveId}|${f.mois}`),
-    ...existingInscriptions.map((f) => `${f.eleveId}|${f.mois}`),
-  ]);
-
-  const toCreate: Array<{
-    tenantId: string;
-    eleveId: string;
-    libelle: string;
-    montant: number;
-    devise: string;
-    statut: "EN_ATTENTE";
-    type: "MENSUALITE";
-    echeance: Date;
-    mois: string;
-    siteId: string | null;
-    createdById: string;
-  }> = [];
+  const eleveWhere = isRelationScopedRole(session.user.role)
+    ? eleveScopeFilter(session.user, "eleve")
+    : siteFilterForModel("eleve", session.user);
 
   const moisDetails: Array<{ mois: number; moisNom: string; generated: number; isSeptembre: boolean }> = [];
+  let generated = 0;
+  let skipped = 0;
+  let sansTarif = 0;
+  let montantTotal = 0;
 
   for (const m of MOIS_SCOLAIRES) {
-    const moisNom = moisNoms[m - 1] ?? `Mois ${m}`;
-    const isSeptembre = m === 9;
-    const yearPart = m >= 9 ? anneeStart : anneeEnd;
-    const moisKey = `${yearPart}-${String(m).padStart(2, "0")}`;
-    const libelle = isSeptembre
-      ? `Scolarité ${moisNom} ${annee} + Frais de réinscription`
-      : `Scolarité ${moisNom} ${annee}`;
-    // Échéance = fin du mois concerné
-    const echeance = new Date(parseInt(yearPart), m, 0);
-    let generatedThisMonth = 0;
+    const resultat = await runWithTenant(
+      tenantId,
+      session.user.siteId ?? null,
+      () =>
+        genererMensualitesPourTenant({
+          tenantId,
+          mois: m,
+          annee,
+          inclureCantine,
+          inclureTransport,
+          inclureFraisInscription,
+          inclureFraisRenouvellement,
+          eleveWhere,
+          acteurId: session.user.id,
+        }),
+      session.user.role,
+    );
 
-    for (const eleve of elevesAvecTarif) {
-      const dedupKey = `${eleve.id}|${moisKey}`;
-      if (existingSet.has(dedupKey)) continue;
-
-      const niveau = eleve.classe?.niveau ?? "Inconnu";
-      const tarif = findTarif(niveau, eleve.siteId ?? null)!;
-
-      let montant = tarif.mensualite;
-      if (isSeptembre && tarif.fraisRenouvellement > 0) {
-        montant += tarif.fraisRenouvellement;
-      }
-      if (inclureCantine && tarif.fraisCantine) montant += tarif.fraisCantine;
-      if (inclureTransport) montant += TARIF_TRANSPORT_FIXE;
-
-      toCreate.push({
-        tenantId,
-        eleveId: eleve.id,
-        libelle,
-        montant,
-        devise: tarif.devise,
-        statut: "EN_ATTENTE",
-        type: "MENSUALITE",
-        echeance,
-        mois: moisKey,
-        siteId: eleve.siteId ?? null,
-        createdById: session.user.id,
-      });
-      generatedThisMonth++;
-      existingSet.add(dedupKey); // éviter les doublons intra-batch
-    }
-
-    moisDetails.push({ mois: m, moisNom, generated: generatedThisMonth, isSeptembre });
+    generated += resultat.generated;
+    skipped += resultat.skipped;
+    sansTarif += resultat.sansTarif;
+    montantTotal += resultat.montantTotal;
+    moisDetails.push({
+      mois: m,
+      moisNom: MOIS_NOMS[m - 1] ?? `Mois ${m}`,
+      generated: resultat.generated,
+      isSeptembre: m === 9,
+    });
   }
-
-  // Numérotation atomique en un bloc, puis bulk insert
-  if (toCreate.length > 0) {
-    const numeros = await reserverNumerosFacture(tenantId, anneeStart, toCreate.length);
-    await prisma.facture.createMany({ data: toCreate.map((f, i) => ({ ...f, numero: numeros[i] })) });
-  }
-
-  const skipped = eleves.length - elevesAvecTarif.length;
 
   await audit({
     tenantId,
@@ -482,19 +442,17 @@ export async function genererFacturesAnnuelles(params: {
     action: "facturation.generer_annuelles",
     verdict: "ALLOWED",
     resource: "factures",
-    reason: `Génération factures annuelles ${annee}: ${toCreate.length} factures sur ${MOIS_SCOLAIRES.length} mois`,
-    metadata: { annee, totalGenerated: toCreate.length, skipped, moisDetails },
+    reason:
+      `Génération annuelle ${annee} : ${generated} facture(s) sur ${MOIS_SCOLAIRES.length} mois, ` +
+      `${skipped} ignorée(s) dont ${sansTarif} sans tarif`,
+    metadata: { annee, generated, skipped, sansTarif, montantTotal, moisDetails },
   });
 
   revalidatePath("/facturation");
   revalidateTag("dashboard-data", "max");
-  return {
-    success: true,
-    generated: toCreate.length,
-    skipped,
-    moisDetails,
-  };
+  return { success: true, generated, skipped, sansTarif, montantTotal, moisDetails };
 }
+
 
 // ============================================================
 // GÉNÉRATION FRAIS D'INSCRIPTION / RENOUVELLEMENT
@@ -516,20 +474,6 @@ export async function genererFraisInscription(params: {
   const tarifs = await prisma.tarifNiveau.findMany({
     where: { tenantId, annee, actif: true },
   });
-  // Indexation à deux niveaux : tarifs site-spécifique (prioritaires) + tarifs globaux
-  const tarifByNiveauSite = new Map<string, typeof tarifs[0]>();
-  const tarifByNiveauGlobal = new Map<string, typeof tarifs[0]>();
-  for (const t of tarifs) {
-    if (t.siteId) {
-      tarifByNiveauSite.set(`${t.niveau.toLowerCase()}|${t.siteId}`, t);
-    } else {
-      tarifByNiveauGlobal.set(t.niveau.toLowerCase(), t);
-    }
-  }
-  function findTarif(niveau: string, siteId: string | null) {
-    const key = `${niveau.toLowerCase()}|${siteId}`;
-    return tarifByNiveauSite.get(key) ?? tarifByNiveauGlobal.get(niveau.toLowerCase());
-  }
 
   const libelle = type === "INSCRIPTION"
     ? `Frais d'inscription ${annee}`
@@ -540,18 +484,25 @@ export async function genererFraisInscription(params: {
   // Avant : pour N élèves → N findFirst(eleve) + N findFirst(facture) + N count + N create = 4N
   // Après : 1 findMany(eleves) + 1 findMany(factures) + 1 count + 1 createMany = 4
 
-  // 1. Batch : charger tous les élèves en 1 requête
-  // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par eleveId + tenantId : le caller a déjà vérifié l'accès
+  // 1. Batch : charger tous les élèves en 1 requête, bornés au périmètre de
+  // l'utilisateur (comme le reste de la finance).
   const eleves = await prisma.eleve.findMany({
-    where: { id: { in: eleveIds }, tenantId },
+    where: {
+      id: { in: eleveIds },
+      tenantId,
+      ...(isRelationScopedRole(session.user.role)
+        ? eleveScopeFilter(session.user, "eleve")
+        : siteFilterForModel("eleve", session.user)),
+    },
     include: { classe: { select: { niveau: true } } },
   });
 
-  // 2. Filtrer ceux qui ont un tarif
-  const elevesAvecTarif = eleves.filter((e) => {
-    const niveau = e.classe?.niveau ?? "Inconnu";
-    return findTarif(niveau, e.siteId ?? null) !== undefined;
-  });
+  // 2. Résolution canonique (même moteur que la facturation) : « 2 » et
+  // « 2ème » se rencontrent, et un niveau que rien ne résout ne facture pas —
+  // au lieu d'ignorer la ligne en silence comme le faisait le lookup texte.
+  const elevesAvecTarif = eleves.filter(
+    (e) => choixTarif(tarifs, e.siteId, e.classe?.niveau) !== null,
+  );
 
   // 3. Batch : vérifier les factures déjà existantes (1 requête)
   // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par factureId + tenantId : le caller a déjà vérifié l'accès
@@ -584,16 +535,17 @@ export async function genererFraisInscription(params: {
   for (const eleve of elevesAvecTarif) {
     if (existingSet.has(eleve.id)) continue;
 
-    const niveau = eleve.classe?.niveau ?? "Inconnu";
-    const tarif = findTarif(niveau, eleve.siteId ?? null)!;
-    const montant = type === "INSCRIPTION" ? tarif.fraisInscription : tarif.fraisRenouvellement;
+    const choix = choixTarif(tarifs, eleve.siteId, eleve.classe?.niveau);
+    if (!choix) continue; // ne devrait pas arriver : filtré juste au-dessus
+
+    const montant = montantPourTypeFrais(choix.tarif, type);
 
     toCreate.push({
       tenantId,
       eleveId: eleve.id,
       libelle,
       montant,
-      devise: tarif.devise,
+      devise: choix.tarif.devise,
       statut: "EN_ATTENTE",
       type,
       echeance,

@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, Trash2, DollarSign } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { createTarif, deleteTarif, getTarifsForTenant, type TarifFormData } from "@/lib/actions/facturation-avancee";
-import { niveauToLabel } from "@/lib/niveau";
+import { NIVEAUX_CANONIQUES, niveauToLabel } from "@/lib/niveau";
 
 interface TarifItem {
   id: string;
@@ -26,11 +26,7 @@ interface TarifItem {
   actif: boolean;
 }
 
-const NIVEAUX_PREDEFINIS = [
-  "1ère", "2ème", "3ème", "4ème", "5ème",
-  "6ème", "7ème", "8ème", "9ème",
-  "Seconde", "Première", "Terminale",
-];
+const NIVEAUX_PREDEFINIS = NIVEAUX_CANONIQUES;
 
 function formatMoney(amount: number, devise: string) {
   const currency = devise === "XOF" ? "DJF" : devise;

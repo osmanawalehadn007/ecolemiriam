@@ -271,12 +271,31 @@ Référence complète : **[docs/DECISIONS-FACTURATION.md](docs/DECISIONS-FACTURA
 18. **Mensualités idempotentes** — Un seul cœur
     (`src/lib/factures/mensualites.ts`) alimente le cron
     `/api/cron/facturation-mensuelle` (`CRON_SECRET`, ordonnancé par
-    `.github/workflows/cron-facturation.yml`) et le CLI
-    `scripts/generer-mensualites.ts` (aperçu par défaut, `--apply` pour écrire).
+    `.github/workflows/cron-facturation.yml`), le CLI
+    `scripts/generer-mensualites.ts` (aperçu par défaut, `--apply` pour écrire)
+    **et le bouton « Générer » de l'écran Facturation** (`genererMensualites` /
+    `genererFacturesAnnuelles` délèguent au cœur, bornés à
+    `siteFilterForModel("eleve", …)`). Le second moteur qui cohabitait a été
+    supprimé le 29/09/2026 : il comparaît les niveaux en chaîne brute (« 2 »
+    ne rencontrait pas « 2ème » → 191 élèves ignorés en silence) et ajoutait
+    les frais de réinscription à la mensualité de septembre, produisant un
+    montant différent de celui du cron pour le même mois.
     L'unicité `(tenantId, eleveId, type=MENSUALITE, mois)` est garantie par
     l'**index partiel en base** `factures_unicite_mensuelle` (une facture
     annulée libère le mois). Ne JAMAIS remplacer ce verrou par un simple test
     applicatif : deux exécutions simultanées le perdraient.
+    Conséquence de l'alignement : les options **cantine** et **transport** ne
+    facturent que ce que la grille déclare (`fraisCantine` / `fraisTransport`).
+    Aucun forfait codé en dur — renseignez ces colonnes dans Paramètres →
+    Tarifs avant de cocher l'option.
+    **Septembre est manuel** : les frais d'inscription / de réinscription ne
+    sont ajoutés que si l'appelant les demande (`inclureFraisInscription`,
+    `inclureFraisRenouvellement` — écran Facturation, `?inscription=1` du cron,
+    `--inscription` du CLI) et **seulement** pour `mois = 9`. Par défaut,
+    septembre est facturé comme les autres mois. Le dédoublonnage compte aussi
+    l'`INSCRIPTION` du mois : le flux d'admission écrit « Frais d'inscription +
+    Scolarité Septembre » dans une seule facture, la recréer comme mensualité
+    double-facturerait la famille.
 19. **Prérequis de déploiement** — La CI ne joue pas les migrations.
     `migration_facture_mensualite_unicite.sql` doit être appliqué sur la base
     cible (idempotent), et `select count(*) from factures_mensualites_doublons`
@@ -309,4 +328,46 @@ Référence complète : **[docs/DECISIONS-FACTURATION.md](docs/DECISIONS-FACTURA
     session d'admin, l'outil d'exploitation
     `scripts/marquer-emails-verifies.ts` applique la même règle et écrit la même
     trace d'audit (lecture seule par défaut, `--apply` pour écrire).
+
+### Règles de nommage des niveaux (décisions du 29/09/2026)
+
+23. **Le niveau est un référentiel FERMÉ** — `Classe.niveau` et
+    `TarifNiveau.niveau` n'acceptent que les 13 valeurs de
+    `NIVEAUX_CANONIQUES` (`src/lib/niveau.ts`) : Maternelle, 1ère → 5ème,
+    6ème → 9ème, Seconde, Première, Terminale. Toute saisie passe par
+    `normaliserNiveau()` (« 2 », « 2eme », « 2ème année », « classe de 6ème »,
+    « PS/MS », « 2nde » → valeur officielle) et l'inclassable est **refusé**
+    (`niveauOuErreur`), jamais deviné. La grille tarifaire est indexée sur ce
+    libellé : une classe écrite « 2 » était **infacturable** (191 élèves de
+    Campus Central invisibles du moteur le 28/09/2026). Ne jamais réintroduire
+    de liste locale : les écrans (Classes, Tarifs) et l'import consomment le
+    référentiel partagé.
+    ⚠️ « 1ère » (1ère année, primaire) ≠ « Première » (lycée) : deux niveaux,
+    deux tarifs (7 000 vs 15 000 DJF).
+    ⚠️ `Matiere.niveau` est hors sujet : il porte un numéro (1-12) de suffixe
+    (« Lecture 1 » → 1), cf. §14.
+24. **Le verrou est en base** — `migration_niveaux_canoniques.sql` (idempotent)
+    pose `classes_niveau_canonique` et `tarifs_niveau_canonique` (CHECK sur la
+    liste). Application sans psql :
+    `npx tsx scripts/appliquer-migration-niveaux.ts --apply` (vérifie d'abord
+    qu'aucune donnée n'est hors référentiel, puis prouve qu'un « 2 » est
+    refusé). Pour corriger des données existantes :
+    `npx tsx scripts/harmoniser-niveaux-classes.ts` (audit, `--apply` pour
+    écrire) — il signale aussi les noms de classe qui contredisent leur niveau.
+    Une contrainte ne dispense pas de normaliser côté application : elle
+    renvoie une erreur SQL brute, là où `normaliserNiveau` accepte la saisie.
+25. **La promotion automatique dérive du référentiel** —
+    `niveauSuivant()` (`src/lib/niveau-suivant.ts`) lit l'échelle
+    `NIVEAUX_CANONIQUES` après normalisation : une classe historique « 2 » ou
+    « 2ème année » trouve désormais son niveau suivant, au lieu d'être
+    signalée « sans changement » et laissée à la main.
+26. **Le périmètre de l'import s'arrête aux sites du demandeur** — `site` EST
+    la table des sites : on borne sur `id` (`resolveSiteScope`), et un compte
+    sans rattachement est refusé (fail-closed) avant même de constituer le
+    plan. `POST /api/import/enseignants` revérifie chaque ligne avec
+    `canAccessSite` et écrit User + Enseignant + rattachement site/matière +
+    classe + affectation dans **une seule transaction RLS**
+    (`runWithRlsBatch`) : plus de compte TEACHER orphelin, plus d'échec avalé
+    par un `.catch(() => {})`, et l'année de la classe créée vient de
+    `getAnneeCouranteLibelle` (jamais d'une constante).
 

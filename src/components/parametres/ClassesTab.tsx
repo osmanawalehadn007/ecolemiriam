@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, Trash2, AlertTriangle, ArrowRightCircle, MinusCircle, ArrowLeftRight } from "lucide-react";
 import { createClasse, deleteClasse, transferClasse, getEnseignantsForClasse, type ClasseFormData } from "@/lib/actions/parametres";
-import { niveauToLabel } from "@/lib/niveau";
+import { NIVEAUX_PAR_CYCLE, niveauToLabel } from "@/lib/niveau";
 import { useTranslations } from "next-intl";
 import { StructureManager } from "./StructureManager";
 import {
@@ -234,8 +234,29 @@ export function ClassesTab({
                 <Input id="nom" placeholder={t("classNamePlaceholder")} value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} required />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="niveau">{t("level")}</Label>
-                <Input id="niveau" placeholder={t("levelPlaceholder")} value={form.niveau} onChange={(e) => setForm({ ...form, niveau: e.target.value })} required />
+                <Label htmlFor="niveau">
+                  {t("level")}
+                  <span className="text-destructive ml-1">*</span>
+                </Label>
+                {/* Référentiel FERMÉ : le niveau indexe la grille tarifaire.
+                    Une saisie libre (« 2 », « 2eme », « 2ème année ») créait
+                    une classe que plus aucune grille ne facturait. */}
+                <select
+                  id="niveau"
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  value={form.niveau}
+                  onChange={(e) => setForm({ ...form, niveau: e.target.value })}
+                  required
+                >
+                  <option value="">{t("levelPlaceholder")}</option>
+                  {NIVEAUX_PAR_CYCLE.map(({ cycle, niveaux }) => (
+                    <optgroup key={cycle} label={cycle}>
+                      {niveaux.map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="filiere">{t("filiere")}</Label>

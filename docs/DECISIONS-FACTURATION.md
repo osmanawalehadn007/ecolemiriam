@@ -59,6 +59,27 @@ plein interdirait.
 doublon est **rejetée par la base**
 (`duplicate key value violates unique constraint "factures_unicite_mensuelle"`).
 
+**Alignement de l'écran Facturation (29/09/2026).** Le bouton « Générer »
+entretenait un **second moteur** dans `src/lib/actions/facturation-avancee.ts`,
+resté sur l'ancienne logique : niveaux comparés en chaîne brute (les classes
+« 2 » et « 3 » de Campus Central — 191 élèves — ne trouvaient aucun tarif et
+étaient ignorées en silence), frais de réinscription additionnés à la
+mensualité de septembre (donc un montant différent de celui du cron pour le
+même mois) et aucun filtre de site (un comptable mono-site facturait les trois
+sites). Les deux actions délèguent désormais au cœur, bornées à
+`siteFilterForModel("eleve", …)`. Le second moteur est supprimé : une seule
+implémentation, un seul comportement, quel que soit le déclencheur.
+
+**Septembre est un choix explicite (29/09/2026).** Les frais de rentrée
+n'entrent dans la mensualité que si l'exploitant les coche (écran Facturation),
+passe `?inscription=1` / `?renouvellement=1` au cron, ou `--inscription` /
+`--renouvellement` au CLI — et uniquement pour le mois de septembre. Par
+défaut, septembre est facturé comme les autres mois : un élève ayant réglé son
+inscription à l'admission ne doit pas être facturé deux fois. Le dédoublonnage
+interroge désormais aussi l'`INSCRIPTION` du mois (le flux d'admission facture
+« Frais d'inscription + Scolarité Septembre » en une seule facture), ce qui
+évitait 4 doubles facturations constatées le 29/09/2026.
+
 ## 3. Recouvrement / impayés — une seule échelle de relance
 
 **Décision.** On garde l'échelle de relances de `main` (`cron/relances-auto` +
@@ -140,3 +161,14 @@ instruction du fichier (il a donc appliqué l'index puis ignoré la vue). Utilis
    si le périmètre n'est pas calculable.
 5. Une seule échelle de relance par facture.
 6. Toute écriture de facture est **idempotente** : rejouer ne duplique pas.
+7. Une seule implémentation de la génération : le cron, le CLI et l'écran
+   passent tous par `src/lib/factures/mensualites.ts`. Toute divergence de
+   montant entre deux déclencheurs est un bug, pas une variante.
+8. La grille tarifaire est un **référentiel fermé** : `niveau` ∈
+   `NIVEAUX_CANONIQUES` (contrainte en base `tarifs_niveau_canonique`), et
+   toute création/modification/suppression de tarif écrit une ligne d'audit
+   `tarif:create` / `tarif:update` / `tarif:delete` avec l'avant/après. Une
+   grille modifiable sans trace rendait impossible la contestation d'une
+   facture.
+9. La génération est **bornée au périmètre du demandeur** : jamais de facture
+   créée sur un site hors du rattachement de l'utilisateur.
