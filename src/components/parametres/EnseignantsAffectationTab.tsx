@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Loader2, Plus, Trash2, GraduationCap, BookOpen, X, ChevronDown, ChevronRight,
+  Loader2, Plus, Trash2, GraduationCap, BookOpen, X, ChevronDown, ChevronRight, MapPin,
 } from "lucide-react";
 import {
   getEnseignantsWithAffectations,
@@ -41,13 +41,18 @@ interface AffectationRow {
   id: string;
   classeId: string;
   matiereId: string | null;
-  classe: { id: string; nom: string; niveau: string; structureId: string | null; structure: { type: string } | null };
+  classe: {
+    id: string; nom: string; niveau: string; structureId: string | null;
+    structure: { type: string } | null;
+    site: { id: string; nom: string } | null;
+  };
   matiere: { id: string; nom: string; code: string } | null;
 }
 
 interface EnseignantRow {
   id: string;
   user: { id: string; name: string; email: string };
+  sites: { site: { id: string; nom: string } }[];
   matieres: { matiere: { id: string; nom: string; code: string } }[];
   affectations: AffectationRow[];
 }
@@ -65,6 +70,7 @@ export function EnseignantsAffectationTab({ canManage }: { canManage: boolean })
   const [assignClasseId, setAssignClasseId] = useState("");
   const [assignMatiereId, setAssignMatiereId] = useState("");
   const [isPending, setIsPending] = useState(false);
+  const [siteFiltre, setSiteFiltre] = useState<string>("ALL");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -77,8 +83,8 @@ export function EnseignantsAffectationTab({ canManage }: { canManage: boolean })
       setEnseignants(ens as EnseignantRow[]);
       setMatieres(mat as MatiereOption[]);
       setClasses(cls as ClasseOption[]);
-    } catch {
-      // silent
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur de chargement des enseignants");
     } finally {
       setLoading(false);
     }
@@ -180,6 +186,31 @@ export function EnseignantsAffectationTab({ canManage }: { canManage: boolean })
     );
   }
 
+  // Sites présents dans la liste : plus d'un site ⇒ vue « tous les sites » de
+  // la direction, on propose alors un filtre par site.
+  const sitesPresents = Array.from(
+    new Map(enseignants.flatMap((e) => e.sites.map((s) => [s.site.id, s.site.nom] as const))).entries()
+  ).sort((a, b) => a[1].localeCompare(b[1]));
+  const sansSite = enseignants.filter((e) => e.sites.length === 0).length;
+  const multiSites = sitesPresents.length > 1 || sansSite > 0;
+  const enseignantsAffiches = enseignants.filter((e) =>
+    siteFiltre === "ALL"
+      ? true
+      : siteFiltre === "NONE"
+        ? e.sites.length === 0
+        : e.sites.some((s) => s.site.id === siteFiltre)
+  );
+
+  const filtres: { id: string; label: string; count: number }[] = [
+    { id: "ALL", label: "Tous les sites", count: enseignants.length },
+    ...sitesPresents.map(([id, nom]) => ({
+      id,
+      label: nom,
+      count: enseignants.filter((e) => e.sites.some((s) => s.site.id === id)).length,
+    })),
+    ...(sansSite > 0 ? [{ id: "NONE", label: "Sans site", count: sansSite }] : []),
+  ];
+
   return (
     <div className="space-y-3">
       <div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800">
@@ -188,7 +219,35 @@ export function EnseignantsAffectationTab({ canManage }: { canManage: boolean })
         à plusieurs classes par matière.
       </div>
 
-      {enseignants.map((ens) => {
+      {multiSites && (
+        <div className="flex flex-wrap gap-2">
+          {filtres.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setSiteFiltre(f.id)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors",
+                siteFiltre === f.id
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-input hover:bg-muted/50",
+                f.id === "NONE" && siteFiltre !== f.id && "border-amber-300 text-amber-700"
+              )}
+            >
+              {f.id !== "ALL" && <MapPin className="h-3.5 w-3.5" />}
+              {f.label}
+              <span className={cn(
+                "rounded-full px-1.5 py-0.5 text-xs font-semibold",
+                siteFiltre === f.id ? "bg-primary-foreground/20" : "bg-muted"
+              )}>
+                {f.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {enseignantsAffiches.map((ens) => {
         const isExpanded = expandedId === ens.id;
         const isEditingMatieres = editingMatieresFor === ens.id;
         const isAssigning = showAssignFor === ens.id;
@@ -207,7 +266,20 @@ export function EnseignantsAffectationTab({ canManage }: { canManage: boolean })
                 <GraduationCap className="h-4 w-4 text-primary" />
                 <span className="font-medium text-sm">{ens.user.name}</span>
                 <span className="text-xs text-muted-foreground">{ens.user.email}</span>
-                <div className="ml-auto flex gap-1.5">
+                <div className="ml-auto flex flex-wrap justify-end gap-1.5">
+                  {ens.sites.length === 0 ? (
+                    <Badge variant="warning" className="text-xs gap-1">
+                      <MapPin className="h-3 w-3" />
+                      Sans site
+                    </Badge>
+                  ) : (
+                    ens.sites.map((s) => (
+                      <Badge key={s.site.id} variant="outline" className="text-xs gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {s.site.nom}
+                      </Badge>
+                    ))
+                  )}
                   {ens.matieres.length > 0 && (
                     <Badge variant="info" className="text-xs">
                       {ens.matieres.length} matière{ens.matieres.length > 1 ? "s" : ""}
@@ -347,6 +419,7 @@ export function EnseignantsAffectationTab({ canManage }: { canManage: boolean })
                           </Badge>
                           <span className="text-xs text-muted-foreground">
                             {niveauToLabel(aff.classe.niveau)}
+                            {multiSites && aff.classe.site ? ` — ${aff.classe.site.nom}` : ""}
                           </span>
                           {aff.matiere ? (
                             <Badge variant="outline" className="text-xs">
@@ -389,12 +462,15 @@ export function EnseignantsAffectationTab({ canManage }: { canManage: boolean })
                           }}
                         >
                           <option value="">— Sélectionner —</option>
-                          {classes.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.nom} ({niveauToLabel(c.niveau)})
-                              {c.structure ? ` — ${c.structure.nom}` : ""}
-                            </option>
-                          ))}
+                          {classes
+                            .filter((c) => !c.site || ens.sites.some((s) => s.site.id === c.site!.id))
+                            .map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.nom} ({niveauToLabel(c.niveau)})
+                                {c.structure ? ` — ${c.structure.nom}` : ""}
+                                {multiSites && c.site ? ` · ${c.site.nom}` : ""}
+                              </option>
+                            ))}
                         </select>
                       </div>
                       {assignClasseId &&

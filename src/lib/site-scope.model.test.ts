@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Prisma } from "@prisma/client";
-import { SITE_PATHS, siteFilterForModel, type SitePath } from "@/lib/site-scope";
+import { SITE_PATHS, siteFilterForModel, siteForNewMember, type SitePath } from "@/lib/site-scope";
 
 /**
  * Vérifie la table `SITE_PATHS` contre le schéma Prisma réel (DMMF).
@@ -168,17 +168,33 @@ describe("siteFilterForModel", () => {
     });
   });
 
-  it("gère une relation vers-plusieurs", () => {
+  it("gère une relation vers-plusieurs (rattachement obligatoire)", () => {
     expect(siteFilterForModel("enseignant", scoped)).toEqual({
-      AND: [
-        {
-          OR: [
-            { sites: { some: { siteId: { in: ["s1"] } } } },
-            { sites: { none: {} } },
-          ],
-        },
-      ],
+      AND: [{ sites: { some: { siteId: { in: ["s1"] } } } }],
     });
+  });
+
+  it("montre tous les enseignants à la direction en vue « tous les sites »", () => {
+    expect(siteFilterForModel("enseignant", { role: "TENANT_ADMIN", siteId: null, siteIds: [] })).toEqual({});
+  });
+
+  it("ne montre que les enseignants du site choisi par la direction", () => {
+    expect(siteFilterForModel("enseignant", { role: "TENANT_ADMIN", siteId: "s2", siteIds: [] })).toEqual({
+      AND: [{ sites: { some: { siteId: { in: ["s2"] } } } }],
+    });
+  });
+
+  it("rattache le personnel au site courant et refuse « tous les sites »", () => {
+    const direction = { role: "TENANT_ADMIN", siteIds: [], tenantHasSites: true };
+    expect(siteForNewMember({ ...direction, siteId: "s2" }, "SECRETARY")).toEqual({ siteId: "s2" });
+    expect(siteForNewMember({ ...direction, siteId: "s2" }, "TEACHER")).toEqual({ siteId: "s2" });
+    expect(siteForNewMember({ ...direction, siteId: null }, "TEACHER")).toHaveProperty("error");
+    expect(siteForNewMember({ ...direction, siteId: null }, "ACCOUNTANT")).toHaveProperty("error");
+    // Dispensés : direction générale et familles.
+    expect(siteForNewMember({ ...direction, siteId: null }, "TENANT_ADMIN")).toEqual({ siteId: null });
+    expect(siteForNewMember({ ...direction, siteId: null }, "PARENT")).toEqual({ siteId: null });
+    // Établissement mono-site : pas de rattachement exigé.
+    expect(siteForNewMember({ ...direction, siteId: null, tenantHasSites: false }, "TEACHER")).toEqual({ siteId: null });
   });
 
   it("reste fail-closed pour un modèle inconnu", () => {

@@ -63,7 +63,14 @@ Le Postgres du VPS reste utile comme **copie de secours** (données au 23/08 :
 - Le rôle `ecolemiriam_owner` (via port 15432, DIRECT_URL) contourne RLS → voit toutes les données
 - Pour voir les données via le rôle app, il faut définir: `SET app.tenant_id = 'cms8kt0b40001zbi3o63y7c5v'; SET app.is_super_admin = 'true';`
 - **PgBouncer en mode transaction pooling** peut ne pas persister les `SET app.*` entre transactions
-- La base live (Supabase) est atteinte avec le rôle `postgres` : ces politiques ne s'appliquent pas.
+- **Corrigé le 29/09/2026 :** en production, le conteneur applicatif se connecte à
+  Supabase avec **`ecolemiriam_app`** (pooler, port 6543) : la RLS **s'applique**.
+  Seul `DIRECT_URL` (rôle `postgres`) la contourne. Un script de diagnostic
+  lancé avec `DIRECT_URL` peut donc réussir là où l'application échoue.
+- Piège : sous RLS, une relation Prisma **obligatoire** (ex. `affectation.classe`)
+  vers une ligne masquée (classe d'un autre site quand `app.site_id` est posé)
+  fait échouer **toute** la requête (« Field classe is required to return data,
+  got null »). Filtrer l'include : `where: { classe: { tenantId } }`.
 
 ### Connexions DB
 

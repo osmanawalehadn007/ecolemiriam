@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, Trash2, Power, Phone, Edit3, Check, X, Building2, MapPin, AlertTriangle, Search, Shield, GraduationCap, Briefcase, Users as UsersIcon, BookOpen, Users as UsersClass, Upload, Mail, BadgeCheck } from "lucide-react";
+import { roleRequiresSite } from "@/lib/site-scope";
 import { createUser, toggleUserActive, deleteUser, updateUserPhone, assignUserSites, getUserSites, getMatieresForAffectation, getClassesForAffectation, resendVerificationEmail, marquerEmailsVerifies, type UserFormData } from "@/lib/actions/parametres";
 import { addUserToTenant } from "@/lib/actions/user-tenant";
 import { useTranslations } from "next-intl";
@@ -201,7 +202,6 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
     password: "",
     isActive: true,
   });
-  const [formSiteIds, setFormSiteIds] = useState<string[]>([]);
 
   // ── Affectation matières + classes pour les enseignants ──
   const [matieres, setMatieres] = useState<MatiereOption[]>([]);
@@ -233,17 +233,10 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
     }
   }, [showForm, form.role, loadAffectationData]);
 
-  // Déduire le site automatiquement à partir des classes sélectionnées
-  const deducedSite = (() => {
-    if (formClasseIds.length === 0) return null;
-    const selectedClasses = classes.filter((c) => formClasseIds.includes(c.id));
-    const siteIds = [...new Set(selectedClasses.map((c) => c.site?.id).filter(Boolean))];
-    if (siteIds.length === 1) {
-      const site = sites.find((s) => s.id === siteIds[0]);
-      return site ? site.nom : null;
-    }
-    return null; // multi-site ou sans site
-  })();
+  // Site de rattachement du futur compte : celui sur lequel l'appelant est
+  // positionné (`sessionSiteId`). Même règle que `siteForNewMember` côté serveur.
+  const siteRequis = sites.length > 0 && roleRequiresSite(form.role);
+  const siteCreation = sessionSiteId ? sites.find((s) => s.id === sessionSiteId) ?? null : null;
 
   function toggleFormMatiere(matiereId: string) {
     setFormMatiereIds((prev) =>
@@ -261,20 +254,6 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
     );
   }
 
-  function toggleFormSite(siteId: string) {
-    setFormSiteIds((prev) =>
-      prev.includes(siteId)
-        ? prev.filter((id) => id !== siteId)
-        : [...prev, siteId]
-    );
-  }
-
-  function toggleAllFormSites() {
-    setFormSiteIds((prev) =>
-      prev.length === sites.length ? [] : sites.map((s) => s.id)
-    );
-  }
-
   // Ouvrir le wizard : étape 1 (choix du rôle)
   function openWizard() {
     setFormStep(1);
@@ -285,10 +264,6 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
   function selectRole(role: string) {
     setForm({ ...form, role: role as UserFormData["role"] });
     setFormStep(2);
-    // Auto-sélectionner le site si l'utilisateur connecté a déjà un site
-    if (sessionSiteId && !formSiteIds.includes(sessionSiteId)) {
-      setFormSiteIds([sessionSiteId]);
-    }
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -303,14 +278,8 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
           classeIds: formClasseIds,
         } : {}),
       };
+      // Le rattachement au site courant est fait côté serveur.
       const result = await createUser(payload);
-      // Assigner les sites si des sites sont sélectionnés
-      if (formSiteIds.length > 0 && result?.success) {
-        const newUserId = (result as { userId?: string }).userId;
-        if (newUserId) {
-          await assignUserSites(newUserId, formSiteIds.map((sid) => ({ siteId: sid, role: null })));
-        }
-      }
       // Feedback différencié selon le statut de l'email
       const emailSent = (result as { emailSent?: boolean }).emailSent;
       const emailError = (result as { emailError?: string }).emailError;
@@ -324,7 +293,6 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
       setShowForm(false);
       setFormStep(1);
       setForm({ name: "", email: "", role: "TEACHER", phone: "", password: "", isActive: true });
-      setFormSiteIds([]);
       setFormMatiereIds([]);
       setFormClasseIds([]);
     } catch (err) {
@@ -631,58 +599,27 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
                   onChange={(e) => setForm({ ...form, password: e.target.value })} />
               </div>
 
-              {/* ── Site : auto-sélectionné ou manuel ── */}
-              {sites.length > 0 && !isTeacherRole(form.role) && (
-                <div className="md:col-span-2 space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Site
-                    {sessionSiteId && formSiteIds.includes(sessionSiteId) && (
-                      <span className="text-xs text-green-600 font-normal">(sélectionné automatiquement depuis votre session)</span>
-                    )}
-                  </Label>
-                  {sessionSiteId && sites.length > 1 && (
-                    <label
-                      className="flex items-center gap-3 p-3 rounded-lg border-2 border-primary/30 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={formSiteIds.length === sites.length}
-                        onChange={toggleAllFormSites}
-                        className="h-4 w-4 rounded border-gray-300"
-                      />
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-primary" />
-                        <p className="text-sm font-semibold">Accès à tous les sites</p>
-                      </div>
-                    </label>
-                  )}
-                  {sites.map((site) => (
-                    <label
-                      key={site.id}
-                      className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={formSiteIds.includes(site.id)}
-                        onChange={() => toggleFormSite(site.id)}
-                        className="h-4 w-4 rounded border-gray-300"
-                      />
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium">{site.nom}</p>
-                          {site.code && <p className="text-xs text-muted-foreground">{site.code}</p>}
-                        </div>
-                      </div>
-                    </label>
-                  ))}
-                  {formSiteIds.length === 0 && (
-                    <p className="text-xs text-muted-foreground italic">
-                      Aucun site sélectionné = accès à tous les sites par défaut.
+              {/* ── Site : celui sur lequel vous êtes positionné ── */}
+              {siteRequis && (
+                siteCreation ? (
+                  <div className="md:col-span-2 flex items-center gap-2 rounded-lg border-2 border-green-500/30 bg-green-500/5 p-3">
+                    <MapPin className="h-4 w-4 text-green-600" />
+                    <p className="text-sm text-green-700">
+                      Sera rattaché automatiquement au site : <strong>{siteCreation.nom}</strong>
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        D&apos;autres sites pourront être ajoutés ensuite via « Accès aux sites ».
+                      </span>
                     </p>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="md:col-span-2 flex items-center gap-2 rounded-lg border-2 border-amber-500/30 bg-amber-500/5 p-3">
+                    <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-600" />
+                    <p className="text-sm text-amber-700">
+                      Vous êtes positionné sur « Tous les sites ». Choisissez un site précis dans le
+                      sélecteur en haut de page : ce compte doit être rattaché à un site pour pouvoir se connecter.
+                    </p>
+                  </div>
+                )
               )}
 
               {/* ── Affectation matières + classes pour les enseignants ── */}
@@ -734,7 +671,7 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
                     <Label className="flex items-center gap-2">
                       <UsersClass className="h-4 w-4" />
                       Classes assignées
-                      <span className="text-xs text-muted-foreground font-normal">(déduit le site automatiquement)</span>
+                      <span className="text-xs text-muted-foreground font-normal">(classes du site courant)</span>
                     </Label>
                     {classes.length === 0 ? (
                       <p className="text-xs text-muted-foreground italic">Chargement des classes…</p>
@@ -767,27 +704,10 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
                     )}
                   </div>
 
-                  {/* Site déduit */}
-                  {deducedSite && (
-                    <div className="flex items-center gap-2 p-3 rounded-lg border-2 border-green-500/30 bg-green-500/5">
-                      <MapPin className="h-4 w-4 text-green-600" />
-                      <p className="text-sm text-green-700">
-                        Site déduit automatiquement : <strong>{deducedSite}</strong>
-                      </p>
-                    </div>
-                  )}
-                  {formClasseIds.length > 0 && !deducedSite && sites.length > 1 && (
-                    <div className="flex items-center gap-2 p-3 rounded-lg border-2 border-amber-500/30 bg-amber-500/5">
-                      <AlertTriangle className="h-4 w-4 text-amber-600" />
-                      <p className="text-sm text-amber-700">
-                        Les classes sélectionnées appartiennent à plusieurs sites. L&apos;enseignant sera multi-site.
-                      </p>
-                    </div>
-                  )}
                 </div>
               )}
               <div className="md:col-span-2 flex gap-2">
-                <Button type="submit" size="sm" className="gap-2" disabled={isPending}>
+                <Button type="submit" size="sm" className="gap-2" disabled={isPending || (siteRequis && !siteCreation)}>
                   {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   {t("create")}
                 </Button>

@@ -97,6 +97,41 @@ export function isRelationScopedRole(role: string | undefined | null): boolean {
 }
 
 /**
+ * Le rôle doit-il être rattaché à un site précis ? Tout le personnel
+ * (enseignant, secrétariat, comptabilité, chef d'établissement…) : sans
+ * rattachement, son périmètre est vide (fail-closed) et il ne voit rien.
+ * Seules la direction générale (tous les sites) et les familles (périmètre
+ * personnel) en sont dispensées.
+ */
+export function roleRequiresSite(role: string | undefined | null): boolean {
+  return !!role && !isTenantWideRole(role) && !isRelationScopedRole(role);
+}
+
+/**
+ * Site auquel rattacher un compte de personnel créé (ou invité) par
+ * l'appelant : le site sur lequel il est positionné.
+ *
+ * - `{ siteId }` : site retenu (`null` pour un établissement mono-site, ou un
+ *   rôle qui n'a pas besoin de site) ;
+ * - `{ error }` : l'appelant est en « tous les sites » (ou sans site
+ *   autorisé) alors que le rôle exige un site précis.
+ */
+export function siteForNewMember(
+  claims: SessionSiteClaims,
+  role: string
+): { siteId: string | null; error?: undefined } | { siteId?: undefined; error: string } {
+  const siteId = siteIdForCreate(claims);
+  if (!roleRequiresSite(role) || claims.tenantHasSites === false) return { siteId };
+  if (!siteId) {
+    return {
+      error:
+        "Choisissez un site précis dans le sélecteur en haut de page : ce compte doit être rattaché à un site pour pouvoir se connecter.",
+    };
+  }
+  return { siteId };
+}
+
+/**
  * Détermine le périmètre de sites effectif. Unique endroit où cette décision
  * est prise.
  */
@@ -466,17 +501,11 @@ export function siteFilterForModel(
   if (path === "column") return { AND: [inSites] };
   if ("one" in path) return { AND: [{ [path.one]: inSites }] };
 
-  // Relation vers-plusieurs : rattaché à l'un de mes sites, ou rattaché à aucun
-  // site (enregistrement partagé au niveau du tenant).
+  // Relation vers-plusieurs : strictement rattaché à l'un de mes sites. Le
+  // rattachement (ex. EnseignantSite) est obligatoire : un enregistrement sans
+  // site n'est visible qu'en vue « tous les sites », jamais sur un site précis.
   return {
-    AND: [
-      {
-        OR: [
-          { [path.many]: { some: { siteId: { in: scope.siteIds } } } },
-          { [path.many]: { none: {} } },
-        ],
-      },
-    ],
+    AND: [{ [path.many]: { some: { siteId: { in: scope.siteIds } } } }],
   };
 }
 

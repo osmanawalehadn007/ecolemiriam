@@ -13,6 +13,7 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auditFire } from "@/lib/audit";
+import { roleRequiresSite, siteForNewMember } from "@/lib/site-scope";
 import { sendEmail } from "@/lib/notifications/email";
 import {
   INVITABLE_ROLES,
@@ -50,7 +51,6 @@ const CreateInvitationSchema = z.object({
   name: z.string().min(1, "Le nom est requis"),
   role: z.enum(INVITABLE_ROLES),
   phone: z.string().optional(),
-  siteId: z.string().optional().nullable(),
 });
 
 export type CreateInvitationInput = z.infer<typeof CreateInvitationSchema>;
@@ -171,10 +171,15 @@ async function createInvitationImpl(input: CreateInvitationInput) {
   });
   if (!tenant) throw new InvitationError("Établissement introuvable");
 
-  // Le site, s'il est fourni, doit appartenir au tenant.
-  if (v.siteId) {
+  // Le site n'est pas choisi dans le formulaire : c'est celui sur lequel
+  // l'administrateur est positionné. En « tous les sites », on refuse pour le
+  // personnel — le compte n'aurait aucun site et ne verrait rien.
+  const rattachement = siteForNewMember(session.user, v.role);
+  if (rattachement.error) throw new InvitationError(rattachement.error);
+  const siteId = rattachement.siteId;
+  if (siteId) {
     const site = await prisma.site.findFirst({
-      where: { id: v.siteId, tenantId },
+      where: { id: siteId, tenantId },
       select: { id: true },
     });
     if (!site) throw new InvitationError("Site introuvable dans cet établissement");
@@ -212,7 +217,7 @@ async function createInvitationImpl(input: CreateInvitationInput) {
   const invitation = await prisma.invitation.create({
     data: {
       tenantId,
-      siteId: v.siteId || null,
+      siteId,
       email: v.email,
       name: v.name,
       role: v.role,
@@ -240,7 +245,7 @@ async function createInvitationImpl(input: CreateInvitationInput) {
     verdict: "ALLOWED",
     resource: "invitation",
     resourceId: invitation.id,
-    metadata: { email: v.email, role: v.role, siteId: v.siteId ?? null, emailSent },
+    metadata: { email: v.email, role: v.role, siteId, emailSent },
   });
 
   revalidatePath("/parametres");
@@ -482,12 +487,6 @@ async function acceptInvitationImpl(input: AcceptInvitationInput) {
         },
       });
 
-      if (invitation.role === "TEACHER" || invitation.role === "CLASS_TEACHER") {
-        await tx.enseignant.create({
-          data: { tenantId: invitation.tenantId, userId: user.id, dateEntree: new Date() },
-        });
-      }
-
       if (invitation.role === "PARENT") {
         const [firstName, ...rest] = name.split(" ");
         await tx.parent.create({
@@ -503,8 +502,37 @@ async function acceptInvitationImpl(input: AcceptInvitationInput) {
       }
     }
 
-    // Rattachement au site prévu par l'invitation (facultatif).
-    if (invitation.siteId) {
+    // Fiche enseignant, y compris pour un compte qui existait déjà (autre
+    // établissement) : sans elle, il n'apparaîtrait pas dans les affectations.
+    // Elle est rattachée au site de l'invitation (EnseignantSite).
+    if (invitation.role === "TEACHER" || invitation.role === "CLASS_TEACHER") {
+      const fiche = created
+        ? null
+        : await tx.enseignant.findFirst({
+            where: { tenantId: invitation.tenantId, userId: user.id },
+            select: { id: true },
+          });
+      if (!fiche) {
+        await tx.enseignant.create({
+          data: {
+            tenantId: invitation.tenantId,
+            userId: user.id,
+            dateEntree: new Date(),
+            ...(invitation.siteId ? { sites: { create: { siteId: invitation.siteId } } } : {}),
+          },
+        });
+      } else if (invitation.siteId) {
+        await tx.enseignantSite.upsert({
+          where: { enseignantId_siteId: { enseignantId: fiche.id, siteId: invitation.siteId } },
+          create: { enseignantId: fiche.id, siteId: invitation.siteId },
+          update: {},
+        });
+      }
+    }
+
+    // Rattachement au site prévu par l'invitation (le site de l'administrateur
+    // au moment de l'envoi). UserSite est ce que lit la session.
+    if (invitation.siteId && roleRequiresSite(invitation.role)) {
       await tx.userSite.upsert({
         where: { userId_siteId: { userId: user.id, siteId: invitation.siteId } },
         create: { userId: user.id, siteId: invitation.siteId },

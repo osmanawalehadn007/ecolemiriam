@@ -24,7 +24,8 @@ const mocks = vi.hoisted(() => {
     user: model(),
     userTenant: model(),
     userSite: model(),
-    enseignant: { create: vi.fn() },
+    enseignant: { create: vi.fn(), findFirst: vi.fn() },
+    enseignantSite: model(),
     parent: { create: vi.fn() },
   };
 
@@ -77,6 +78,10 @@ function adminSession(overrides: Record<string, unknown> = {}) {
       tenantId: "tenant-A",
       name: "Admin A",
       role: "TENANT_ADMIN",
+      // Positionné sur un site précis : c'est lui que reçoit l'invité.
+      siteId: "site-1",
+      siteIds: [],
+      tenantHasSites: true,
       ...overrides,
     },
   };
@@ -205,9 +210,31 @@ describe("createInvitation", () => {
     });
   });
 
+  it("rattache l'invité au site sur lequel l'administrateur est positionné", async () => {
+    const result = await createInvitation(input);
+    expect(result.success).toBe(true);
+    expect(models.invitation.create.mock.calls[0][0].data.siteId).toBe("site-1");
+  });
+
+  it("refuse d'inviter du personnel depuis « tous les sites »", async () => {
+    mockAuth.mockResolvedValue(adminSession({ siteId: null }));
+    const result = await createInvitation(input);
+    expect(result.success).toBe(false);
+    expect(models.invitation.create).not.toHaveBeenCalled();
+  });
+
+  it("autorise un parent ou un directeur depuis « tous les sites »", async () => {
+    mockAuth.mockResolvedValue(adminSession({ siteId: null }));
+    for (const role of ["PARENT", "TENANT_ADMIN"] as const) {
+      const result = await createInvitation({ ...input, role });
+      expect(result.success).toBe(true);
+    }
+  });
+
   it("refuse un site qui n'appartient pas à l'établissement", async () => {
+    mockAuth.mockResolvedValue(adminSession({ siteId: "site-autre" }));
     models.site.findFirst.mockResolvedValue(null);
-    const result = await createInvitation({ ...input, siteId: "site-autre" });
+    const result = await createInvitation(input);
     expect(result).toEqual({
       success: false,
       error: "Site introuvable dans cet établissement",
@@ -302,6 +329,8 @@ describe("acceptInvitation", () => {
 
     expect(result).toEqual({ success: true });
     expect(tx.user.create).not.toHaveBeenCalled();
+    // Compte existant sans fiche dans cet établissement : elle est créée.
+    expect(tx.enseignant.create).toHaveBeenCalledTimes(1);
     expect(tx.userTenant.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -312,6 +341,35 @@ describe("acceptInvitation", () => {
           isDefault: false,
         }),
       })
+    );
+  });
+
+  it("rattache le nouvel enseignant au site de l'invitation (UserSite + EnseignantSite)", async () => {
+    const { token } = generateInvitationToken();
+    models.invitation.findUnique.mockResolvedValue(pendingInvitation({ siteId: "site-1" }));
+    tx.user.findUnique.mockResolvedValue(null);
+    tx.user.create.mockResolvedValue({ id: "u-new", siteId: "site-1" });
+
+    const result = await acceptInvitation({ token, password: "MotDePasse2026" });
+    expect(result).toEqual({ success: true });
+    expect(tx.enseignant.create.mock.calls[0][0].data.sites).toEqual({ create: { siteId: "site-1" } });
+    expect(tx.userSite.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: { userId: "u-new", siteId: "site-1" } })
+    );
+  });
+
+  it("ajoute le site à la fiche existante d'un enseignant déjà connu", async () => {
+    const { token } = generateInvitationToken();
+    models.invitation.findUnique.mockResolvedValue(pendingInvitation({ siteId: "site-1" }));
+    tx.user.findUnique.mockResolvedValue({ id: "u-existing", siteId: "site-1" });
+    tx.userTenant.findUnique.mockResolvedValue(null);
+    tx.enseignant.findFirst.mockResolvedValue({ id: "ens-1" });
+
+    const result = await acceptInvitation({ token, password: "MotDePasse2026" });
+    expect(result).toEqual({ success: true });
+    expect(tx.enseignant.create).not.toHaveBeenCalled();
+    expect(tx.enseignantSite.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: { enseignantId: "ens-1", siteId: "site-1" } })
     );
   });
 
