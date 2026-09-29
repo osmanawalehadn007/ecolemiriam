@@ -404,18 +404,18 @@ function TarifCard({
               <p className="text-xs text-muted-foreground">{t("tarifFraisRenouvellement")}</p>
               <p className="font-semibold">{formatMoney(tarif.fraisRenouvellement, tarif.devise)}</p>
             </div>
-            {tarif.fraisCantine != null && (
-              <div>
-                <p className="text-xs text-muted-foreground">{t("tarifFraisCantine")}</p>
-                <p className="font-semibold">{formatMoney(tarif.fraisCantine, tarif.devise)}</p>
-              </div>
-            )}
-            {tarif.fraisTransport != null && (
-              <div>
-                <p className="text-xs text-muted-foreground">{t("tarifFraisTransport")}</p>
-                <p className="font-semibold">{formatMoney(tarif.fraisTransport, tarif.devise)}</p>
-              </div>
-            )}
+            <div>
+              <p className="text-xs text-muted-foreground">{t("tarifFraisCantine")}</p>
+              <p className={cn("font-semibold", tarif.fraisCantine == null && "text-muted-foreground")}>
+                {tarif.fraisCantine != null ? formatMoney(tarif.fraisCantine, tarif.devise) : t("tarifOptionNonRenseignee")}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">{t("tarifFraisTransport")}</p>
+              <p className={cn("font-semibold", tarif.fraisTransport == null && "text-muted-foreground")}>
+                {tarif.fraisTransport != null ? formatMoney(tarif.fraisTransport, tarif.devise) : t("tarifOptionNonRenseignee")}
+              </p>
+            </div>
           </div>
           <p className="text-xs text-muted-foreground">
             {t("tarifNbMoisLabel", { count: tarif.nbMois })}

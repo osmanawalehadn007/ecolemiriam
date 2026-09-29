@@ -23,6 +23,13 @@ async function main() {
     10,
   );
 
+  // Options de facturation testables : cantine/transport (grille tarifaire) et
+  // frais de rentrée (septembre uniquement).
+  const inclureCantine = process.argv.includes("--cantine");
+  const inclureTransport = process.argv.includes("--transport");
+  const inclureFraisInscription = process.argv.includes("--inscription");
+  const inclureFraisRenouvellement = process.argv.includes("--renouvellement");
+
   const tenant = await prisma.tenant.findFirst({ select: { id: true, name: true } });
   if (!tenant) throw new Error("Aucun tenant en base");
 
@@ -47,7 +54,18 @@ async function main() {
   });
 
   console.log(`\nTenant ${tenant.name} — année ${annee} — mois ${mois}`);
-  console.log(`Sites : ${sites.length} | élèves actifs : ${eleves.length}\n`);
+  console.log(`Sites : ${sites.length} | élèves actifs : ${eleves.length}`);
+  console.log(
+    `Options : ${[
+      inclureCantine ? "cantine" : null,
+      inclureTransport ? "transport" : null,
+      inclureFraisInscription ? "frais d'inscription (sept.)" : null,
+      inclureFraisRenouvellement ? "frais de réinscription (sept.)" : null,
+    ]
+      .filter(Boolean)
+      .join(" + ") || "aucune"}
+`,
+  );
 
   const cibles: { id: string | null; nom: string }[] = [
     ...sites.map((s) => ({ id: s.id as string | null, nom: s.nom })),
@@ -69,6 +87,10 @@ async function main() {
         tenantId: tenant.id,
         mois,
         annee,
+        inclureCantine,
+        inclureTransport,
+        inclureFraisInscription,
+        inclureFraisRenouvellement,
         eleveWhere,
         tarifWhere,
         dryRun: true,

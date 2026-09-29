@@ -1136,7 +1136,11 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
 
       {/* Modal: confirmation de vérification d'emails */}
       {showVerifyModal && (
-        <Card className="border-amber-300">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !verifyPending && setShowVerifyModal(false)}
+        >
+        <Card className="w-full max-w-md border-amber-300" onClick={(e) => e.stopPropagation()}>
           <CardHeader>
             <CardTitle className="text-sm flex items-center gap-2">
               <BadgeCheck className="h-4 w-4" />
@@ -1178,6 +1182,7 @@ export function UsersTab({ users, canManage, sessionRole, sessionSiteId, availab
             </div>
           </CardContent>
         </Card>
+        </div>
       )}
 
       {/* Modal: Confirmation de suppression */}

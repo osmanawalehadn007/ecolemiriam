@@ -46,7 +46,16 @@ interface ExclusionItem {
 
 const MOIS_NOMS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
-export function FacturationActions({ currentYear = "2025-2026", userRole }: { currentYear?: string; userRole?: string }) {
+export function FacturationActions({
+  currentYear = "2025-2026",
+  userRole,
+  optionsDisponibles = { cantine: true, transport: true },
+}: {
+  currentYear?: string;
+  userRole?: string;
+  /** Cantine / transport : la grille déclare-t-elle un montant pour l'année ? */
+  optionsDisponibles?: { cantine: boolean; transport: boolean };
+}) {
   const t = useTranslations("facturation");
   const canWrite = hasPermission(userRole, "finance:write");
   const [isPending, setIsPending] = useState(false);
@@ -66,6 +75,53 @@ export function FacturationActions({ currentYear = "2025-2026", userRole }: { cu
   // (Paramètres → Tarifs) : cocher n'ajoute rien si la colonne est vide.
   const [genFraisInscription, setGenFraisInscription] = useState(false);
   const [genFraisRenouvellement, setGenFraisRenouvellement] = useState(false);
+
+  /**
+   * Options mensuelles (cantine / transport). Une option dont la grille ne
+   * déclare AUCUN montant est désactivée, avec la raison : la cocher
+   * n'ajouterait rien (le montant est lu dans la grille, plus de forfait codé
+   * en dur). C'est le piège d'origine : l'opérateur croyait avoir facturé.
+   */
+  const optionsManquantes = [
+    optionsDisponibles.cantine ? null : "cantine",
+    optionsDisponibles.transport ? null : "transport",
+  ].filter((v): v is string => v !== null);
+
+  const blocOptionsMensuelles = (
+    <div className="flex flex-col gap-2">
+      <label
+        className={`flex items-center gap-2 ${optionsDisponibles.cantine ? "cursor-pointer" : "opacity-60"}`}
+      >
+        <input
+          type="checkbox"
+          checked={genCantine}
+          disabled={!optionsDisponibles.cantine}
+          onChange={(e) => setGenCantine(e.target.checked)}
+          className="h-4 w-4 rounded border-gray-300"
+        />
+        <span className="text-sm">{t("includeCanteen")}</span>
+      </label>
+      <label
+        className={`flex items-center gap-2 ${optionsDisponibles.transport ? "cursor-pointer" : "opacity-60"}`}
+      >
+        <input
+          type="checkbox"
+          checked={genTransport}
+          disabled={!optionsDisponibles.transport}
+          onChange={(e) => setGenTransport(e.target.checked)}
+          className="h-4 w-4 rounded border-gray-300"
+        />
+        <span className="text-sm">{t("includeTransport")}</span>
+      </label>
+      {optionsManquantes.length > 0 && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          Montant non renseigné dans la grille tarifaire pour :{" "}
+          {optionsManquantes.join(", ")}. Renseignez-le dans Paramètres → Tarifs
+          (l&apos;option n&apos;ajouterait rien à la facture).
+        </p>
+      )}
+    </div>
+  );
 
   /**
    * Bloc « frais de rentrée » : septembre est le seul mois où l'on peut
@@ -258,21 +314,7 @@ export function FacturationActions({ currentYear = "2025-2026", userRole }: { cu
                 <Input id="annual-annee" value={genAnnee} onChange={(e) => setGenAnnee(e.target.value)} />
               </div>
             </div>
-            <div className="flex flex-col gap-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={genCantine} onChange={(e) => setGenCantine(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
-                <span className="text-sm">{t("includeCanteen")}</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={genTransport} onChange={(e) => setGenTransport(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
-                <span className="text-sm">{t("includeTransport")}</span>
-              </label>
-              <p className="text-xs text-muted-foreground">
-                Cantine et transport sont facturés au montant déclaré dans la grille
-                tarifaire (Paramètres → Tarifs) : si la colonne « frais cantine » ou
-                « frais transport » est vide, cocher l&apos;option n&apos;ajoute rien.
-              </p>
-            </div>
+            {blocOptionsMensuelles}
             {blocFraisRentree}
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 space-y-1.5">
               <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
@@ -320,21 +362,7 @@ export function FacturationActions({ currentYear = "2025-2026", userRole }: { cu
                 <Input id="gen-annee" value={genAnnee} onChange={(e) => setGenAnnee(e.target.value)} />
               </div>
             </div>
-            <div className="flex flex-col gap-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={genCantine} onChange={(e) => setGenCantine(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
-                <span className="text-sm">{t("includeCanteen")}</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={genTransport} onChange={(e) => setGenTransport(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
-                <span className="text-sm">{t("includeTransport")}</span>
-              </label>
-              <p className="text-xs text-muted-foreground">
-                Cantine et transport sont facturés au montant déclaré dans la grille
-                tarifaire (Paramètres → Tarifs) : si la colonne est vide, cocher
-                l&apos;option n&apos;ajoute rien.
-              </p>
-            </div>
+            {blocOptionsMensuelles}
             {genMois === 9 ? (
               blocFraisRentree
             ) : (

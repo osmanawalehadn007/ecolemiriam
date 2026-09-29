@@ -2490,6 +2490,7 @@
     "tarifFraisRenouvellement": "Frais de renouvellement",
     "tarifFraisCantine": "Frais cantine (optionnel)",
     "tarifFraisTransport": "Frais transport (optionnel)",
+    "tarifOptionNonRenseignee": "— non renseigné",
     "tarifDevise": "Devise",
     "tarifNbMois": "Nb de mois",
     "tarifNbMoisLabel": "{count} mensualités par an",

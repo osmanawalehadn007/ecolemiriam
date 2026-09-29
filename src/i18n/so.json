@@ -2394,6 +2394,7 @@
     "tarifFraisRenouvellement": "Renewal fee",
     "tarifFraisCantine": "Canteen fee (optional)",
     "tarifFraisTransport": "Transport fee (optional)",
+    "tarifOptionNonRenseignee": "— not set",
     "tarifDevise": "Currency",
     "tarifNbMois": "Number of months",
     "tarifNbMoisLabel": "{count} monthly installments per year",
