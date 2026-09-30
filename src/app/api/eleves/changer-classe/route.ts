@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
   revalidatePath("/eleves");
   revalidateTag("dashboard-data", "max");
   revalidateTag("classes-list", "max");
+  revalidateTag("eleves-transfert-data", "max");
 
   return NextResponse.json({ count: result.count });
 }

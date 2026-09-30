@@ -23,7 +23,7 @@ import { ELEVE_NON_ARCHIVE } from "@/lib/eleve-filters";
 import { checkPermission } from "@/lib/rbac";
 import { generateSecurePassword } from "@/lib/security/password";
 import { sendVerificationEmail } from "@/lib/security/email-verification";
-import type { Role } from "@prisma/client";
+import type { Prisma, Role } from "@prisma/client";
 
 // ============================================================
 // ÉTABLISSEMENT
@@ -585,9 +585,18 @@ export async function deleteClasse(
       tenantId: session.user.tenantId,
       ...siteFilterForModel("classe", session.user),
     },
-    include: { _count: { select: { eleves: ELEVE_NON_ARCHIVE } } },
+    include: { _count: { select: { eleves: ELEVE_NON_ARCHIVE, notes: true, evaluations: true } } },
   });
   if (!classe) throw new Error("Classe non trouvée");
+
+  if (classe._count.notes > 0 || classe._count.evaluations > 0) {
+    throw new Error(
+      `Impossible de supprimer cette classe : elle contient ${classe._count.evaluations} évaluation(s) et ${classe._count.notes} note(s). Déplacez les élèves avec « Changement de classe » ou conservez la classe.`
+    );
+  }
+
+  const eleveWhere = { classeId, tenantId: session.user.tenantId, ...ELEVE_NON_ARCHIVE.where };
+  const ops: Prisma.PrismaPromise<unknown>[] = [];
 
   // S'il y a des élèves actifs, exiger une stratégie explicite.
   if (classe._count.eleves > 0) {
@@ -613,19 +622,22 @@ export async function deleteClasse(
       if (!target) throw new Error("Classe cible non trouvée (même année scolaire requise)");
       if (options.targetClasseId === classeId) throw new Error("La classe cible doit être différente");
 
-      await prisma.eleve.updateMany({
-        where: { classeId, tenantId: session.user.tenantId, ...ELEVE_NON_ARCHIVE },
+      ops.push(prisma.eleve.updateMany({
+        where: eleveWhere,
         data: { classeId: options.targetClasseId },
-      });
+      }));
     } else if (strategy === "unassign") {
-      await prisma.eleve.updateMany({
-        where: { classeId, tenantId: session.user.tenantId, ...ELEVE_NON_ARCHIVE },
+      ops.push(prisma.eleve.updateMany({
+        where: eleveWhere,
         data: { classeId: null },
-      });
+      }));
     }
   }
 
-  await prisma.classe.delete({ where: { id: classeId } });
+  // Déplacement et suppression dans la même transaction : si la suppression
+  // échoue, les élèves ne restent pas déplacés à moitié.
+  ops.push(prisma.classe.delete({ where: { id: classeId } }));
+  await prisma.$transaction(ops);
 
   revalidatePath("/parametres");
   revalidatePath("/eleves");
