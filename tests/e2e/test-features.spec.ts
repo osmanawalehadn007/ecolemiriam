@@ -36,7 +36,14 @@ test.describe("Analytics — nouveaux graphiques", () => {
   test("Page analytics charge avec tous les graphiques", async ({ page }) => {
     await login(page, ADMIN_EMAIL, PASSWORD);
     await page.goto("/analytics", { waitUntil: "networkidle" });
-    await expect(page.locator("text=Analytics")).toBeVisible({ timeout: 15000 });
+    // Le titre de la page est « Statistiques » (h1 rendu par <Header>) — et NON
+    // le libellé du lien de la barre latérale (« Analytics »). L'ancien
+    // `text=Analytics` matchait par sous-chaîne, donc aussi le placeholder
+    // « Chargement des analytics… » d'AnalyticsView : dès que la page rendait
+    // lentement, la locator résolvait DEUX éléments et le test échouait en
+    // `strict mode violation` (observé le 30/09/2026, sur une PR qui ne touchait
+    // ni l'app ni les tests). Un rôle + un nom exact ne peut pas se confondre.
+    await expect(page.getByRole("heading", { level: 1, name: "Statistiques" })).toBeVisible({ timeout: 15000 });
 
     // KPI cards
     await expect(page.locator("text=Élèves actifs")).toBeVisible({ timeout: 10000 });
