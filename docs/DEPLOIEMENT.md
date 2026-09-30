@@ -97,6 +97,19 @@ avec le bon mot de passe et sans le moindre message d'erreur. Conserver
 l'ingress `app.ecolemiriam.com` dans `cloudflared/config.yml` : il porte la
 redirection ; le retirer rendrait les anciens signets muets.
 
+**Ne pas authentifier la synchronisation de la VM par un jeton.** Depuis le
+30/09/2026, la CI ne fait plus de `git fetch` SUR la VM : le job fabrique un
+`git bundle` du commit déployé et le transfère par le tunnel IAP
+(`.github/scripts/vm-sync.sh` ; bundle vérifié des deux côtés par
+`git bundle verify`, `--ff-only` conservé, stash des modifications locales
+conservé). Motif : le PAT fine-grained de
+`/etc/ecolemiriam/git-credentials` a expiré le 30/09/2026 — un jeton a
+obligatoirement une échéance — et plus aucun déploiement ne pouvait atteindre
+le staging, sans qu'une ligne de code soit en cause. Un secret qui expire est
+une panne programmée. Corollaire : le checkout des jobs `staging` et `promote`
+doit rester en `fetch-depth: 0`, un bundle produit depuis un clone superficiel
+étant inexploitable par le dépôt de la VM.
+
 **Ne pas remettre de `git pull` dans `ci-deploy-gcp.sh`** pour le chemin CI. Ce
 script vit dans `/opt/ecolemiriam` : un `git pull` lancé depuis lui réécrit le
 fichier que bash est en train de lire, et l'exécution en cours termine sur
@@ -168,7 +181,7 @@ Secrets, en `640 root:ecolpro` dans `/etc/ecolemiriam/` :
 | Fichier | Usage |
 |---|---|
 | `ghcr-token` | PAT classique, scope `read:packages` — `docker pull` |
-| `git-credentials` | PAT fine-grained, Contents Read-only sur `EcolPro` — `git pull` |
+| `git-credentials` | PAT fine-grained, Contents Read-only sur `EcolPro` — **uniquement pour un `git pull` manuel sur la VM** : la CI ne s'en sert plus (voir la règle ci-dessous) |
 | `git-credential-ro.sh` | helper git système ; ignore `store`/`erase` pour que le fichier ne soit jamais réécrit |
 
 Se connecter à la VM :

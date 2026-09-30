@@ -202,6 +202,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Historique COMPLET : `vm-sync.sh` en fabrique un `git bundle` que le
+          # dépôt de la VM (non superficiel) doit pouvoir raccrocher. Un clone
+          # superficiel produirait un bundle inexploitable, et le script le
+          # refuse explicitement. Coût réel : le pack du dépôt fait ~6 Mio.
+          fetch-depth: 0
 
       - name: Authenticate to GCP (Workload Identity Federation)
         uses: google-github-actions/auth@v2
@@ -218,7 +224,13 @@ jobs:
       # passées en argument plutôt que rangées dans un script de /opt, pour
       # qu'aucun fichier ne se modifie pendant qu'il s'exécute.
       - name: Sync code on VM
-        run: .github/scripts/ssh-retry.sh 'cd /opt/ecolemiriam && S=0; { git diff --quiet && git diff --cached --quiet; } || { git stash push -m ci-sync && S=1; }; git fetch origin main && git merge --ff-only origin/main; RC=$?; [ "$S" = 0 ] || git stash pop; exit $RC'
+        # Aucun jeton git : le runner fabrique un `git bundle` du commit déployé
+        # et le transfère par le tunnel IAP. L'ancienne version faisait un
+        # `git fetch origin main` SUR la VM, avec un PAT fine-grained stocké dans
+        # /etc/ecolemiriam/git-credentials — jeton obligatoirement daté, qui a
+        # expiré le 30/09/2026 et stoppé tous les déploiements sans qu'aucun code
+        # ne soit en cause. Voir .github/scripts/vm-sync.sh.
+        run: .github/scripts/vm-sync.sh
 
       - name: Deploy to staging slot via IAP
         run: .github/scripts/ssh-retry.sh 'CI_SKIP_GIT_SYNC=1 /opt/ecolemiriam/docker/scripts/ci-deploy-gcp.sh staging'
@@ -253,6 +265,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # requis par .github/scripts/vm-sync.sh (git bundle)
 
       - name: Authenticate to GCP (Workload Identity Federation)
         uses: google-github-actions/auth@v2
@@ -269,7 +283,9 @@ jobs:
       # passées en argument plutôt que rangées dans un script de /opt, pour
       # qu'aucun fichier ne se modifie pendant qu'il s'exécute.
       - name: Sync code on VM
-        run: .github/scripts/ssh-retry.sh 'cd /opt/ecolemiriam && S=0; { git diff --quiet && git diff --cached --quiet; } || { git stash push -m ci-sync && S=1; }; git fetch origin main && git merge --ff-only origin/main; RC=$?; [ "$S" = 0 ] || git stash pop; exit $RC'
+        # Même mécanisme qu'au staging : bundle git fabriqué par le runner et
+        # transféré par IAP, donc sans jeton (cf. .github/scripts/vm-sync.sh).
+        run: .github/scripts/vm-sync.sh
 
       - name: Promote staging to production via IAP
         run: .github/scripts/ssh-retry.sh 'CI_SKIP_GIT_SYNC=1 /opt/ecolemiriam/docker/scripts/ci-deploy-gcp.sh promote'
