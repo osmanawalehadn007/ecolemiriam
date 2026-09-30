@@ -94,6 +94,10 @@ if [ "${GHCR_LOGIN_STDIN:-0}" = "1" ]; then
   trap 'rm -rf "$GHCR_DOCKER_CONFIG"' EXIT
   printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin >/dev/null
   unset GHCR_TOKEN
+  # Prévient les scripts délégués (blue-green) : la session est déjà établie,
+  # ils ne doivent PAS refaire un login avec le PAT local — celui-ci a expiré
+  # le 30/09/2026 et faisait échouer la phase staging malgré la CI authentifiée.
+  export GHCR_AUTH_READY=1
   echo "  Connecté avec le jeton éphémère du workflow (config Docker temporaire)."
 else
   GHCR_TOKEN_PATH=""

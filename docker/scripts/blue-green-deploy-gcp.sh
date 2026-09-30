@@ -329,6 +329,14 @@ ghcr_token_file() {
 # Login GHCR
 ghcr_login() {
   local token_file
+  # Déjà authentifié par l'appelant (ci-deploy-gcp.sh, jeton éphémère du
+  # workflow et DOCKER_CONFIG dédié) : refaire un login ici écraserait cette
+  # session avec le PAT local — et échouerait dès que ce PAT a expiré, ce qui a
+  # bloqué le staging le 30/09/2026 alors que la CI était pourtant authentifiée.
+  if [ "${GHCR_AUTH_READY:-0}" = "1" ]; then
+    log "  Authentification GHCR déjà établie par l'appelant — login local ignoré."
+    return 0
+  fi
   if token_file=$(ghcr_token_file); then
     docker login ghcr.io -u wilsan007 --password-stdin < "$token_file" 2>/dev/null
   else
