@@ -233,7 +233,14 @@ jobs:
         run: .github/scripts/vm-sync.sh
 
       - name: Deploy to staging slot via IAP
-        run: .github/scripts/ssh-retry.sh 'CI_SKIP_GIT_SYNC=1 /opt/ecolemiriam/docker/scripts/ci-deploy-gcp.sh staging'
+        # Le jeton GHCR est le GITHUB_TOKEN ÉPHÉMÈRE du job, transmis par
+        # stdin : rien n'est persisté sur la VM, rien à faire tourner. Le PAT
+        # de /etc/ecolemiriam/ghcr-token (classique, 30 jours) a expiré le
+        # 30/09/2026 et bloquait le déploiement sur « denied: denied ».
+        env:
+          GHCR_ACTOR: ${{ github.actor }}
+          GHCR_EPHEMERAL_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s %s\n' "$GHCR_ACTOR" "$GHCR_EPHEMERAL_TOKEN" | .github/scripts/ssh-retry.sh 'GHCR_LOGIN_STDIN=1 CI_SKIP_GIT_SYNC=1 /opt/ecolemiriam/docker/scripts/ci-deploy-gcp.sh staging'
 
   # ============================================================
   # JOB 4 : Approbation manuelle — promotion en production
@@ -288,7 +295,10 @@ jobs:
         run: .github/scripts/vm-sync.sh
 
       - name: Promote staging to production via IAP
-        run: .github/scripts/ssh-retry.sh 'CI_SKIP_GIT_SYNC=1 /opt/ecolemiriam/docker/scripts/ci-deploy-gcp.sh promote'
+        env:
+          GHCR_ACTOR: ${{ github.actor }}
+          GHCR_EPHEMERAL_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s %s\n' "$GHCR_ACTOR" "$GHCR_EPHEMERAL_TOKEN" | .github/scripts/ssh-retry.sh 'GHCR_LOGIN_STDIN=1 CI_SKIP_GIT_SYNC=1 /opt/ecolemiriam/docker/scripts/ci-deploy-gcp.sh promote'
 
       - name: Verify production health
         run: .github/scripts/ssh-retry.sh '/opt/ecolemiriam/docker/scripts/blue-green-deploy-gcp.sh --status'

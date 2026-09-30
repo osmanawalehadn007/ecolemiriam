@@ -65,22 +65,51 @@ fi
 # Pas de régénération PgBouncer userlist sur GCP (pas de PgBouncer)
 
 # --- 2. Login GHCR ---
-# Ordre : $GHCR_TOKEN_FILE, emplacement partagé, home (legacy).
-# L'emplacement partagé est requis en OS Login : le SA se connecte en
-# sa_<id>, dont le home n'est pas celui où le token a été écrit.
+# Deux sources, dans cet ordre :
+#
+#   1. `GHCR_LOGIN_STDIN=1` : les identifiants (« <utilisateur> <jeton> » sur
+#      UNE ligne) arrivent par l'entrée standard. C'est le chemin de la CI : le
+#      workflow transmet le GITHUB_TOKEN éphémère du job (`packages: read`,
+#      invalidé à la fin du run, lié à ce dépôt). Rien à faire tourner, rien
+#      qui expire un jour sans prévenir. Le login est confiné à un
+#      DOCKER_CONFIG temporaire : le trousseau de l'opérateur n'est ni lu ni
+#      écrasé, et aucun jeton ne reste sur la VM.
+#   2. Sinon, le PAT des fichiers ci-dessous. Chemin MANUEL, pour un humain qui
+#      lance le script sur la VM.
+#
+# Pourquoi la source 1 existe : un PAT classique a une échéance (30 jours par
+# défaut). Celui de /etc/ecolemiriam/ghcr-token (`ghp_…`, écrit le 30/08/2026)
+# a expiré le 30/09/2026 et le déploiement s'est arrêté sur
+# « Error response from daemon: Get "https://ghcr.io/v2/": denied: denied » —
+# même panne programmée que le jeton git de la synchronisation.
 echo "=== 2/3 — Login GHCR ==="
-GHCR_TOKEN_PATH=""
-for f in "${GHCR_TOKEN_FILE:-}" /etc/ecolemiriam/ghcr-token ~/.config/ghcr-token; do
-  if [ -n "$f" ] && [ -r "$f" ]; then
-    GHCR_TOKEN_PATH="$f"
-    break
+if [ "${GHCR_LOGIN_STDIN:-0}" = "1" ]; then
+  read -r GHCR_USER GHCR_TOKEN || true
+  if [ -z "${GHCR_TOKEN:-}" ]; then
+    echo "ERREUR: GHCR_LOGIN_STDIN=1 attend « <utilisateur> <jeton> » sur l'entrée standard."
+    exit 1
   fi
-done
-if [ -n "$GHCR_TOKEN_PATH" ]; then
-  docker login ghcr.io -u wilsan007 --password-stdin < "$GHCR_TOKEN_PATH"
+  GHCR_DOCKER_CONFIG="$(mktemp -d)"
+  export DOCKER_CONFIG="$GHCR_DOCKER_CONFIG"
+  trap 'rm -rf "$GHCR_DOCKER_CONFIG"' EXIT
+  printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin >/dev/null
+  unset GHCR_TOKEN
+  echo "  Connecté avec le jeton éphémère du workflow (config Docker temporaire)."
 else
-  echo "ERREUR: Token GHCR introuvable (/etc/ecolemiriam/ghcr-token ou ~/.config/ghcr-token)"
-  exit 1
+  GHCR_TOKEN_PATH=""
+  for f in "${GHCR_TOKEN_FILE:-}" /etc/ecolemiriam/ghcr-token ~/.config/ghcr-token; do
+    if [ -n "$f" ] && [ -r "$f" ]; then
+      GHCR_TOKEN_PATH="$f"
+      break
+    fi
+  done
+  if [ -n "$GHCR_TOKEN_PATH" ]; then
+    docker login ghcr.io -u wilsan007 --password-stdin < "$GHCR_TOKEN_PATH" >/dev/null
+    echo "  Connecté avec $GHCR_TOKEN_PATH."
+  else
+    echo "ERREUR: Token GHCR introuvable (/etc/ecolemiriam/ghcr-token ou ~/.config/ghcr-token)"
+    exit 1
+  fi
 fi
 
 # --- 3. Délégation au script blue-green GCP ---

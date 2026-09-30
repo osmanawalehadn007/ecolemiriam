@@ -110,6 +110,16 @@ une panne programmée. Corollaire : le checkout des jobs `staging` et `promote`
 doit rester en `fetch-depth: 0`, un bundle produit depuis un clone superficiel
 étant inexploitable par le dépôt de la VM.
 
+La même règle vaut pour **GHCR** : le `docker login` de la CI utilise le
+`GITHUB_TOKEN` éphémère du job, transmis par l'entrée standard
+(`GHCR_LOGIN_STDIN=1`) et confiné à un `DOCKER_CONFIG` temporaire — aucun jeton
+n'est écrit sur la VM. Le PAT classique de `/etc/ecolemiriam/ghcr-token`
+(échéance 30 jours, expiré le 30/09/2026 comme celui de git, ce qui a produit
+`Get "https://ghcr.io/v2/": denied: denied`) n'est plus lu que si le script est
+lancé à la main. Corollaire : le paquet `ghcr.io/wilsan007/ecolemiriam-app` doit
+rester **rattaché au dépôt** `wilsan007/EcolPro`, sinon le `GITHUB_TOKEN` du job
+n'y a plus accès.
+
 **Ne pas remettre de `git pull` dans `ci-deploy-gcp.sh`** pour le chemin CI. Ce
 script vit dans `/opt/ecolemiriam` : un `git pull` lancé depuis lui réécrit le
 fichier que bash est en train de lire, et l'exécution en cours termine sur
@@ -180,7 +190,7 @@ Secrets, en `640 root:ecolpro` dans `/etc/ecolemiriam/` :
 
 | Fichier | Usage |
 |---|---|
-| `ghcr-token` | PAT classique, scope `read:packages` — `docker pull` |
+| `ghcr-token` | PAT classique, scope `read:packages` — **uniquement pour un déploiement manuel sur la VM** : la CI se connecte à GHCR avec le `GITHUB_TOKEN` éphémère du job (voir la règle ci-dessous) |
 | `git-credentials` | PAT fine-grained, Contents Read-only sur `EcolPro` — **uniquement pour un `git pull` manuel sur la VM** : la CI ne s'en sert plus (voir la règle ci-dessous) |
 | `git-credential-ro.sh` | helper git système ; ignore `store`/`erase` pour que le fichier ne soit jamais réécrit |
 
