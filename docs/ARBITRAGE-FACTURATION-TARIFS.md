@@ -1,3 +1,5 @@
+pour l'arbitrage prennez la decison la plus optimal
+
 # Arbitrage facturation / tarifs — `main` vs `feat/invitations-facturation-tarifs`
 
 > État au 27/09/2026. Ce document **ne tranche pas** les questions métier : il
