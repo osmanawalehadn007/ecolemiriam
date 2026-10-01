@@ -9,9 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createDepense, deleteDepense } from "@/lib/actions/finances";
 import { getUsersForTenant } from "@/lib/actions/parametres";
+import { peutAutoriserDepense, peutPayerDepense } from "@/lib/depense-habilitations";
 import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
-import { peutAutoriserDepense, peutEmettreDepense } from "@/lib/depense-roles";
 
 interface Depense {
   id: string;
@@ -32,6 +32,8 @@ interface UserOption {
   id: string;
   name: string | null;
   role: string;
+  /** Un compte désactivé ne doit apparaître dans aucune liste déroulante. */
+  isActive: boolean;
 }
 
 function formatCurrency(value: number, devise: string) {
@@ -77,13 +79,29 @@ export function DepensesSection({
   useEffect(() => {
     getUsersForTenant()
       .then((data) =>
-        setUsers(data.filter((u) => u.isActive).map((u) => ({ id: u.id, name: u.name, role: u.role }))),
+        setUsers(
+          data.map((u) => ({
+            id: u.id,
+            name: u.name,
+            role: u.role,
+            isActive: u.isActive,
+          }))
+        )
       )
       .catch(() => {});
   }, []);
 
-  const autorisateurs = users.filter((u) => peutAutoriserDepense(u.role));
-  const emetteurs = users.filter((u) => peutEmettreDepense(u.role));
+  // Deux listes restreintes, alimentées par le référentiel partagé
+  // `@/lib/depense-habilitations` (le même que la server action et que les
+  // triggers PostgreSQL) :
+  //   « Autorisé par » → responsable d'établissement (TENANT_ADMIN) et chef
+  //                      d'établissement (PRINCIPAL) ;
+  //   « Payé par »     → comptable / caissier (ACCOUNTANT).
+  // Les comptes désactivés et les SUPER_ADMIN sont exclus dans tous les cas.
+  const autorisateurs = users.filter(
+    (u) => u.isActive && peutAutoriserDepense(u.role)
+  );
+  const payeurs = users.filter((u) => u.isActive && peutPayerDepense(u.role));
 
   const typeEngagementOptions = [
     { value: "bon_commande", label: t("engBonCommande") },
@@ -201,7 +219,7 @@ export function DepensesSection({
               onChange={(e) => setForm({ ...form, payeParId: e.target.value })}
             >
               <option value="">—</option>
-              {emetteurs.map((u) => (
+              {payeurs.map((u) => (
                 <option key={u.id} value={u.id}>{u.name ?? "—"}</option>
               ))}
             </select>
