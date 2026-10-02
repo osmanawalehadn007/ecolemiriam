@@ -75,7 +75,13 @@ export async function getFacturesForTenant(filters?: { statut?: string; eleveId?
       ...(filters?.eleveId ? { eleveId: filters.eleveId } : {}),
     },
     include: {
-      eleve: { select: { id: true, nom: true, prenom: true, matricule: true, classeId: true, classe: { select: { nom: true } } } },
+      eleve: {
+        select: {
+          id: true, nom: true, prenom: true, matricule: true, classeId: true,
+          // niveau + type de structure : regroupement de la liste par cycle
+          classe: { select: { nom: true, niveau: true, structure: { select: { type: true } } } },
+        },
+      },
       // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (facture déjà bornée)
       paiements: { include: { enregistrePar: { select: { id: true, name: true } } } },
       relances: { select: { id: true, niveau: true, envoyeeLe: true } },

@@ -11,6 +11,7 @@ import { createDepense, deleteDepense } from "@/lib/actions/finances";
 import { getUsersForTenant } from "@/lib/actions/parametres";
 import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
+import { peutAutoriserDepense, peutEmettreDepense } from "@/lib/depense-roles";
 
 interface Depense {
   id: string;
@@ -75,9 +76,14 @@ export function DepensesSection({
 
   useEffect(() => {
     getUsersForTenant()
-      .then((data) => setUsers(data.map((u) => ({ id: u.id, name: u.name, role: u.role }))))
+      .then((data) =>
+        setUsers(data.filter((u) => u.isActive).map((u) => ({ id: u.id, name: u.name, role: u.role }))),
+      )
       .catch(() => {});
   }, []);
+
+  const autorisateurs = users.filter((u) => peutAutoriserDepense(u.role));
+  const emetteurs = users.filter((u) => peutEmettreDepense(u.role));
 
   const typeEngagementOptions = [
     { value: "bon_commande", label: t("engBonCommande") },
@@ -182,7 +188,7 @@ export function DepensesSection({
               onChange={(e) => setForm({ ...form, autoriseParId: e.target.value })}
             >
               <option value="">—</option>
-              {users.map((u) => (
+              {autorisateurs.map((u) => (
                 <option key={u.id} value={u.id}>{u.name ?? "—"}</option>
               ))}
             </select>
@@ -195,7 +201,7 @@ export function DepensesSection({
               onChange={(e) => setForm({ ...form, payeParId: e.target.value })}
             >
               <option value="">—</option>
-              {users.map((u) => (
+              {emetteurs.map((u) => (
                 <option key={u.id} value={u.id}>{u.name ?? "—"}</option>
               ))}
             </select>

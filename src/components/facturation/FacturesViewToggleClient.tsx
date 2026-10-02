@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { FacturesTable } from "./FacturesTable";
 import { FacturesMonthlyView } from "./FacturesMonthlyView";
+import { FacturesParCategorie } from "./FacturesParCategorie";
+import { SEUIL_REGROUPEMENT } from "@/lib/facturation/categories";
 
 type FactureItem = Awaited<ReturnType<typeof import("@/lib/actions/facture").getFacturesForTenant>>[number];
 
@@ -45,7 +47,12 @@ export function FacturesViewToggleClient({ factures, userRole }: { factures: Fac
 
       {/* Views */}
       {view === "list" ? (
-        <FacturesTable factures={factures} />
+        // Au-delà du seuil, la liste à plat devient illisible : on la range par cycle puis par classe.
+        factures.length > SEUIL_REGROUPEMENT ? (
+          <FacturesParCategorie factures={factures} />
+        ) : (
+          <FacturesTable factures={factures} />
+        )
       ) : (
         <FacturesMonthlyView factures={factures} userRole={userRole} />
       )}

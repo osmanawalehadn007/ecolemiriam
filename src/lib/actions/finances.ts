@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { checkPermission } from "@/lib/rbac";
+import { ROLES_AUTORISATION_DEPENSE, ROLES_EMISSION_DEPENSE } from "@/lib/depense-roles";
 
 const DepenseSchema = z.object({
   categorie: z.string().min(1, "La catégorie est requise"),
@@ -71,6 +72,21 @@ export async function createDepense(data: z.infer<typeof DepenseSchema>) {
   const parsed = DepenseSchema.safeParse(data);
   if (!parsed.success) {
     throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
+  }
+
+  // Le formulaire ne propose que les bons rôles ; on le vérifie aussi ici.
+  const { autoriseParId, payeParId } = parsed.data;
+  if (autoriseParId) {
+    const ok = await prisma.user.count({
+      where: { id: autoriseParId, tenantId: session.user.tenantId, ...siteFilterForModel("user", session.user), role: { in: [...ROLES_AUTORISATION_DEPENSE] } },
+    });
+    if (!ok) throw new Error("Une dépense ne peut être autorisée que par le directeur ou le principal");
+  }
+  if (payeParId) {
+    const ok = await prisma.user.count({
+      where: { id: payeParId, tenantId: session.user.tenantId, ...siteFilterForModel("user", session.user), role: { in: [...ROLES_EMISSION_DEPENSE] } },
+    });
+    if (!ok) throw new Error("Une dépense ne peut être émise que par le comptable");
   }
 
   await prisma.depense.create({
