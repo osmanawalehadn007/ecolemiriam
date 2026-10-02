@@ -15,6 +15,7 @@ interface StructureItem {
   nom: string;
   actif: boolean;
   _count: { classes: number };
+  site: { id: string; nom: string } | null;
 }
 
 const TYPE_ICONS: Record<string, string> = {
@@ -51,6 +52,14 @@ export function StructureManager({ canManage }: { canManage: boolean }) {
       setLoading(false);
     }
   }
+
+  // Plusieurs sites : une même structure existe une fois par site, on affiche donc le site.
+  const plusieursSites = new Set(structures.map((s) => s.site?.id ?? null)).size > 1;
+  const structuresTriees = [...structures].sort(
+    (a, b) =>
+      (a.site?.nom ?? "").localeCompare(b.site?.nom ?? "", "fr") ||
+      TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type),
+  );
 
   const existingTypes = new Set(structures.map((s) => s.type));
   const availableTypes = TYPE_ORDER.filter((type) => !existingTypes.has(type));
@@ -137,7 +146,7 @@ export function StructureManager({ canManage }: { canManage: boolean }) {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {structures.map((s) => (
+              {structuresTriees.map((s) => (
                 <div
                   key={s.id}
                   className="flex items-center justify-between p-3 rounded-lg border bg-card hover:shadow-sm transition-shadow"
@@ -146,6 +155,9 @@ export function StructureManager({ canManage }: { canManage: boolean }) {
                     <span className="text-2xl">{TYPE_ICONS[s.type] ?? "📋"}</span>
                     <div>
                       <p className="font-medium text-sm">{s.nom}</p>
+                      {plusieursSites && (
+                        <p className="text-xs font-medium text-primary">{s.site?.nom ?? t("sharedAllSites")}</p>
+                      )}
                       <p className="text-xs text-muted-foreground">
                         {s._count.classes} {t("classes")}
                       </p>

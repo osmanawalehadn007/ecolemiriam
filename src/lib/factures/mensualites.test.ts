@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { libelleMensualite, libellesMensualite, MOIS_NOMS } from "@/lib/factures/mensualites";
+import { echeanceMensualite, libelleMensualite, libellesMensualite, MOIS_NOMS } from "@/lib/factures/mensualites";
 
 /**
  * Le libellé du mois est la clé d'idempotence de la facturation : il doit être
@@ -41,5 +41,18 @@ describe("libellesMensualite", () => {
 
   it("tolère un mois hors bornes sans casser le libellé", () => {
     expect(libelleMensualite(13, "2026-2027")).toBe("Scolarité Mois 13 2026-2027");
+  });
+});
+
+describe("echeanceMensualite", () => {
+  it("tombe le 10 du mois facturé", () => {
+    expect(echeanceMensualite(9, "2026")).toEqual(new Date(2026, 8, 10));
+    expect(echeanceMensualite(1, "2027")).toEqual(new Date(2027, 0, 10));
+  });
+  it("place septembre-décembre dans la 1re année scolaire, janvier-août dans la 2e", () => {
+    expect(echeanceMensualite(9, "2026-2027")).toEqual(new Date(2026, 8, 10));
+    expect(echeanceMensualite(12, "2026-2027")).toEqual(new Date(2026, 11, 10));
+    expect(echeanceMensualite(1, "2026-2027")).toEqual(new Date(2027, 0, 10));
+    expect(echeanceMensualite(6, "2026-2027")).toEqual(new Date(2027, 5, 10));
   });
 });

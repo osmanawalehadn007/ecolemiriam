@@ -43,6 +43,25 @@ export const MOIS_NOMS = [
 export const MOIS_RENTREE = 9;
 
 /**
+ * Délai de paiement d'une mensualité : elle est due le 10 du mois facturé.
+ * L'échéance suivait auparavant le dernier jour du mois (~30 jours), ce qui
+ * retardait d'autant les relances automatiques (calées sur l'échéance).
+ */
+export const JOUR_ECHEANCE_MENSUALITE = 10;
+
+/**
+ * Échéance d'une mensualité : le 10 du mois facturé. Année scolaire
+ * « 2026-2027 » : septembre à décembre tombent en 2026, janvier à août en 2027
+ * (sinon une mensualité de janvier naîtrait déjà échue, donc « en retard »).
+ * Une année simple (« 2026 ») est prise telle quelle.
+ */
+export function echeanceMensualite(mois: number, annee: string): Date {
+  const [debut, fin] = annee.split("-").map((a) => parseInt(a, 10));
+  const anneeCivile = fin && mois < MOIS_RENTREE ? fin : debut;
+  return new Date(anneeCivile, mois - 1, JOUR_ECHEANCE_MENSUALITE);
+}
+
+/**
  * Libellés acceptés pour une échéance mensuelle. L'ancienne génération écrivait
  * « Scolarité Septembre 2026 » (année seule) et la nouvelle
  * « Scolarité Septembre 2026-2027 » : les deux doivent être reconnus pour que
@@ -280,8 +299,7 @@ export async function genererMensualitesPourTenant(
       continue;
     }
 
-    // Échéance = dernier jour du mois facturé.
-    const echeance = new Date(parseInt(annee.split("-")[0], 10), mois, 0);
+    const echeance = echeanceMensualite(mois, annee);
     const numero = await reserverNumeroFacture(tenantId, prefixeNumero(annee));
 
     try {

@@ -2648,6 +2648,7 @@
   },
   "structures": {
     "title": "Educational structures",
+    "sharedAllSites": "All sites",
     "addStructure": "Add a structure",
     "selectStructures": "Select structures",
     "empty": "No structure defined. Select your school's structures to get started.",

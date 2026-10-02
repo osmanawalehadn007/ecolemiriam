@@ -2656,6 +2656,7 @@
   },
   "structures": {
     "title": "Structures pédagogiques",
+    "sharedAllSites": "Tous les sites",
     "addStructure": "Ajouter une structure",
     "selectStructures": "Choisir les structures",
     "empty": "Aucune structure définie. Sélectionnez les structures de votre établissement pour commencer.",

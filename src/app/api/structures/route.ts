@@ -25,6 +25,9 @@ export async function GET() {
       where: { tenantId: session.user.tenantId, ...siteFilterForModel("structure", session.user) },
       include: {
         _count: { select: { classes: true } },
+        // Les structures sont propres à chaque site : sans son nom, un
+        // directeur multi-sites voit « Primaire » en plusieurs exemplaires.
+        site: { select: { id: true, nom: true } },
       },
       orderBy: [{ type: "asc" }],
     });
@@ -81,7 +84,7 @@ export async function POST(req: NextRequest) {
 
     const all = await prisma.structure.findMany({
       where: { tenantId, ...siteFilterForModel("structure", session.user) },
-      include: { _count: { select: { classes: true } } },
+      include: { _count: { select: { classes: true } }, site: { select: { id: true, nom: true } } },
       orderBy: [{ type: "asc" }],
     });
 
