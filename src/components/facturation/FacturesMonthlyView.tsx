@@ -12,35 +12,10 @@ import {
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { hasPermission } from "@/lib/client-permissions";
+import { FacturesParCategorie } from "./FacturesParCategorie";
+import { SEUIL_REGROUPEMENT } from "@/lib/facturation/categories";
 
-interface FactureMensuelle {
-  id: string;
-  numero: string;
-  libelle: string;
-  montant: number;
-  devise: string;
-  statut: "EN_ATTENTE" | "PAYEE" | "EN_RETARD" | "ANNULEE";
-  echeance: Date | null;
-  createdAt: Date;
-  mois: string | null;
-  eleve: {
-    id: string;
-    nom: string;
-    prenom: string;
-    matricule: string;
-    classe: { nom: string } | null;
-  } | null;
-  candidature: {
-    id: string;
-    nom: string;
-    prenom: string;
-    classeVoulue: string;
-    annee: string;
-    statut: string;
-  } | null;
-  paiements: { montant: number }[];
-  relances: { id: string; niveau: number; envoyeeLe: Date }[];
-}
+type FactureMensuelle = Awaited<ReturnType<typeof import("@/lib/actions/facture").getFacturesForTenant>>[number];
 
 interface FacturesMonthlyViewProps {
   factures: FactureMensuelle[];
@@ -298,6 +273,11 @@ export function FacturesMonthlyView({ factures, userRole }: FacturesMonthlyViewP
 
                     {filteredFacs.length === 0 ? (
                       <p className="text-center py-6 text-sm text-muted-foreground">{t("noInvoices")}</p>
+                    ) : filteredFacs.length > SEUIL_REGROUPEMENT ? (
+                      // Même rangement que la liste : cycle → classe → factures.
+                      <div className="p-4">
+                        <FacturesParCategorie factures={filteredFacs} />
+                      </div>
                     ) : (
                       <table className="w-full text-sm">
                         <thead className="bg-muted/30 border-b">
