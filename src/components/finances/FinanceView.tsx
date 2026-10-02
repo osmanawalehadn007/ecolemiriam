@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +24,7 @@ import { DepensesSection } from "./DepensesSection";
 import { BudgetSection } from "./BudgetSection";
 import { RemiseCaisseSection } from "./RemiseCaisseSection";
 import { hasPermission } from "@/lib/client-permissions";
+import { getPaymentMethodType } from "@/lib/payment-methods";
 
 type Periode = "today" | "week" | "month" | "semester" | "year";
 type FinanceType = "all" | "recettes" | "depenses" | "factures";
@@ -54,6 +56,13 @@ interface Paiement {
     eleve: { nom: string; prenom: string | null } | null;
   };
   enregistrePar: { name: string | null } | null;
+}
+
+interface RecetteParMethode {
+  methode: string;
+  devise: string;
+  montant: number;
+  nombre: number;
 }
 
 interface FacturePeriode {
@@ -134,7 +143,7 @@ export function FinanceView({
   cashPending,
   depenses,
   budgets,
-  paiements,
+  recettesParMethode,
   facturesPeriode,
   remisesCaisse,
   activeSite,
@@ -155,7 +164,7 @@ export function FinanceView({
   cashPending: Paiement[];
   depenses: Depense[];
   budgets: Budget[];
-  paiements: Paiement[];
+  recettesParMethode: RecetteParMethode[];
   facturesPeriode: FacturePeriode[];
   remisesCaisse: RemiseCaisse[];
   activeSite: string;
@@ -173,7 +182,7 @@ export function FinanceView({
   const router = useRouter();
   const searchParams = useSearchParams();
   const canWriteFinance = hasPermission(currentUser.role, "finance:write");
-  const currency = paiements[0]?.devise ?? facturesPeriode[0]?.devise ?? "DJF";
+  const currency = recettesParMethode[0]?.devise ?? facturesPeriode[0]?.devise ?? "DJF";
   const siteColor = activeSite === "all" ? undefined : siteColors[activeSite];
 
   const [depotId, setDepotId] = useState<string | null>(null);
@@ -265,6 +274,22 @@ export function FinanceView({
       toast.error(e instanceof Error ? e.message : "Erreur");
     }
   }
+
+  const nombrePaiements = recettesParMethode.reduce((n, r) => n + r.nombre, 0);
+  const recettesParType = (["CASH", "MOBILE_MONEY", "BANK", "CARD", "OTHER"] as const)
+    .map((type) => {
+      const lignes = recettesParMethode.filter((r) => (getPaymentMethodType(r.methode) ?? "OTHER") === type);
+      return {
+        type,
+        montant: lignes.reduce((m, r) => m + r.montant, 0),
+        nombre: lignes.reduce((n, r) => n + r.nombre, 0),
+      };
+    })
+    .filter((r) => r.nombre > 0);
+
+  const facturesPayees = facturesPeriode.filter((f) => f.statut === "PAYEE").length;
+  const facturesEnAttente = facturesPeriode.filter((f) => f.statut === "EN_ATTENTE").length;
+  const facturesEnRetard = facturesPeriode.filter((f) => f.statut === "EN_RETARD").length;
 
   const stats = [
     { label: t("totalInvoiced"), value: totalFactures, color: "text-blue-600" },
@@ -419,51 +444,40 @@ export function FinanceView({
         </Card>
       )}
 
-      {/* ── Section Recettes (paiements) ── */}
+      {/* ── Montants perçus : un indicateur, pas la liste des paiements ── */}
       {showRecettes && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-green-600" />
-              {t("paymentsForSite", { site: currentSiteName })}
+              {t("amountsReceivedForSite", { site: currentSiteName })}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {paiements.length === 0 ? (
+            {nombrePaiements === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">{t("noPayments")}</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-muted-foreground text-xs">
-                      <th className="text-left py-2 pr-2">{t("date")}</th>
-                      <th className="text-left py-2 pr-2">{t("student")}</th>
-                      <th className="text-left py-2 pr-2">{t("invoice")}</th>
-                      <th className="text-left py-2 pr-2">{t("method")}</th>
-                      <th className="text-left py-2 pr-2">{t("reference")}</th>
-                      <th className="text-right py-2">{t("amount")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paiements.map((p) => (
-                      <tr key={p.id} className="border-b last:border-0">
-                        <td className="py-2 pr-2 whitespace-nowrap">{formatDate(p.date)}</td>
-                        <td className="py-2 pr-2">{p.facture.eleve ? `${p.facture.eleve.prenom ? `${p.facture.eleve.prenom} ` : ""}${p.facture.eleve.nom}` : "—"}</td>
-                        <td className="py-2 pr-2">{p.facture.numero}</td>
-                        <td className="py-2 pr-2 capitalize">{p.methode}</td>
-                        <td className="py-2 pr-2 text-muted-foreground">{p.reference ?? "—"}</td>
-                        <td className="py-2 text-right font-medium">{formatCurrency(p.montant, p.devise)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-3xl font-bold text-green-600">{formatCurrency(totalEncaisse, currency)}</p>
+                  <p className="text-xs text-muted-foreground">{t("paymentsCount", { count: nombrePaiements })}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {recettesParType.map((r) => (
+                    <div key={r.type} className="rounded-xl border bg-muted/30 px-3 py-2">
+                      <p className="text-xs text-muted-foreground">{t(`methodType_${r.type}`)}</p>
+                      <p className="text-lg font-bold">{formatCurrency(r.montant, currency)}</p>
+                      <p className="text-xs text-muted-foreground">{t("paymentsCount", { count: r.nombre })}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* ── Section Factures émises ── */}
+      {/* ── Factures émises : synthèse seulement, la liste est dans /facturation ── */}
       {showFactures && (
         <Card>
           <CardHeader className="pb-2">
@@ -479,47 +493,27 @@ export function FinanceView({
             {facturesPeriode.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">{t("noInvoicesPeriod")}</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-muted-foreground text-xs">
-                      <th className="text-left py-2 pr-2">{t("date")}</th>
-                      <th className="text-left py-2 pr-2">{t("colNumber")}</th>
-                      <th className="text-left py-2 pr-2">{t("student")}</th>
-                      <th className="text-left py-2 pr-2">{t("colStatus")}</th>
-                      <th className="text-right py-2 pr-2">{t("amount")}</th>
-                      <th className="text-right py-2 pr-2">{t("colPaid")}</th>
-                      <th className="text-right py-2">{t("colRemaining")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {facturesPeriode.map((f) => {
-                      const paye = f.paiements.reduce((s, p) => s + p.montant, 0);
-                      const restant = f.montant - paye;
-                      return (
-                        <tr key={f.id} className="border-b last:border-0 hover:bg-muted/20">
-                          <td className="py-2 pr-2 whitespace-nowrap">{formatDate(f.createdAt)}</td>
-                          <td className="py-2 pr-2 font-mono text-xs">{f.numero}</td>
-                          <td className="py-2 pr-2">
-                            <div className="font-medium text-xs">{f.eleve?.prenom ?? ""} {f.eleve?.nom ?? ""}</div>
-                            <div className="text-xs text-muted-foreground">{f.eleve?.classe?.nom ?? "N/A"}</div>
-                          </td>
-                          <td className="py-2 pr-2">
-                            {f.statut === "PAYEE" && <Badge variant="success" className="text-xs">{t("statusPaid")}</Badge>}
-                            {f.statut === "EN_ATTENTE" && <Badge variant="warning" className="text-xs">{t("statusPending")}</Badge>}
-                            {f.statut === "EN_RETARD" && <Badge variant="destructive" className="text-xs">{t("statusOverdue")}</Badge>}
-                            {f.statut === "ANNULEE" && <Badge variant="secondary" className="text-xs">{t("statusCancelled")}</Badge>}
-                          </td>
-                          <td className="py-2 pr-2 text-right font-medium text-xs">{formatCurrency(f.montant, f.devise)}</td>
-                          <td className="py-2 pr-2 text-right text-green-600 text-xs">{formatCurrency(paye, f.devise)}</td>
-                          <td className={cn("py-2 text-right font-medium text-xs", restant > 0 ? "text-red-600" : "text-green-600")}>
-                            {formatCurrency(restant, f.devise)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap gap-6 text-sm">
+                  <div>
+                    <p className="text-2xl font-bold text-green-600">{facturesPayees}</p>
+                    <p className="text-xs text-muted-foreground">{t("statusPaid")}</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-yellow-600">{facturesEnAttente}</p>
+                    <p className="text-xs text-muted-foreground">{t("statusPending")}</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-red-600">{facturesEnRetard}</p>
+                    <p className="text-xs text-muted-foreground">{t("statusOverdue")}</p>
+                  </div>
+                </div>
+                <Button asChild variant="outline" size="sm" className="gap-2">
+                  <Link href="/facturation">
+                    <FileText className="h-4 w-4" />
+                    {t("seeInvoicesDetail")}
+                  </Link>
+                </Button>
               </div>
             )}
           </CardContent>

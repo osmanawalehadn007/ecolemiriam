@@ -92,7 +92,7 @@ const getFinanceDataCached = unstable_cache(
 
       const { start, end } = monthRange ?? getPeriodRange(periode);
 
-      const [availableMonths, totalAgg, paiements, totalFacturesAgg, cashPendingAgg, cashPending, totalDepensesAgg, depenses, budgets, remisesCaisse, facturesPeriode] = await Promise.all([
+      const [availableMonths, totalAgg, paiementsParMethodeAgg, totalFacturesAgg, cashPendingAgg, cashPending, totalDepensesAgg, depenses, budgets, remisesCaisse, facturesPeriode] = await Promise.all([
         // Mois disponibles
         (async () => {
           const [factureDates, paiementDates, depenseDates] = await Promise.all([
@@ -138,15 +138,14 @@ const getFinanceDataCached = unstable_cache(
           _sum: { montant: true },
           where: { date: { gte: start, lte: end }, facture: { tenantId, ...siteFilter } },
         }),
+        // Montants perçus par moyen de paiement : un agrégat exact, là où la liste
+        // des paiements était tronquée à 200 lignes.
         // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
-        prisma.paiement.findMany({
+        prisma.paiement.groupBy({
+          by: ["methode", "devise"],
+          _sum: { montant: true },
+          _count: { _all: true },
           where: { date: { gte: start, lte: end }, facture: { tenantId, ...siteFilter } },
-          include: {
-            facture: { select: { numero: true, site: { select: { nom: true } }, eleve: { select: { nom: true, prenom: true } } } },
-            enregistrePar: { select: { name: true } },
-          },
-          orderBy: { date: "desc" },
-          take: 200,
         }),
         prisma.facture.aggregate({
           _sum: { montant: true },
@@ -208,7 +207,12 @@ const getFinanceDataCached = unstable_cache(
         depenses,
         budgets,
         remisesCaisse,
-        paiements,
+        recettesParMethode: paiementsParMethodeAgg.map((g) => ({
+          methode: g.methode,
+          devise: g.devise,
+          montant: g._sum.montant ?? 0,
+          nombre: g._count._all,
+        })),
         facturesPeriode,
       };
     });
@@ -273,7 +277,7 @@ export default async function FinancesPage(
     activeMonth,
   );
 
-  const { availableMonths, totalEncaisse, totalFactures, totalRestant, cashPendingTotal, cashPending, totalDepenses, depenses, budgets, remisesCaisse, paiements, facturesPeriode } = cached;
+  const { availableMonths, totalEncaisse, totalFactures, totalRestant, cashPendingTotal, cashPending, totalDepenses, depenses, budgets, remisesCaisse, recettesParMethode, facturesPeriode } = cached;
 
   const currentSiteName = activeSite === "all"
     ? tCommon("allSites")
@@ -306,7 +310,7 @@ export default async function FinancesPage(
           cashPending={cashPending}
           depenses={depenses}
           budgets={budgets}
-          paiements={paiements}
+          recettesParMethode={recettesParMethode}
           facturesPeriode={facturesPeriode}
           remisesCaisse={remisesCaisse}
           activeSite={activeSite}
