@@ -103,10 +103,10 @@ jobs:
       # ── Audit de sécurité des dépendances (npm audit) ──────────────────
       # Bloque le CI si une vulnérabilité de niveau high ou critical est
       # détectée dans les dépendances. Les vulnérabilités moderate et low
-      # sont affichées mais ne bloquent pas (continue-on-error: false sur
-      # --audit-level=high uniquement).
+      # sont ignorées. Les exceptions (avis sans correctif disponible) sont
+      # nominatives et motivées dans scripts/ci/audit-dependances.mjs.
       - name: Dependency audit (high+)
-        run: npm audit --audit-level=high
+        run: node scripts/ci/audit-dependances.mjs
         continue-on-error: false
 
       # ── Garde-fous de dépôt (cible de déploiement, secrets, doc env) ────
