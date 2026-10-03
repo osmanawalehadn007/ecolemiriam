@@ -29,6 +29,13 @@ describe("StudentSearch", () => {
     expect(screen.getByText("Jane Smith")).toBeInTheDocument();
   });
 
+  it("lists students in alphabetical order of their displayed name", () => {
+    render(<StudentSearch students={mockStudents} value="" onChange={mockOnChange} />);
+    fireEvent.focus(screen.getByRole("combobox"));
+    const names = screen.getAllByRole("listitem").map((li) => li.querySelector(".font-medium")?.textContent);
+    expect(names).toEqual(["Bob Brown", "Jane Smith", "John Doe"]);
+  });
+
   it("filters students by query", () => {
     render(<StudentSearch students={mockStudents} value="" onChange={mockOnChange} />);
     fireEvent.focus(screen.getByRole("combobox"));

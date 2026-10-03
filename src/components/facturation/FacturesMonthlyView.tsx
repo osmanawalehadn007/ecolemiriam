@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { hasPermission } from "@/lib/client-permissions";
 import { FacturesParCategorie } from "./FacturesParCategorie";
 import { SEUIL_REGROUPEMENT } from "@/lib/facturation/categories";
+import { trierFactures } from "@/lib/facturation/tri";
 
 type FactureMensuelle = Awaited<ReturnType<typeof import("@/lib/actions/facture").getFacturesForTenant>>[number];
 
@@ -176,14 +177,14 @@ export function FacturesMonthlyView({ factures, userRole }: FacturesMonthlyViewP
             const isExpanded = expandedMonth === mois;
 
             // Filtrer les factures selon le filtre statut
-            const filteredFacs = facs.filter((f) => {
+            const filteredFacs = trierFactures(facs.filter((f) => {
               if (filterStatus === "ALL") return true;
               if (filterStatus === "PAYEE") return f.statut === "PAYEE";
               if (filterStatus === "EN_ATTENTE") return f.statut === "EN_ATTENTE";
               if (filterStatus === "EN_RETARD") return f.statut === "EN_RETARD";
               if (filterStatus === "RELANCEE") return f.relances.length > 0;
               return true;
-            });
+            }));
 
             return (
               <Card key={mois} className="overflow-hidden">

@@ -137,7 +137,7 @@ function todayInputValue() {
 export function FinanceView({
   totalEncaisse,
   totalFactures,
-  totalRestant,
+  resultatNet,
   totalDepenses,
   cashPendingTotal,
   cashPending,
@@ -158,7 +158,7 @@ export function FinanceView({
 }: {
   totalEncaisse: number;
   totalFactures: number;
-  totalRestant: number;
+  resultatNet: number;
   totalDepenses: number;
   cashPendingTotal: number;
   cashPending: Paiement[];
@@ -291,12 +291,19 @@ export function FinanceView({
   const facturesEnAttente = facturesPeriode.filter((f) => f.statut === "EN_ATTENTE").length;
   const facturesEnRetard = facturesPeriode.filter((f) => f.statut === "EN_RETARD").length;
 
-  const stats = [
-    { label: t("totalInvoiced"), value: totalFactures, color: "text-blue-600" },
-    { label: t("totalCollected"), value: totalEncaisse, color: "text-green-600", siteColor },
-    { label: t("totalRemaining"), value: totalRestant, color: "text-orange-600" },
-    { label: t("totalExpenses"), value: totalDepenses, color: "text-red-600" },
-  ];
+  type Stat = { label: string; value: number; color: string; siteColor?: SiteColor };
+  const statFacture: Stat = { label: t("totalInvoiced"), value: totalFactures, color: "text-blue-600" };
+  const statEncaisse: Stat = { label: t("totalCollected"), value: totalEncaisse, color: "text-green-600", siteColor };
+  const statDepenses: Stat = { label: t("totalExpenses"), value: totalDepenses, color: "text-red-600" };
+  // Libellé et couleur suivent le signe ; le montant est affiché en valeur absolue.
+  const statResultat: Stat =
+    resultatNet > 0
+      ? { label: t("resultSurplus"), value: resultatNet, color: "text-green-600" }
+      : resultatNet < 0
+        ? { label: t("resultShortfall"), value: -resultatNet, color: "text-red-600" }
+        : { label: t("resultBalanced"), value: 0, color: "text-muted-foreground" };
+  // Le résultat vient en dernier : il se lit comme le total des cartes qui le précèdent.
+  const stats = [statFacture, statEncaisse, statDepenses, statResultat];
 
   const exportHref = activeMonth
     ? `/api/finances/export?siteId=${activeSite}&month=${activeMonth}&type=${activeType}`
@@ -307,14 +314,13 @@ export function FinanceView({
   const showDepenses = showAll || activeType === "depenses";
   const showFactures = showAll || activeType === "factures";
 
-  const filteredStats = showAll
-    ? stats
-    : activeType === "recettes"
-      ? [stats[1], stats[2]]
+  const filteredStats =
+    activeType === "recettes"
+      ? [statEncaisse, statResultat]
       : activeType === "depenses"
-        ? [stats[3]]
+        ? [statDepenses]
         : activeType === "factures"
-          ? [stats[0], stats[2]]
+          ? [statFacture, statResultat]
           : stats;
 
   return (

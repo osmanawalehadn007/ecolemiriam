@@ -10,6 +10,7 @@ import { Download, Plus, Filter, Eye, User, X, UserPlus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { StudentSearch } from "./StudentSearch";
 import { getPaymentMethod, getPaymentMethodType } from "@/lib/payment-methods";
+import { trierFactures } from "@/lib/facturation/tri";
 
 interface FactureWithRelations {
   id: string;
@@ -121,7 +122,7 @@ export function FacturesTable({ factures }: FacturesTableProps) {
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return factures.filter((f) => {
+    return trierFactures(factures.filter((f) => {
       const matchesSearch =
         !q ||
         f.numero.toLowerCase().includes(q) ||
@@ -135,7 +136,7 @@ export function FacturesTable({ factures }: FacturesTableProps) {
       const matchesEleve = !eleveFilterId || f.eleve?.id === eleveFilterId;
       const matchesAdmission = !admissionFilter || (!f.eleve && !!f.candidature);
       return matchesSearch && matchesStatut && matchesEleve && matchesAdmission;
-    });
+    }));
   }, [factures, search, statutFilter, eleveFilterId, admissionFilter]);
 
   const totalMontant = filtered.reduce((sum, f) => sum + f.montant, 0);

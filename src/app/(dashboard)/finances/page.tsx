@@ -200,7 +200,12 @@ const getFinanceDataCached = unstable_cache(
         availableMonths,
         totalEncaisse: totalAgg._sum.montant ?? 0,
         totalFactures: totalFacturesAgg._sum.montant ?? 0,
-        totalRestant: (totalFacturesAgg._sum.montant ?? 0) - (totalAgg._sum.montant ?? 0),
+        // Résultat de la période : encaissé − facturé − dépenses.
+        // Positif = plus-value encaissée, négatif = manque à encaisser.
+        resultatNet:
+          (totalAgg._sum.montant ?? 0) -
+          (totalFacturesAgg._sum.montant ?? 0) -
+          (totalDepensesAgg._sum.montant ?? 0),
         cashPendingTotal: cashPendingAgg._sum.montant ?? 0,
         cashPending,
         totalDepenses: totalDepensesAgg._sum.montant ?? 0,
@@ -217,7 +222,7 @@ const getFinanceDataCached = unstable_cache(
       };
     });
   },
-  ["finances-data"],
+  ["finances-data-v2"],
   { revalidate: 30, tags: ["finances-data"] }
 );
 
@@ -277,7 +282,7 @@ export default async function FinancesPage(
     activeMonth,
   );
 
-  const { availableMonths, totalEncaisse, totalFactures, totalRestant, cashPendingTotal, cashPending, totalDepenses, depenses, budgets, remisesCaisse, recettesParMethode, facturesPeriode } = cached;
+  const { availableMonths, totalEncaisse, totalFactures, resultatNet, cashPendingTotal, cashPending, totalDepenses, depenses, budgets, remisesCaisse, recettesParMethode, facturesPeriode } = cached;
 
   const currentSiteName = activeSite === "all"
     ? tCommon("allSites")
@@ -304,7 +309,7 @@ export default async function FinancesPage(
         <FinanceView
           totalEncaisse={totalEncaisse}
           totalFactures={totalFactures}
-          totalRestant={totalRestant}
+          resultatNet={resultatNet}
           totalDepenses={totalDepenses}
           cashPendingTotal={cashPendingTotal}
           cashPending={cashPending}

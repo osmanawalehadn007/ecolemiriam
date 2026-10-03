@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { refuserSiNonAutorise, pourChaqueTenant } from "@/lib/cron";
 
 /**
  * Cron endpoint: PURGE definitively deleted sites after their grace period.
@@ -11,20 +12,32 @@ import prisma from "@/lib/prisma";
  */
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
+  const refus = refuserSiNonAutorise(req);
+  if (refus) return refus;
 
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const parTenant = await pourChaqueTenant((tenant) => purgerTenant(tenant.id));
+  const bilans = parTenant.flatMap((r) => (r.ok ? [r.resultat] : []));
+  const erreurs = [
+    ...bilans.flatMap((b) => b.errors),
+    ...parTenant.flatMap((r) => (r.ok ? [] : [`tenant ${r.tenantId}: ${r.erreur}`])),
+  ];
 
+  return NextResponse.json({
+    purged: bilans.reduce((s, b) => s + b.purged, 0),
+    total: bilans.reduce((s, b) => s + b.total, 0),
+    errors: erreurs.length > 0 ? erreurs : undefined,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+// Tâche système authentifiée par CRON_SECRET, sans session : chaque tenant
+// est traité dans son contexte RLS pour purger ses sites arrivés à échéance.
+async function purgerTenant(tenantId: string) {
   const now = new Date();
 
-  // Tâche système authentifiée par CRON_SECRET, sans session : elle balaie
-  // délibérément tous les tenants pour purger les sites arrivés à échéance.
-  // eslint-disable-next-line ecolemiriam/require-tenant-id
   const sitesToPurge = await prisma.site.findMany({
     where: {
+      tenantId,
       deletedAt: { not: null },
       scheduledPurgeAt: { lte: now },
     },
@@ -36,10 +49,6 @@ export async function GET(req: NextRequest) {
       deletedReason: true,
     },
   });
-
-  if (sitesToPurge.length === 0) {
-    return NextResponse.json({ purged: 0, message: "No sites to purge" });
-  }
 
   let purged = 0;
   const errors: string[] = [];
@@ -69,10 +78,5 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({
-    purged,
-    total: sitesToPurge.length,
-    errors: errors.length > 0 ? errors : undefined,
-    timestamp: now.toISOString(),
-  });
+  return { purged, total: sitesToPurge.length, errors };
 }

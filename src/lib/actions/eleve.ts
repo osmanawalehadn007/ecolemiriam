@@ -10,6 +10,7 @@ import { mergeFilters } from "@/lib/site-scope";
 import { checkPermission } from "@/lib/rbac";
 import { audit } from "@/lib/audit";
 import { reserverNumeroFacture } from "@/lib/facture-numero";
+import { indexerTarifs } from "@/lib/facturation/tarifs";
 import { trouverDoublon, resoudreIdentiteKey, cleDepuisFiche } from "@/lib/eleve-identity-server";
 import { estDateApproximative } from "@/lib/eleve-identity";
 import { z } from "zod";
@@ -297,17 +298,12 @@ export async function createEleve(
   // ── Générer la facture d'inscription (frais inscription + mensualité septembre) ──
   //    Même logique que le workflow d'admission : on cherche le TarifNiveau
   //    pour le niveau/site/année, et on crée une facture liée à la candidature.
-   
-  const tarif = await prisma.tarifNiveau.findFirst({
-    where: {
-      tenantId,
-      niveau: classeNiveau ?? "",
-      annee: anneeInscription,
-      actif: true,
-      OR: [{ siteId: resolvedSiteId }, { siteId: null }],
-    },
-    orderBy: { siteId: { sort: "desc", nulls: "last" } }, // privilégier le tarif spécifique au site (NULLs en dernier sur Postgres)
+  //    Tarif du site prioritaire, puis global ; niveau comparé sous forme
+  //    canonique ("1" = "1ère").
+  const tarifs = await prisma.tarifNiveau.findMany({
+    where: { tenantId, annee: anneeInscription, actif: true },
   });
+  const tarif = indexerTarifs(tarifs)(classeNiveau, resolvedSiteId);
 
   const fraisInscription = tarif?.fraisInscription ?? 0;
   const mensualite = tarif?.mensualite ?? 0;

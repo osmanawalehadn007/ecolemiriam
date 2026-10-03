@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { cn, compareAlpha } from "@/lib/utils";
 
 interface StudentOption {
   id: string;
@@ -46,10 +46,16 @@ export function StudentSearch({
     }
   }, [selected]);
 
+  // Tri alphabétique sur le nom tel qu'il est affiché (« Prénom Nom »)
+  const sorted = useMemo(
+    () => [...students].sort((a, b) => compareAlpha(`${a.prenom} ${a.nom}`, `${b.prenom} ${b.nom}`)),
+    [students]
+  );
+
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
-    if (!q) return students.slice(0, 50);
-    return students
+    if (!q) return sorted.slice(0, 100);
+    return sorted
       .filter(
         (s) =>
           s.nom.toLowerCase().includes(q) ||
@@ -58,7 +64,7 @@ export function StudentSearch({
           s.classe?.nom?.toLowerCase().includes(q)
       )
       .slice(0, 20);
-  }, [students, query]);
+  }, [sorted, query]);
 
   useEffect(() => {
     setHighlighted(0);

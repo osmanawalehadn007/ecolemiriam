@@ -10,18 +10,20 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Loader2, Save, Sparkles, AlertCircle, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { cn, compareAlpha } from "@/lib/utils";
 import { createFacturesCombinees, getExistingFacturesForEleve, type FacturesCombineesData } from "@/lib/actions/facture";
 import { StudentSearch } from "./StudentSearch";
 import { useTranslations } from "next-intl";
 import { niveauToLabel } from "@/lib/niveau";
+import { indexerTarifs } from "@/lib/facturation/tarifs";
 
 interface EleveOption {
   id: string;
   nom: string;
   prenom: string;
   matricule: string;
-  classe: { id: string; nom: string; niveau: string } | null;
+  siteId: string | null;
+  classe: { id: string; nom: string; niveau: string; siteId: string | null } | null;
 }
 
 interface ClasseOption {
@@ -33,6 +35,7 @@ interface ClasseOption {
 interface TarifOption {
   id: string;
   niveau: string;
+  siteId: string | null;
   mensualite: number;
   fraisInscription: number;
   fraisRenouvellement: number;
@@ -106,6 +109,8 @@ export function FactureForm({
     }
   }, [eleveIdPreselected, eleves]);
 
+  const sortedClasses = useMemo(() => [...classes].sort((a, b) => compareAlpha(a.nom, b.nom)), [classes]);
+
   const filteredEleves = useMemo(() => {
     if (!selectedClasseId) return eleves;
     return eleves.filter((e) => e.classe?.id === selectedClasseId);
@@ -116,12 +121,13 @@ export function FactureForm({
     [eleves, form.eleveId]
   );
 
+  // Tarif propre au site de l'élève en priorité, sinon tarif global ; les
+  // niveaux sont comparés sous forme canonique ("1" = "1ère").
+  const trouverTarif = useMemo(() => indexerTarifs(tarifs), [tarifs]);
   const matchedTarif = useMemo(() => {
     if (!selectedEleve?.classe?.niveau) return null;
-    return tarifs.find(
-      (t) => t.niveau.toLowerCase() === selectedEleve.classe!.niveau.toLowerCase()
-    ) ?? null;
-  }, [tarifs, selectedEleve]);
+    return trouverTarif(selectedEleve.classe.niveau, selectedEleve.siteId ?? selectedEleve.classe.siteId) ?? null;
+  }, [trouverTarif, selectedEleve]);
 
   // Charger les factures existantes de l'élève sélectionné
   useEffect(() => {
@@ -161,6 +167,24 @@ export function FactureForm({
     return f?.statut === "PAYEE";
   }
 
+  const selectedMonthlyServices = selectedServices.filter((s) => TYPES_MENSUELS.includes(s));
+
+  // Un mois est verrouillé quand tous les services mensuels sélectionnés sont
+  // déjà facturés pour ce mois (par défaut : la mensualité).
+  function isMonthLocked(mois: string, monthlyServices: FactureType[] = selectedMonthlyServices) {
+    const services = monthlyServices.length > 0 ? monthlyServices : (["MENSUALITE"] as FactureType[]);
+    return services.every((s) => isLocked(s, mois));
+  }
+
+  function monthExistingFacture(mois: string) {
+    const services = selectedMonthlyServices.length > 0 ? selectedMonthlyServices : (["MENSUALITE"] as FactureType[]);
+    return getExistingFor(services.includes("MENSUALITE") ? "MENSUALITE" : services[0], mois);
+  }
+
+  function isServiceUnavailable(type: FactureType) {
+    return type === "CANTINE" && !matchedTarif?.fraisCantine;
+  }
+
   function handleStudentChange(eleveId: string) {
     setForm({ eleveId });
     setSelectedServices([]);
@@ -171,17 +195,18 @@ export function FactureForm({
   }
 
   function toggleService(type: FactureType) {
-    setSelectedServices((prev) => {
-      if (prev.includes(type)) {
-        return prev.filter((s) => s !== type);
-      }
+    // Exclusions mutuelles : inscription / réinscription
+    const next = selectedServices.includes(type)
+      ? selectedServices.filter((s) => s !== type)
+      : [...selectedServices.filter((s) => !TYPE_EXCLUSIVE[type].includes(s)), type];
+    setSelectedServices(next);
 
-      // Exclusions mutuelles : inscription / réinscription
-      const exclusive = TYPE_EXCLUSIVE[type];
-      const next = [...prev.filter((s) => !exclusive.includes(s)), type];
-
-      // Si on active une inscription/réinscription, on supprime l'autre
-      return next;
+    // Retirer les mois devenus entièrement facturés pour les nouveaux services,
+    // afin que la sélection affichée corresponde exactement à ce qui sera facturé.
+    const nextMonthly = next.filter((s) => TYPES_MENSUELS.includes(s));
+    setSelectedMonths((prev) => {
+      const kept = new Set([...prev].filter((mk) => !isMonthLocked(mk, nextMonthly)));
+      return kept.size === prev.size ? prev : kept;
     });
   }
 
@@ -209,8 +234,7 @@ export function FactureForm({
         next.delete(moisKey);
       } else {
         // Ne pas ajouter si déjà facturé (verrouillé)
-        const existingFor = existingByKey.get(`MENSUALITE:${moisKey}`);
-        if (existingFor && existingFor.statut !== "ANNULEE") return next;
+        if (isMonthLocked(moisKey)) return next;
         next.add(moisKey);
       }
       return next;
@@ -286,6 +310,10 @@ export function FactureForm({
   }, [selectedServices, selectedEleve, matchedTarif, selectedYear, existingByKey, selectedMonths]);
 
   const totalAmount = useMemo(() => drafts.reduce((sum, d) => sum + d.montant, 0), [drafts]);
+  const monthlyTotal = useMemo(
+    () => drafts.filter((d) => d.mois !== null).reduce((sum, d) => sum + d.montant, 0),
+    [drafts]
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -383,7 +411,7 @@ export function FactureForm({
                   className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="">{t("allClasses")}</option>
-                  {classes.map((c) => (
+                  {sortedClasses.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.nom}
                     </option>
@@ -433,8 +461,8 @@ export function FactureForm({
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                 {moisScolaires.map((m) => {
                   const isSel = selectedMonths.has(m.key);
-                  const locked = isLocked("MENSUALITE", m.key);
-                  const existingFor = getExistingFor("MENSUALITE", m.key);
+                  const locked = isMonthLocked(m.key);
+                  const existingFor = monthExistingFacture(m.key);
                   const paid = isPaid(existingFor);
 
                   return (
@@ -469,7 +497,7 @@ export function FactureForm({
                 <p className="text-xs text-muted-foreground">
                   {t("monthsSelected", { count: selectedMonths.size })} —{" "}
                   <span className="font-semibold text-primary">
-                    {(selectedMonths.size * matchedTarif.mensualite).toLocaleString()} {matchedTarif.devise}
+                    {monthlyTotal.toLocaleString()} {matchedTarif.devise}
                   </span>
                 </p>
               )}
@@ -489,7 +517,8 @@ export function FactureForm({
                 // des boutons de mois, pas au niveau du bouton de service.
                 // Pour les services non mensuels, on garde le verrouillage ici.
                 const existingFor = opt.requiresMonth ? null : getExistingFor(opt.value);
-                const locked = opt.requiresMonth ? false : isLocked(opt.value);
+                const unavailable = isServiceUnavailable(opt.value);
+                const locked = unavailable || (opt.requiresMonth ? false : isLocked(opt.value));
                 const paid = isPaid(existingFor);
 
                 return (
@@ -513,7 +542,9 @@ export function FactureForm({
                       {isSelected && !locked && <CheckCircle2 className="h-4 w-4" />}
                       {locked && paid && <AlertCircle className="h-4 w-4 text-amber-600" />}
                     </div>
-                    {locked && existingFor && (
+                    {unavailable ? (
+                      <span className="text-[10px] leading-tight text-muted-foreground">{t("noCantineTarif")}</span>
+                    ) : locked && existingFor && (
                       <span className="text-[10px] leading-tight text-muted-foreground">
                         {paid
                           ? t("invoiceAlreadyPaid", { numero: existingFor.numero })
@@ -547,7 +578,14 @@ export function FactureForm({
             </div>
           )}
 
-          {drafts.length === 0 && selectedServices.length > 0 && (
+          {drafts.length === 0 && selectedMonthlyServices.length > 0 && selectedMonths.size === 0 && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20 text-sm text-muted-foreground">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              {t("selectAtLeastOneMonth")}
+            </div>
+          )}
+
+          {drafts.length === 0 && selectedServices.length > 0 && !(selectedMonthlyServices.length > 0 && selectedMonths.size === 0) && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
               <AlertCircle className="h-4 w-4 flex-shrink-0" />
               {t("selectedServicesAlreadyInvoiced")}

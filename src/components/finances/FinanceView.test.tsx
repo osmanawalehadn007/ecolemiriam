@@ -13,12 +13,12 @@ vi.mock("./DepensesSection", () => ({ DepensesSection: () => null }));
 vi.mock("./BudgetSection", () => ({ BudgetSection: () => null }));
 vi.mock("./RemiseCaisseSection", () => ({ RemiseCaisseSection: () => null }));
 
-const rendre = (recettesParMethode: unknown[], facturesPeriode: unknown[] = [], activeType = "recettes") =>
+const rendre = (recettesParMethode: unknown[], facturesPeriode: unknown[] = [], activeType = "recettes", resultatNet = -20000) =>
   render(
     <FinanceView
       totalEncaisse={80000}
       totalFactures={100000}
-      totalRestant={20000}
+      resultatNet={resultatNet}
       totalDepenses={0}
       cashPendingTotal={0}
       cashPending={[]}
@@ -60,5 +60,26 @@ describe("FinanceView — montants perçus", () => {
     expect(screen.queryByText("FAC-1")).toBeNull();
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.getByRole("link", { name: /seeInvoicesDetail/ }).getAttribute("href")).toBe("/facturation");
+  });
+});
+
+describe("FinanceView — carte de résultat", () => {
+  it("choisit le libellé selon le signe et place le résultat en dernier", () => {
+    rendre([], [], "all", 4500);
+    expect(screen.getByText("resultSurplus")).toBeTruthy();
+    expect(screen.queryByText("resultShortfall")).toBeNull();
+    const libelles = ["totalInvoiced", "totalCollected", "totalExpenses", "resultSurplus"].map((k) => screen.getByText(k));
+    for (let i = 1; i < libelles.length; i++) {
+      expect(libelles[i - 1].compareDocumentPosition(libelles[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+  it("affiche un manque à encaisser, sans signe moins, quand le résultat est négatif", () => {
+    rendre([], [], "all", -15000);
+    expect(screen.getByText("resultShortfall")).toBeTruthy();
+    expect(screen.queryByText(/-\s?15/)).toBeNull();
+  });
+  it("affiche l'équilibre à zéro", () => {
+    rendre([], [], "all", 0);
+    expect(screen.getByText("resultBalanced")).toBeTruthy();
   });
 });

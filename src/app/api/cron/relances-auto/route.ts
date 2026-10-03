@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { sendSMS } from "@/lib/sms/africasTalking";
 import { sendEmail, renderNotificationEmail } from "@/lib/notifications/email";
+import { refuserSiNonAutorise, pourChaqueTenant } from "@/lib/cron";
+import { smsDisponible } from "@/lib/facturation/rappels";
 
 /**
  * Cron — Relances automatiques de paiement.
@@ -12,16 +14,32 @@ import { sendEmail, renderNotificationEmail } from "@/lib/notifications/email";
  *   - Niveau 2 : J+10 après échéance (relance ferme)
  *   - Niveau 3 : J+20 après échéance (mise en demeure)
  *
- * Protégé par CRON_SECRET. À appeler quotidiennement.
- * Planifié via vercel.json (une fois par jour à 8h00 UTC).
+ * Protégé par CRON_SECRET. Planifié chaque jour par Ofelia (docker/ofelia).
+ * Chaque établissement est traité dans son propre contexte RLS : sans
+ * session, une requête Prisma hors contexte est refusée.
  */
 async function handler(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  const provided = req.headers.get("authorization");
-  if (!secret || provided !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
+  const refus = refuserSiNonAutorise(req);
+  if (refus) return refus;
 
+  const parTenant = await pourChaqueTenant((tenant) => relancerTenant(tenant.id));
+  const results = parTenant.flatMap((r) => (r.ok ? r.resultat : []));
+  const erreurs = parTenant.filter((r) => !r.ok);
+
+  // Résumé
+  const sent = results.filter((r) => r.success).length;
+  const failed = results.filter((r) => !r.success).length;
+
+  return NextResponse.json({
+    processed: results.length,
+    sent,
+    failed,
+    results,
+    ...(erreurs.length > 0 && { erreurs }),
+  }, { status: erreurs.length > 0 ? 500 : 200 });
+}
+
+async function relancerTenant(tenantId: string) {
   const now = new Date();
   const results: Array<{
     factureId: string;
@@ -46,9 +64,10 @@ async function handler(req: NextRequest) {
     dateFin.setDate(dateFin.getDate() - palier.joursApresEcheance);
 
     // Factures en retard dont l'échéance tombe dans la fenêtre du palier
-    // eslint-disable-next-line ecolemiriam/require-tenant-id, ecolemiriam/require-site-filter -- cron cross-tenant : traite toutes les factures en retard, protégé par CRON_SECRET
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- cron (CRON_SECRET) : toutes les factures en retard du tenant, tous sites
     const factures = await prisma.facture.findMany({
       where: {
+        tenantId,
         statut: { in: ["EN_ATTENTE", "EN_RETARD"] },
         echeance: {
           gte: dateDebut,
@@ -100,8 +119,11 @@ async function handler(req: NextRequest) {
       // Collecter les contacts des parents
       const phones: string[] = [];
       const emails: string[] = [];
+      // SMS seulement si Africa's Talking est configuré : sinon sendSMS simule
+      // un succès et la relance serait notée « envoyée » sans l'avoir été.
+      const avecSms = smsDisponible();
       for (const ep of facture.eleve?.parents ?? []) {
-        if (ep.parent.phone) phones.push(ep.parent.phone);
+        if (avecSms && ep.parent.phone) phones.push(ep.parent.phone);
         if (ep.parent.email) emails.push(ep.parent.email);
       }
 
@@ -167,16 +189,7 @@ async function handler(req: NextRequest) {
     }
   }
 
-  // Résumé
-  const sent = results.filter((r) => r.success).length;
-  const failed = results.filter((r) => !r.success).length;
-
-  return NextResponse.json({
-    processed: results.length,
-    sent,
-    failed,
-    results,
-  });
+  return results;
 }
 
 function buildRelanceMessage(

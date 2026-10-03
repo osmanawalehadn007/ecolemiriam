@@ -12,6 +12,7 @@ import { siteFilterForModel } from "@/lib/site-scope";
 import { niveauSuivant } from "@/lib/niveau-suivant";
 import { notifyDirection } from "@/lib/notifications/notify-direction";
 import { reserverNumerosFacture } from "@/lib/facture-numero";
+import { indexerTarifs } from "@/lib/facturation/tarifs";
 import type { Role } from "@prisma/client";
 
 // ============================================================
@@ -409,38 +410,21 @@ export async function genererFraisRenouvellement(annee: string) {
    
   const eleves = await prisma.eleve.findMany({
     where: { tenantId, statut: "ACTIF", deletedAt: null, ...siteFilter },
-    include: { classe: { select: { niveau: true } } },
+    include: { classe: { select: { niveau: true, siteId: true } } },
   });
 
-  // 2. Tarifs pour l'année cible
-  // Indexation à deux niveaux : tarifs site-spécifique (prioritaires) + tarifs globaux
-  // Clé: `${niveau}|${siteId}` → un tarif global a siteId=null
+  // 2. Tarifs pour l'année cible : tarif du site prioritaire, puis global
   const tarifs = await prisma.tarifNiveau.findMany({
     where: { tenantId, annee, actif: true },
   });
-  const tarifByNiveauSite = new Map<string, typeof tarifs[0]>();
-  const tarifByNiveauGlobal = new Map<string, typeof tarifs[0]>();
-  for (const t of tarifs) {
-    if (t.siteId) {
-      tarifByNiveauSite.set(`${t.niveau.toLowerCase()}|${t.siteId}`, t);
-    } else {
-      tarifByNiveauGlobal.set(t.niveau.toLowerCase(), t);
-    }
-  }
-  // Lookup : tarif site-spécifique en priorité, fallback sur global
-  function findTarif(niveau: string, siteId: string | null) {
-    const key = `${niveau.toLowerCase()}|${siteId}`;
-    return tarifByNiveauSite.get(key) ?? tarifByNiveauGlobal.get(niveau.toLowerCase());
-  }
+  const trouverTarif = indexerTarifs(tarifs);
+  const tarifDe = (e: (typeof eleves)[number]) => trouverTarif(e.classe?.niveau, e.siteId ?? e.classe?.siteId ?? null);
 
   const libelle = `Frais de renouvellement ${annee}`;
   const echeance = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
   // 3. Batch : vérifier les factures existantes
-  const elevesAvecTarif = eleves.filter((e) => {
-    const niveau = e.classe?.niveau ?? "Inconnu";
-    return findTarif(niveau, e.siteId ?? null) !== undefined;
-  });
+  const elevesAvecTarif = eleves.filter((e) => tarifDe(e) !== undefined);
 
   // eslint-disable-next-line ecolemiriam/require-site-filter -- bulk check, tenantId dans le where
   const existing = await prisma.facture.findMany({
@@ -471,8 +455,7 @@ export async function genererFraisRenouvellement(annee: string) {
 
   for (const eleve of elevesAvecTarif) {
     if (existingSet.has(eleve.id)) continue;
-    const niveau = eleve.classe?.niveau ?? "Inconnu";
-    const tarif = findTarif(niveau, eleve.siteId ?? null)!;
+    const tarif = tarifDe(eleve)!;
 
     toCreate.push({
       tenantId,
@@ -483,7 +466,7 @@ export async function genererFraisRenouvellement(annee: string) {
       statut: "EN_ATTENTE",
       type: "RENOUVELLEMENT",
       echeance,
-      siteId: eleve.siteId ?? null,
+      siteId: eleve.siteId ?? eleve.classe?.siteId ?? null,
       createdById: session.user.id,
     });
   }

@@ -10,6 +10,7 @@ import { notifyDirection } from "@/lib/notifications/notify-direction";
 import { piecesRequisesPresentes } from "@/lib/admissions/pieces-justificatives";
 import { niveauToLabel } from "@/lib/niveau";
 import { reserverNumeroFacture } from "@/lib/facture-numero";
+import { indexerTarifs } from "@/lib/facturation/tarifs";
 import { formatMoisScolarite, moisScolariteDefaut, isMoisScolariteValide } from "@/lib/admissions/mois-scolarite";
 
 const UpdateSchema = z.object({
@@ -112,17 +113,10 @@ export async function PATCH(
       // le tarif spécifique au site mais en acceptant le tarif partagé
       // (siteId null) — sans quoi un tarif commun à tous les sites serait ignoré
       // et la facture tomberait à 0.
-       
-      const tarif = await prisma.tarifNiveau.findFirst({
-        where: {
-          tenantId: session.user.tenantId,
-          niveau: niveauTarif,
-          annee: candidature.annee,
-          actif: true,
-          OR: [{ siteId: candidature.siteId ?? null }, { siteId: null }],
-        },
-        orderBy: { siteId: { sort: "desc", nulls: "last" } }, // privilégier le tarif spécifique au site (NULLs en dernier sur Postgres)
+      const tarifs = await prisma.tarifNiveau.findMany({
+        where: { tenantId: session.user.tenantId, annee: candidature.annee, actif: true },
       });
+      const tarif = indexerTarifs(tarifs)(niveauTarif, candidature.siteId);
 
       // Garde-fou : sans tarif configuré (ou tarif à 0), la facture serait vide
       // et l'encaissement impossible. On bloque l'admission avec un message

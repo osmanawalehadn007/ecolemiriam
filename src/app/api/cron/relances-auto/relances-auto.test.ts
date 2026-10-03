@@ -4,9 +4,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({
   default: {
+    // Le cron traite chaque établissement dans son contexte RLS.
+    tenant: { findMany: vi.fn().mockResolvedValue([{ id: "t1", name: "Ecole Test" }]) },
     facture: { findMany: vi.fn(), update: vi.fn() },
     relance: { create: vi.fn() },
   },
+  runWithTenant: (_tenantId: string, _siteId: string | null, fn: () => Promise<unknown>) => fn(),
 }));
 vi.mock("@/lib/sms/africasTalking", () => ({
   sendSMS: vi.fn().mockResolvedValue({ success: true, sent: 1 }),
@@ -36,6 +39,25 @@ describe("Cron relances-auto", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.CRON_SECRET = "test-secret";
+    // SMS envoyé seulement si Africa's Talking est configuré.
+    process.env.AT_API_KEY = "test-key";
+    process.env.AT_USERNAME = "test-user";
+  });
+
+  it("n'envoie pas de SMS quand Africa's Talking n'est pas configuré", async () => {
+    delete process.env.AT_API_KEY;
+    mockPrisma.facture.findMany.mockResolvedValueOnce([{
+      id: "f3", tenantId: "t1", statut: "EN_ATTENTE",
+      echeance: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      montant: 1000, numero: "FAC-003",
+      eleve: { id: "e3", nom: "Doe", prenom: "J", parents: [{ parent: { id: "p", nom: "D", prenom: "P", phone: "+253", email: null } }] },
+      tenant: { id: "t1", name: "Ecole Test" }, relances: [],
+    }]).mockResolvedValue([]);
+    await GET(makeReq({ authorization: "Bearer test-secret" }));
+    expect(sendSMS).not.toHaveBeenCalled();
+    expect(mockPrisma.relance.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ canal: "courrier" }) })
+    );
   });
 
   it("rejette sans CRON_SECRET", async () => {

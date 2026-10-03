@@ -93,6 +93,16 @@ export function slugify(text: string): string {
     .trim();
 }
 
+const collator = new Intl.Collator("fr", { sensitivity: "base", numeric: true });
+
+/**
+ * Comparaison alphabétique française : insensible à la casse et aux accents,
+ * nombres triés naturellement ("2ème" avant "10ème", "6ème A" avant "6ème B").
+ */
+export function compareAlpha(a: string, b: string): number {
+  return collator.compare(a, b);
+}
+
 /** Tronque un texte */
 export function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
