@@ -13,12 +13,13 @@ vi.mock("./DepensesSection", () => ({ DepensesSection: () => null }));
 vi.mock("./BudgetSection", () => ({ BudgetSection: () => null }));
 vi.mock("./RemiseCaisseSection", () => ({ RemiseCaisseSection: () => null }));
 
-const rendre = (recettesParMethode: unknown[], facturesPeriode: unknown[] = [], activeType = "recettes", resultatNet = -20000) =>
+const rendre = (recettesParMethode: unknown[], facturesPeriode: unknown[] = [], activeType = "recettes", resteAEncaisser = 20000, soldeCaisse = 80000) =>
   render(
     <FinanceView
       totalEncaisse={80000}
       totalFactures={100000}
-      resultatNet={resultatNet}
+      resteAEncaisser={resteAEncaisser}
+      soldeCaisse={soldeCaisse}
       totalDepenses={0}
       cashPendingTotal={0}
       cashPending={[]}
@@ -63,23 +64,26 @@ describe("FinanceView — montants perçus", () => {
   });
 });
 
-describe("FinanceView — carte de résultat", () => {
-  it("choisit le libellé selon le signe et place le résultat en dernier", () => {
-    rendre([], [], "all", 4500);
-    expect(screen.getByText("resultSurplus")).toBeTruthy();
-    expect(screen.queryByText("resultShortfall")).toBeNull();
-    const libelles = ["totalInvoiced", "totalCollected", "totalExpenses", "resultSurplus"].map((k) => screen.getByText(k));
+describe("FinanceView — reste à encaisser et solde en caisse", () => {
+  it("affiche les cinq cartes dans l'ordre", () => {
+    rendre([], [], "all", 170250, 1735600);
+    const libelles = ["totalInvoiced", "totalCollected", "totalRemaining", "totalExpenses", "cashBalance"].map((k) => screen.getByText(k));
     for (let i = 1; i < libelles.length; i++) {
       expect(libelles[i - 1].compareDocumentPosition(libelles[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
+    expect(screen.queryByText("collectedExtra")).toBeNull();
   });
-  it("affiche un manque à encaisser, sans signe moins, quand le résultat est négatif", () => {
-    rendre([], [], "all", -15000);
-    expect(screen.getByText("resultShortfall")).toBeTruthy();
-    expect(screen.queryByText(/-\s?15/)).toBeNull();
+  it("remplace un reste négatif par « encaissé en plus », sans signe moins", () => {
+    rendre([], [], "all", -12000, 22000);
+    const carte = screen.getByText("collectedExtra").parentElement!;
+    expect(screen.queryByText("totalRemaining")).toBeNull();
+    expect(carte.textContent).toMatch(/12\s?000/);
+    expect(carte.textContent).not.toMatch(/-/);
   });
-  it("affiche l'équilibre à zéro", () => {
-    rendre([], [], "all", 0);
-    expect(screen.getByText("resultBalanced")).toBeTruthy();
+  it("affiche un solde en caisse négatif avec son signe, en rouge", () => {
+    rendre([], [], "all", 0, -2500);
+    const montant = screen.getByText("cashBalance").nextElementSibling!;
+    expect(montant.textContent).toMatch(/-/);
+    expect(montant.className).toContain("text-red-600");
   });
 });

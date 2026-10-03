@@ -137,7 +137,8 @@ function todayInputValue() {
 export function FinanceView({
   totalEncaisse,
   totalFactures,
-  resultatNet,
+  resteAEncaisser,
+  soldeCaisse,
   totalDepenses,
   cashPendingTotal,
   cashPending,
@@ -158,7 +159,8 @@ export function FinanceView({
 }: {
   totalEncaisse: number;
   totalFactures: number;
-  resultatNet: number;
+  resteAEncaisser: number;
+  soldeCaisse: number;
   totalDepenses: number;
   cashPendingTotal: number;
   cashPending: Paiement[];
@@ -295,15 +297,20 @@ export function FinanceView({
   const statFacture: Stat = { label: t("totalInvoiced"), value: totalFactures, color: "text-blue-600" };
   const statEncaisse: Stat = { label: t("totalCollected"), value: totalEncaisse, color: "text-green-600", siteColor };
   const statDepenses: Stat = { label: t("totalExpenses"), value: totalDepenses, color: "text-red-600" };
-  // Libellé et couleur suivent le signe ; le montant est affiché en valeur absolue.
-  const statResultat: Stat =
-    resultatNet > 0
-      ? { label: t("resultSurplus"), value: resultatNet, color: "text-green-600" }
-      : resultatNet < 0
-        ? { label: t("resultShortfall"), value: -resultatNet, color: "text-red-600" }
-        : { label: t("resultBalanced"), value: 0, color: "text-muted-foreground" };
-  // Le résultat vient en dernier : il se lit comme le total des cartes qui le précèdent.
-  const stats = [statFacture, statEncaisse, statDepenses, statResultat];
+  // Reste à encaisser = facturé − encaissé. Négatif quand la période a
+  // encaissé des factures plus anciennes : on l'affiche en positif sous un
+  // autre libellé plutôt qu'un « reste » négatif.
+  const statReste: Stat =
+    resteAEncaisser >= 0
+      ? { label: t("totalRemaining"), value: resteAEncaisser, color: "text-orange-600" }
+      : { label: t("collectedExtra"), value: -resteAEncaisser, color: "text-green-600" };
+  // Solde en caisse = encaissé − dépenses, affiché avec son signe.
+  const statSolde: Stat = {
+    label: t("cashBalance"),
+    value: soldeCaisse,
+    color: soldeCaisse >= 0 ? "text-green-600" : "text-red-600",
+  };
+  const stats = [statFacture, statEncaisse, statReste, statDepenses, statSolde];
 
   const exportHref = activeMonth
     ? `/api/finances/export?siteId=${activeSite}&month=${activeMonth}&type=${activeType}`
@@ -316,11 +323,11 @@ export function FinanceView({
 
   const filteredStats =
     activeType === "recettes"
-      ? [statEncaisse, statResultat]
+      ? [statEncaisse, statReste]
       : activeType === "depenses"
-        ? [statDepenses]
+        ? [statDepenses, statSolde]
         : activeType === "factures"
-          ? [statFacture, statResultat]
+          ? [statFacture, statReste]
           : stats;
 
   return (
@@ -425,16 +432,19 @@ export function FinanceView({
       </div>
 
       {/* ── Stats cards (filtrées par type) ── */}
-      <div className={cn("grid gap-4", filteredStats.length === 1 ? "grid-cols-1" : filteredStats.length === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4")}>
+      {/* Les cinq cartes tiennent sur une seule ligne dès la tablette ; en dessous, deux colonnes. */}
+      <div className={cn("grid", filteredStats.length === 1 ? "grid-cols-1 gap-4" : filteredStats.length === 2 ? "grid-cols-1 gap-4 sm:grid-cols-2" : "grid-cols-2 gap-2 md:grid-cols-5 xl:gap-4")}>
         {filteredStats.map((s) => (
           <Card
             key={s.label}
             className="border-l-4"
             style={{ borderLeftColor: s.siteColor?.base ?? "#6b7280" }}
           >
-            <CardContent className="p-4">
+            <CardContent className={filteredStats.length > 2 ? "p-3 xl:p-4" : "p-4"}>
               <p className="text-xs text-muted-foreground">{s.label}</p>
-              <p className={`text-2xl font-bold ${s.color}`}>{formatCurrency(s.value, currency)}</p>
+              <p className={cn("font-bold", filteredStats.length > 2 ? "text-base lg:text-lg xl:text-2xl" : "text-2xl", s.color)}>
+                {formatCurrency(s.value, currency)}
+              </p>
             </CardContent>
           </Card>
         ))}

@@ -200,12 +200,10 @@ const getFinanceDataCached = unstable_cache(
         availableMonths,
         totalEncaisse: totalAgg._sum.montant ?? 0,
         totalFactures: totalFacturesAgg._sum.montant ?? 0,
-        // Résultat de la période : encaissé − facturé − dépenses.
-        // Positif = plus-value encaissée, négatif = manque à encaisser.
-        resultatNet:
-          (totalAgg._sum.montant ?? 0) -
-          (totalFacturesAgg._sum.montant ?? 0) -
-          (totalDepensesAgg._sum.montant ?? 0),
+        // Deux restes distincts, à ne pas fusionner : ce que les familles
+        // doivent encore, et ce qu'il reste de l'argent reçu après dépenses.
+        resteAEncaisser: (totalFacturesAgg._sum.montant ?? 0) - (totalAgg._sum.montant ?? 0),
+        soldeCaisse: (totalAgg._sum.montant ?? 0) - (totalDepensesAgg._sum.montant ?? 0),
         cashPendingTotal: cashPendingAgg._sum.montant ?? 0,
         cashPending,
         totalDepenses: totalDepensesAgg._sum.montant ?? 0,
@@ -222,7 +220,7 @@ const getFinanceDataCached = unstable_cache(
       };
     });
   },
-  ["finances-data-v2"],
+  ["finances-data-v3"],
   { revalidate: 30, tags: ["finances-data"] }
 );
 
@@ -282,7 +280,7 @@ export default async function FinancesPage(
     activeMonth,
   );
 
-  const { availableMonths, totalEncaisse, totalFactures, resultatNet, cashPendingTotal, cashPending, totalDepenses, depenses, budgets, remisesCaisse, recettesParMethode, facturesPeriode } = cached;
+  const { availableMonths, totalEncaisse, totalFactures, resteAEncaisser, soldeCaisse, cashPendingTotal, cashPending, totalDepenses, depenses, budgets, remisesCaisse, recettesParMethode, facturesPeriode } = cached;
 
   const currentSiteName = activeSite === "all"
     ? tCommon("allSites")
@@ -309,7 +307,8 @@ export default async function FinancesPage(
         <FinanceView
           totalEncaisse={totalEncaisse}
           totalFactures={totalFactures}
-          resultatNet={resultatNet}
+          resteAEncaisser={resteAEncaisser}
+          soldeCaisse={soldeCaisse}
           totalDepenses={totalDepenses}
           cashPendingTotal={cashPendingTotal}
           cashPending={cashPending}
