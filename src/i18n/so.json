@@ -2876,6 +2876,7 @@
     "typeDepenses": "Kharashaad",
     "typeFactures": "Faaturo",
     "invoicesForPeriod": "Faaturo la abuuray (muddo)",
+    "cashOnlyHint": "Cash oo keliya — laga saaray faaturo Waffi ama hab kale oo keliya lagu bixiyay",
     "seeInvoicesDetail": "Eeg faahfaahinta biilasha",
     "noInvoicesPeriod": "Ma jirto faaturo la abuuray muddadan.",
     "colNumber": "N.",

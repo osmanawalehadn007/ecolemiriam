@@ -503,6 +503,7 @@ export function FinanceView({
               {facturesPeriode.length > 0 && (
                 <Badge variant="secondary" className="text-xs ml-1">{facturesPeriode.length}</Badge>
               )}
+              <span className="ml-auto text-xs font-normal text-muted-foreground">{t("cashOnlyHint")}</span>
             </CardTitle>
           </CardHeader>
           <CardContent>

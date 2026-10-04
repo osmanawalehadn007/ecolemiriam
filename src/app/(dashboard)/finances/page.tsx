@@ -11,6 +11,7 @@ import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-scope";
 import { getSitesForUser } from "@/lib/actions/eleve";
 import { getSiteColorMap } from "@/lib/site-colors";
 import { getRemisesCaisse } from "@/lib/actions/finances";
+import { PAYMENT_METHODS } from "@/lib/payment-methods";
 import { unstable_cache } from "next/cache";
 import {
   startOfDay,
@@ -61,6 +62,9 @@ function getMonthRange(monthParam: string) {
     end: endOfMonth(new Date(year, month, 1)),
   };
 }
+
+/** Moyens de paiement en espèces (type CASH dans PAYMENT_METHODS). */
+const METHODES_ESPECES = PAYMENT_METHODS.filter((m) => m.type === "CASH").map((m) => m.id);
 
 // Cache des données financières — la clé inclut tenantId, siteId, periode,
 // month et activeSite pour que chaque combinaison ait son propre cache.
@@ -183,8 +187,19 @@ const getFinanceDataCached = unstable_cache(
         }),
         getRemisesCaisse(activeSite === "all" ? null : activeSite),
          
+        // Factures émises : on ne garde que les impayées et celles réglées au
+        // moins en partie en espèces ; celles payées uniquement par Waafi,
+        // CAC Pay, virement ou carte sont exclues de la page Finances.
         prisma.facture.findMany({
-          where: { tenantId, ...siteFilter, createdAt: { gte: start, lte: end } },
+          where: {
+            tenantId,
+            ...siteFilter,
+            createdAt: { gte: start, lte: end },
+            OR: [
+              { paiements: { none: {} } },
+              { paiements: { some: { methode: { in: METHODES_ESPECES } } } },
+            ],
+          },
           include: {
             eleve: { select: { nom: true, prenom: true, matricule: true, classe: { select: { nom: true } } } },
             site: { select: { nom: true } },
@@ -220,7 +235,7 @@ const getFinanceDataCached = unstable_cache(
       };
     });
   },
-  ["finances-data-v3"],
+  ["finances-data-v4"],
   { revalidate: 30, tags: ["finances-data"] }
 );
 

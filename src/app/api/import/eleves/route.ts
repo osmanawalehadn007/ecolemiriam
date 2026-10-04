@@ -16,6 +16,7 @@ import { checkPermission } from "@/lib/rbac";
 
 // Mapping: nom du groupe scolaire → StructureType
 const GROUP_TO_STRUCTURE: Record<string, StructureType> = {
+  Maternelle: "MATERNELLE",
   Primaire: "PRIMAIRE",
   Collège: "COLLEGE",
   Lycée: "LYCEE",
@@ -160,8 +161,15 @@ export async function POST(req: NextRequest) {
     const classesRequises = [...new Set(aCreer.map((l) => l.classe))];
     const niveauDe = new Map(rows.map((r) => [r.classe, r.niveau]));
 
+    // Structures du site cible uniquement : chaque site possède ses propres
+    // structures (unicité tenantId+siteId+type) et une classe importée ne doit
+    // jamais être rattachée à la structure d'un autre site.
+    const structureFilter = targetSiteId
+      ? { AND: [{ siteId: targetSiteId }] }
+      : siteFilterForModel("structure", session.user);
+    // eslint-disable-next-line ecolemiriam/require-site-filter -- tenantId déjà dans le where (le linter ne détecte pas le spread/merge)
     const existingStructures = await prisma.structure.findMany({
-      where: mergeFilters({ tenantId }, siteFilterForModel("structure", session.user)),
+      where: mergeFilters({ tenantId }, structureFilter),
     });
     const structureByType = new Map<string, string>(existingStructures.map((s) => [s.type, s.id]));
 

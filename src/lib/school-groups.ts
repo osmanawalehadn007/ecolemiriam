@@ -1,8 +1,9 @@
-export type SchoolGroup = "Primaire" | "Collège" | "Lycée" | "Autre";
+export type SchoolGroup = "Maternelle" | "Primaire" | "Collège" | "Lycée" | "Autre";
 
-export const SCHOOL_GROUP_ORDER: SchoolGroup[] = ["Primaire", "Collège", "Lycée", "Autre"];
+export const SCHOOL_GROUP_ORDER: SchoolGroup[] = ["Maternelle", "Primaire", "Collège", "Lycée", "Autre"];
 
 export const SCHOOL_GROUP_ICONS: Record<SchoolGroup, string> = {
+  Maternelle: "🧸",
   Primaire: "🧒",
   Collège: "📘",
   Lycée: "🎓",
@@ -34,12 +35,14 @@ const NIVEAU_TO_YEAR: Record<string, number> = {
   terminale: 12, term: 12, tle: 12,
   // Maternelle (hors numérotation)
   maternelle: 0, ps: 0, ms: 0, gs: 0,
+  garderie: 0, garderies: 0,
+  "petite section": 0, "moyenne section": 0, "grande section": 0,
   // Compatibilité anciens formats français (CP, CE1, CE2, CM1, CM2)
   ci: 1, cp: 1, ce1: 2, ce2: 3, cm1: 4, cm2: 5,
 };
 
 function yearToGroup(year: number): SchoolGroup {
-  if (year === 0) return "Autre"; // Maternelle
+  if (year === 0) return "Maternelle";
   if (year >= 1 && year <= 5) return "Primaire";
   if (year >= 6 && year <= 9) return "Collège";
   if (year >= 10 && year <= 12) return "Lycée";

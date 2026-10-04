@@ -2972,6 +2972,7 @@
     "typeDepenses": "Dépenses",
     "typeFactures": "Factures",
     "invoicesForPeriod": "Factures émises (période)",
+    "cashOnlyHint": "Espèces uniquement — hors factures réglées uniquement par Waafi ou autre moyen",
     "seeInvoicesDetail": "Voir le détail des factures",
     "noInvoicesPeriod": "Aucune facture émise pour cette période.",
     "colNumber": "N°",

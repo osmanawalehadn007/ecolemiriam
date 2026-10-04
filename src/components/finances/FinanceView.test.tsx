@@ -62,6 +62,11 @@ describe("FinanceView — montants perçus", () => {
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.getByRole("link", { name: /seeInvoicesDetail/ }).getAttribute("href")).toBe("/facturation");
   });
+
+  it("signale que la carte Factures ne compte que les factures impayées ou réglées en espèces", () => {
+    rendre([], [{ id: "f1", numero: "FAC-1", statut: "PAYEE", montant: 1000, devise: "DJF", paiements: [] }], "factures");
+    expect(screen.getByText("cashOnlyHint")).toBeTruthy();
+  });
 });
 
 describe("FinanceView — reste à encaisser et solde en caisse", () => {

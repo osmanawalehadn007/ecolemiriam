@@ -2964,6 +2964,7 @@
     "typeDepenses": "Expenses",
     "typeFactures": "Invoices",
     "invoicesForPeriod": "Invoices issued (period)",
+    "cashOnlyHint": "Cash only — excludes invoices paid solely by Waafi or another method",
     "seeInvoicesDetail": "See invoice details",
     "noInvoicesPeriod": "No invoices issued for this period.",
     "colNumber": "No.",
