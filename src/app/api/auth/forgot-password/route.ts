@@ -19,19 +19,27 @@ import { verifyTurnstileToken } from "@/lib/security/turnstile";
 import { auditFire } from "@/lib/audit";
 
 const ForgotSchema = z.object({
-  email: z.string().email("Email invalide"),
-  turnstileToken: z.string().optional(),
+  email: z.string().trim().email("Email invalide"),
+  turnstileToken: z.string().nullable().optional(),
 });
 
 export async function POST(req: Request) {
   try {
     const ip = getClientIP(req as unknown as import("next/server").NextRequest);
-    const rl = rateLimit({ max: 3, windowSec: 300, key: `forgot-password:${ip}` });
-    if (!rl.allowed) {
-      return NextResponse.json(
+    const tropDeDemandes = () =>
+      NextResponse.json(
         { error: "Trop de demandes. Réessayez dans 5 minutes." },
         { status: 429, headers: { "Retry-After": "300" } }
       );
+
+    // Une école entière partage une seule IP publique (NAT), et sans
+    // CF-Connecting-IP toutes les requêtes tombent sur la clé « unknown ».
+    // L'ancien plafond de 3 demandes / 5 min PAR IP bloquait donc tout
+    // l'établissement dès la quatrième personne. Le plafond strict porte
+    // désormais sur l'adresse email visée ; celui par IP ne sert plus qu'à
+    // contenir un envoi en masse.
+    if (!rateLimit({ max: 30, windowSec: 300, key: `forgot-password:${ip}` }).allowed) {
+      return tropDeDemandes();
     }
 
     const body = await req.json();
@@ -41,6 +49,10 @@ export async function POST(req: Request) {
     }
 
     const { email, turnstileToken } = parsed.data;
+
+    if (!rateLimit({ max: 3, windowSec: 300, key: `forgot-password:email:${email.toLowerCase()}` }).allowed) {
+      return tropDeDemandes();
+    }
 
     // ── Vérification Turnstile (anti-bot) ──────────────────────────────
     const turnstileResult = await verifyTurnstileToken(turnstileToken, req);
@@ -82,6 +94,9 @@ export async function POST(req: Request) {
     );
 
     if (!result.success) {
+      // La réponse reste un succès factice (anti-énumération) : ce log est
+      // donc la seule trace visible d'un email qui n'est jamais parti.
+      console.error("[API/auth/forgot-password] email de reset NON envoyé:", result.error);
       auditFire({
         userId: user.id,
         action: "auth:forgot-password",

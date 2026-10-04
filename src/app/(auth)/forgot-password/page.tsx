@@ -14,6 +14,9 @@ export default function ForgotPasswordPage() {
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState("");
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  // Un token Turnstile est à usage unique : après un échec il faut en
+  // redemander un neuf, sinon chaque nouvel essai échoue à son tour.
+  const [turnstileReset, setTurnstileReset] = useState(0);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,6 +34,8 @@ export default function ForgotPasswordPage() {
         setSent(true);
       } else {
         setErr(data.error ?? "Échec de l'envoi");
+        setTurnstileToken(null);
+        setTurnstileReset((n) => n + 1);
       }
     } catch {
       setErr("Erreur réseau. Vérifiez votre connexion.");
@@ -100,6 +105,7 @@ export default function ForgotPasswordPage() {
             {/* Widget Turnstile (anti-bot) — invisible si pas de site key */}
             <TurnstileWidget
               action="forgot-password"
+              resetSignal={turnstileReset}
               onToken={setTurnstileToken}
               onExpire={() => setTurnstileToken(null)}
               onError={() => setTurnstileToken(null)}

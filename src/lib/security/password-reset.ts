@@ -210,7 +210,7 @@ export async function resetPasswordWithToken(
    
   const user = await prismaBase.user.findFirst({
     where: { email: { equals: email, mode: "insensitive" } },
-    select: { id: true, isActive: true },
+    select: { id: true, isActive: true, emailVerified: true },
   });
 
   if (!user) {
@@ -224,10 +224,18 @@ export async function resetPasswordWithToken(
 
   const hashed = await bcrypt.hash(newPassword, 12);
 
-   
+  // Le lien n'a pu être ouvert que depuis la boîte de l'utilisateur : il vaut
+  // preuve de possession de l'adresse. Sans cela, un compte jamais vérifié
+  // réinitialisait son mot de passe puis restait bloqué au login sur « email
+  // non vérifié ». De même, le mot de passe venant d'être choisi par
+  // l'utilisateur, l'obligation d'en changer n'a plus d'objet.
   await prismaBase.user.update({
     where: { id: user.id },
-    data: { password: hashed },
+    data: {
+      password: hashed,
+      mustChangePassword: false,
+      ...(user.emailVerified ? {} : { emailVerified: new Date() }),
+    },
   });
 
   // Supprimer le token consommé + tous les tokens de reset pour cet email
