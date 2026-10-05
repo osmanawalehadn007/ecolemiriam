@@ -15,6 +15,21 @@ describe("getSchoolGroup", () => {
     expect(getSchoolGroup("Maternelle", "Garderie 2")).toBe("Maternelle");
   });
 
+  it("fait primer la structure enregistrée en base sur le nom et le niveau", () => {
+    // Une classe au nom libre, rattachée à la structure MATERNELLE de son site.
+    expect(getSchoolGroup("", "Les Poussins", "MATERNELLE")).toBe("Maternelle");
+    expect(getSchoolGroup("Maternelle", "Garderie", "MATERNELLE")).toBe("Maternelle");
+    expect(getSchoolGroup("", "Club robotique", "COLLEGE")).toBe("Collège");
+    // La structure l'emporte même si le nom évoque un autre cycle.
+    expect(getSchoolGroup("6ème", "6ème B", "PRIMAIRE")).toBe("Primaire");
+  });
+
+  it("retombe sur le niveau et le nom sans structure, ou avec un type inconnu", () => {
+    expect(getSchoolGroup("Maternelle", "Garderie", null)).toBe("Maternelle");
+    expect(getSchoolGroup("6ème", "6ème B", undefined)).toBe("Collège");
+    expect(getSchoolGroup("6ème", "6ème B", "INCONNU")).toBe("Collège");
+  });
+
   it("reconnaît la maternelle depuis le nom seul (garderies, sections)", () => {
     expect(getSchoolGroup("", "Garderies")).toBe("Maternelle");
     expect(getSchoolGroup("", "PS")).toBe("Maternelle");

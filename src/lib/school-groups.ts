@@ -41,6 +41,16 @@ const NIVEAU_TO_YEAR: Record<string, number> = {
   ci: 1, cp: 1, ce1: 2, ce2: 3, cm1: 4, cm2: 5,
 };
 
+// La structure pédagogique enregistrée en base (`Classe.structure.type`) fait
+// foi : c'est l'établissement qui a rangé la classe dans un cycle. Le nom et le
+// niveau ne servent qu'aux classes sans structure.
+const STRUCTURE_TYPE_TO_GROUP: Record<string, SchoolGroup> = {
+  MATERNELLE: "Maternelle",
+  PRIMAIRE: "Primaire",
+  COLLEGE: "Collège",
+  LYCEE: "Lycée",
+};
+
 function yearToGroup(year: number): SchoolGroup {
   if (year === 0) return "Maternelle";
   if (year >= 1 && year <= 5) return "Primaire";
@@ -49,7 +59,10 @@ function yearToGroup(year: number): SchoolGroup {
   return "Autre";
 }
 
-export function getSchoolGroup(niveau: string, nom?: string): SchoolGroup {
+export function getSchoolGroup(niveau: string, nom?: string, structureType?: string | null): SchoolGroup {
+  const fromStructure = structureType ? STRUCTURE_TYPE_TO_GROUP[structureType] : undefined;
+  if (fromStructure) return fromStructure;
+
   const text = `${niveau} ${nom ?? ""}`.toLowerCase().trim();
 
   // Détecte "1ère année", "2ème année", "3e année", etc.
@@ -80,7 +93,9 @@ export interface GroupedClasses<T> {
   classes: { classe: string; items: T[] }[];
 }
 
-export function groupBySchoolLevel<T extends { classe?: { nom: string; niveau: string } | null }>(
+export function groupBySchoolLevel<
+  T extends { classe?: { nom: string; niveau: string; structure?: { type: string } | null } | null }
+>(
   items: T[]
 ): GroupedClasses<T>[] {
   const groupMap = new Map<SchoolGroup, Map<string, T[]>>();
@@ -88,7 +103,7 @@ export function groupBySchoolLevel<T extends { classe?: { nom: string; niveau: s
   for (const item of items) {
     const classeNom = item.classe?.nom ?? "Sans classe";
     const niveau = item.classe?.niveau ?? "";
-    const group = item.classe ? getSchoolGroup(niveau, classeNom) : "Autre";
+    const group = item.classe ? getSchoolGroup(niveau, classeNom, item.classe.structure?.type) : "Autre";
 
     if (!groupMap.has(group)) groupMap.set(group, new Map());
     const classMap = groupMap.get(group)!;
