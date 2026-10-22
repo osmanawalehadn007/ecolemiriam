@@ -1,0 +1,66 @@
+name: Cron — Rapport des élèves impayés par site
+
+on:
+  schedule:
+    - cron: "0 3 10 * *"
+  workflow_dispatch:
+    inputs:
+      mois:
+        description: "Mois 1-12 (optionnel, par défaut courant)"
+        required: false
+        default: ""
+      annee:
+        description: "Année (optionnel, par défaut courant)"
+        required: false
+        default: ""
+
+jobs:
+  generer-rapport:
+    name: Générer les rapports d'impayés
+    runs-on: ubuntu-latest
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.SA_EMAIL }}
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Vérifier la configuration
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET absent."
+            exit 1
+          fi
+      - name: Déterminer la tâche
+        id: tache
+        run: |
+          MOIS=""${{ inputs.mois }}"
+          ANNEE=""${{ inputs.annee }}"
+          if [ -z "$MOIS" ]; then
+            MOIS=$(date +%m)
+            ANNEE=$(date +%Y)
+          fi
+          echo "mois=$MOIS" >> "$GITHUB_OUTPUT"
+          echo "année=$ANNEE" >> "$GITHUB_OUTPUT"
+      - name: Exécuter le script de génération
+        run: |
+          CIBLE=$(docker ps --format "{{.Names}}" | grep "^ecolemiriam-app-" | head -1)
+          docker exec "$CIBLE" -H "Authorization: Bearer $CRON_SECRET"             -n http://localhost:3000/api/cron/rapport-impayes?mois=${{ steps.tache.outputs.mois }}&annee=${{ steps.tache.outputs.annee }}
+      - name: Télécharger les rapports
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapports-impayes-${{ steps.tache.outputs.mois }}-${{ steps.tache.outputs.annee }}
+          path: /tmp/rapports-impayes/*.pdf
+          retention-days: 30
+      - name: Résumé
+        if: always()
+        run: |
+          echo "### Ordonnanceur — compte rendu" >> "$GITHUB_STEP_SUMMARY"
+          echo "- tâche : génération de rapport d'impayés" >> "$GITHUB_STEP_SUMMARY"
+          echo "- mois : ${{ steps.tache.outputs.mois }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- année : ${{ steps.tache.outputs.annee }}" >> "$GITHUB_STEP_SUMMARY"
