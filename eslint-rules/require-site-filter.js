@@ -351,7 +351,7 @@ module.exports = {
 
           // Vérifier si c'est le client prisma ou un client scoped
           const rootObj = node.callee.object.object;
-          const isPrisma = rootObj.type === "Identifier" && rootObj.name === "prisma";
+          const isPrisma = rootObj.type === "Identifier" && (rootObj.name === "prisma" || rootObj.name === "db");
           const isScoped = rootObj.type === "Identifier" && rootObj.name === "scoped";
 
           // prismaSiteScoped() injecte automatiquement le filtre → pas d'erreur

@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
-import { runWithTenant, runWithRlsBatch } from "@/lib/prisma";
+import { runWithTenant, runWithRlsBatch, rlsBatch } from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { NotesOverview } from "@/components/notes/NotesOverview";
 import { Button } from "@/components/ui/button";
@@ -74,19 +74,19 @@ const getNotesData = unstable_cache(
           : {}
     );
 
-    const [classes, matieres, statsNotes] = await Promise.all([
+    const [classes, matieres, statsNotes] = await rlsBatch((db) => [
       // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- `classeWhere` est construit plus haut avec siteFilterForModel + anneeFilterForModel
-      prisma.classe.findMany({
+      db.classe.findMany({
         where: classeWhere,
         select: { id: true, nom: true, niveau: true, siteId: true, site: { select: { nom: true } } },
         orderBy: { nom: "asc" },
       }),
-      prisma.matiere.findMany({
+      db.matiere.findMany({
         where: matiereWhere,
         select: { id: true, nom: true, code: true, couleur: true, coefficient: true },
         orderBy: { nom: "asc" },
       }),
-      prisma.note.groupBy({
+      db.note.groupBy({
         by: ["matiereId"],
         where: noteWhere,
         _avg: { valeur: true },

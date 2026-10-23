@@ -3,8 +3,7 @@ import { Header } from "@/components/layout/Header";
 import { FournituresView } from "@/components/fournitures/FournituresView";
 import { getTranslations } from "next-intl/server";
 import { guardPage } from "@/lib/guard-page";
-import prisma from "@/lib/prisma";
-import { runWithTenant } from "@/lib/prisma";
+import { runWithTenant, rlsBatch } from "@/lib/prisma";
 import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-scope";
 import { niveauToLabel } from "@/lib/niveau";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
@@ -40,14 +39,17 @@ const getFournituresData = unstable_cache(
       // Année courante : table `annees_scolaires` (source de vérité), avec repli
       // sur le champ dénormalisé `Tenant.currentYear` (déprécié). L'ancien repli
       // était la constante « 2025-2026 », qui devenait fausse à chaque rentrée.
-      const tenant = await prisma.tenant.findUnique({
-        where: { id: tenantId },
-        select: { currentYear: true },
-      });
-      const currentYear =
-        (await getAnneeCouranteLibelle(tenantId)) ??
-        tenant?.currentYear ??
-        `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+      // Le repli sur Tenant n'est lu que si aucune année n'est enregistrée
+      // (cas normal : 0 requête, l'année vient du cache).
+      let currentYear = await getAnneeCouranteLibelle(tenantId);
+      if (!currentYear) {
+        const [tenant] = await rlsBatch((db) => [
+          db.tenant.findUnique({ where: { id: tenantId }, select: { currentYear: true } }),
+        ]);
+        currentYear =
+          tenant?.currentYear ??
+          `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+      }
 
       // Récupérer les matières et niveaux
       const siteFilter = siteFilterForModel("matiere", sessionUser);
@@ -59,20 +61,30 @@ const getFournituresData = unstable_cache(
       if (isTeacher) {
         // ── Enseignant : ne voir QUE ses classes et SES matières ──────
         const enseignantSiteFilter = siteFilterForModel("enseignant", sessionUser);
-        const enseignant = await prisma.enseignant.findFirst({
-          where: { userId, tenantId, ...enseignantSiteFilter },
-          select: { id: true },
-        });
+        const [enseignant] = await rlsBatch((db) => [
+          db.enseignant.findFirst({
+            where: { userId, tenantId, ...enseignantSiteFilter },
+            select: { id: true },
+          }),
+        ]);
 
         if (enseignant) {
           // 1. Récupérer les affectations avec classe + matière
-          const affectations = await prisma.enseignantAffectation.findMany({
-            where: { enseignantId: enseignant.id, tenantId },
-            select: {
-              classe: { select: { niveau: true } },
-              matiere: { select: { id: true, nom: true, code: true } },
-            },
-          });
+          // Affectations et enseignant_matieres (primaire : pas de matière
+          // dans les affectations) lues dans la même transaction.
+          const [affectations, ensMatieres] = await rlsBatch((db) => [
+            db.enseignantAffectation.findMany({
+              where: { enseignantId: enseignant.id, tenantId },
+              select: {
+                classe: { select: { niveau: true } },
+                matiere: { select: { id: true, nom: true, code: true } },
+              },
+            }),
+            db.enseignantMatiere.findMany({
+              where: { enseignantId: enseignant.id, tenantId },
+              select: { matiere: { select: { id: true, nom: true, code: true } } },
+            }),
+          ]);
 
           // 2. Niveaux distincts des classes affectées
           const niveauSet = new Set<string>();
@@ -92,10 +104,6 @@ const getFournituresData = unstable_cache(
             }
           }
           // Compléter avec enseignant_matieres (primaire : pas de matière dans affectations)
-          const ensMatieres = await prisma.enseignantMatiere.findMany({
-            where: { enseignantId: enseignant.id, tenantId },
-            select: { matiere: { select: { id: true, nom: true, code: true } } },
-          });
           for (const em of ensMatieres) {
             matiereSet.set(em.matiere.id, em.matiere);
           }
@@ -107,18 +115,20 @@ const getFournituresData = unstable_cache(
         }
       } else {
         // ── Admin/Secrétariat/Parent/Élève : toutes les matières et niveaux ──
-        matieres = await prisma.matiere.findMany({
-          where: { tenantId, ...siteFilter },
-          select: { id: true, nom: true, code: true },
-          orderBy: { nom: "asc" },
-        });
-
-        const classes = await prisma.classe.findMany({
-          where: { tenantId, annee: currentYear, ...classeSiteFilter },
-          select: { niveau: true },
-          distinct: ["niveau"],
-          orderBy: { niveau: "asc" },
-        });
+        const [matieresRows, classes] = await rlsBatch((db) => [
+          db.matiere.findMany({
+            where: { tenantId, ...siteFilter },
+            select: { id: true, nom: true, code: true },
+            orderBy: { nom: "asc" },
+          }),
+          db.classe.findMany({
+            where: { tenantId, annee: currentYear, ...classeSiteFilter },
+            select: { niveau: true },
+            distinct: ["niveau"],
+            orderBy: { niveau: "asc" },
+          }),
+        ]);
+        matieres = matieresRows;
         niveauxRaw = classes.map((c) => c.niveau);
       }
 

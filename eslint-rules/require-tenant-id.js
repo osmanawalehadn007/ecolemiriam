@@ -90,7 +90,7 @@ function hasOwnershipCheck(fnNode, model) {
       node.callee.type === "MemberExpression" &&
       node.callee.object.type === "MemberExpression" &&
       node.callee.object.object.type === "Identifier" &&
-      node.callee.object.object.name === "prisma" &&
+      ["prisma", "db"].includes(node.callee.object.object.name) &&
       node.callee.object.property.name === model &&
       READ_METHODS.includes(node.callee.property.name)
     ) {
@@ -138,7 +138,7 @@ module.exports = {
           node.callee.type === "MemberExpression" &&
           node.callee.object.type === "MemberExpression" &&
           node.callee.object.object.type === "Identifier" &&
-          node.callee.object.object.name === "prisma"
+          ["prisma", "db"].includes(node.callee.object.object.name)
         ) {
           const model = node.callee.object.property.name;
           const method = node.callee.property.name;

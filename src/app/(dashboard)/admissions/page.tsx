@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import prisma, { runWithTenant } from "@/lib/prisma";
+import { runWithTenant, rlsBatch } from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { AdmissionsView } from "@/components/admissions/AdmissionsView";
 import { getTranslations } from "next-intl/server";
@@ -30,8 +30,8 @@ const getAdmissionsData = unstable_cache(
     const classeSiteFilter = siteFilterForModel("classe", sessionUser);
 
     return runWithTenant(tenantId, siteId, async () => {
-      const [candidatures, classesRaw] = await Promise.all([
-        prisma.candidature.findMany({
+      const [candidatures, classesRaw] = await rlsBatch((db) => [
+        db.candidature.findMany({
           where: { tenantId, annee, ...siteFilter },
           orderBy: { createdAt: "desc" },
           include: {
@@ -55,7 +55,7 @@ const getAdmissionsData = unstable_cache(
         // On NE dédoublonne PAS par nom : deux sites peuvent avoir une classe
         // homonyme, et c'est l'ID (lié au site) qui doit être choisi — pas le nom.
          
-        prisma.classe.findMany({
+        db.classe.findMany({
           where: { tenantId, annee, ...classeSiteFilter },
           select: { id: true, nom: true, niveau: true, siteId: true, site: { select: { nom: true } } },
           orderBy: [{ nom: "asc" }],

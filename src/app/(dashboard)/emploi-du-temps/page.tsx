@@ -2,8 +2,7 @@ import React from "react";
 import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
-import { runWithTenant } from "@/lib/prisma";
+import { runWithTenant, rlsBatch } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { Header } from "@/components/layout/Header";
 import { EmploiDuTempsView } from "@/components/emploi-du-temps/EmploiDuTempsView";
@@ -35,8 +34,10 @@ const getEmploiData = unstable_cache(
       // Les fragments d'isolation sont construits ici, au plus près des requêtes :
       // passés en paramètres, ils n'étaient plus rattachables à leur origine, ni par
       // un relecteur ni par l'analyse statique.
-      const [classes, matieres, enseignants, emplois, salles, disponibilites] = await Promise.all([
-        prisma.classe.findMany({
+      const anneeLibelle = await getAnneeCouranteLibelle(tenantId);
+
+      const [classes, matieres, enseignants, emplois, salles, disponibilites] = await rlsBatch((db) => [
+        db.classe.findMany({
           where: mergeFilters(
             { tenantId, ...siteFilterForModel("classe", claims) },
             // Une grille horaire se construit sur les classes de l'année en
@@ -44,7 +45,7 @@ const getEmploiData = unstable_cache(
             // Argument distinct de mergeFilters : le fragment d'année encapsule
             // son prédicat dans `AND`, il écraserait celui du site s'il était
             // étalé dans le même objet.
-            anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+            anneeFilterForModel("classe", anneeLibelle),
             classePersonal
           ),
           select: {
@@ -55,22 +56,22 @@ const getEmploiData = unstable_cache(
           },
           orderBy: [{ structure: { type: "asc" } }, { niveau: "asc" }, { nom: "asc" }],
         }),
-        prisma.matiere.findMany({
+        db.matiere.findMany({
           where: { tenantId, ...siteFilterForModel("matiere", claims) },
           select: { id: true, nom: true, code: true, couleur: true, coefficient: true },
           orderBy: { nom: "asc" },
         }),
-        prisma.enseignant.findMany({
+        db.enseignant.findMany({
           where: { tenantId, ...siteFilterForModel("enseignant", claims) },
           include: { user: { select: { name: true } } },
           orderBy: { user: { name: "asc" } },
         }),
-        prisma.emploiTemps.findMany({
+        db.emploiTemps.findMany({
           where: mergeFilters(
             { tenantId, ...siteFilterForModel("emploiTemps", claims) },
             anneeFilterForModel(
               "emploiTemps",
-              await getAnneeCouranteLibelle(tenantId),
+              anneeLibelle,
             ),
             emploiPersonal
           ),
@@ -81,12 +82,12 @@ const getEmploiData = unstable_cache(
           },
           orderBy: [{ jour: "asc" }, { heureDebut: "asc" }],
         }),
-        prisma.salle.findMany({
+        db.salle.findMany({
           where: { tenantId, ...siteFilterForModel("salle", claims) },
           select: { id: true, nom: true, capacite: true, type: true },
           orderBy: { nom: "asc" },
         }),
-        prisma.disponibiliteEnseignant.findMany({
+        db.disponibiliteEnseignant.findMany({
           where: { tenantId, ...siteFilterForModel("disponibiliteEnseignant", claims) },
           select: { id: true, enseignantId: true, jour: true, heureDebut: true, heureFin: true },
         }),

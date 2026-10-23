@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
-import { runWithTenant } from "@/lib/prisma";
+import { runWithTenant, rlsBatch } from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { DashboardStats } from "@/components/dashboard/DashboardStats";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
@@ -107,6 +107,8 @@ const getDashboardData = unstable_cache(
           : {}),
     } as Prisma.ExamenWhereInput;
 
+    const anneeLibelle = await getAnneeCouranteLibelle(tenantId);
+
     const [
       eleveStats,
       totalClasses,
@@ -115,19 +117,19 @@ const getDashboardData = unstable_cache(
       notesRecentes,
       prochainExamen,
       absenceChartData,
-    ] = await Promise.all([
+    ] = await rlsBatch((db) => [
       // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-      prisma.eleve.groupBy({
+      db.eleve.groupBy({
         by: ["statut"],
         where: baseWhere,
         _count: true,
       }),
       // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-      prisma.classe.count({
-        where: mergeFilters(classeWhere, anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId))),
+      db.classe.count({
+        where: mergeFilters(classeWhere, anneeFilterForModel("classe", anneeLibelle)),
       }),
       // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-      prisma.absence.count({
+      db.absence.count({
         where: {
           ...absenceWhere,
           date: {
@@ -137,11 +139,11 @@ const getDashboardData = unstable_cache(
         },
       }),
       // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-      prisma.absence.count({
+      db.absence.count({
         where: { ...absenceWhere, statut: "INJUSTIFIEE" },
       }),
       // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-      prisma.note.findMany({
+      db.note.findMany({
         where: noteWhere,
         orderBy: { createdAt: "desc" },
         take: 5,
@@ -151,14 +153,14 @@ const getDashboardData = unstable_cache(
         },
       }),
       // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-      prisma.examen.findFirst({
+      db.examen.findFirst({
         where: { ...examenWhere, statut: "PROGRAMME", dateDebut: { gte: new Date() } },
         orderBy: { dateDebut: "asc" },
       }),
       // OPTIMISATION: données du graphique d'absences chargées côté serveur
       // → élimine le fetch HTTP client supplémentaire (/api/dashboard/absences-chart)
       // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès
-      prisma.absence.findMany({
+      db.absence.findMany({
         where: {
           ...absenceWhere,
           date: { gte: new Date(Date.now() - 56 * 24 * 60 * 60 * 1000) },

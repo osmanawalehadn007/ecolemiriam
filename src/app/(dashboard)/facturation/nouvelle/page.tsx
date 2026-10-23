@@ -1,9 +1,9 @@
 import { auth } from "@/lib/auth";
+import { rlsBatch } from "@/lib/prisma";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { FactureForm } from "@/components/facturation/FactureForm";
-import prisma from "@/lib/prisma";
 import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { anneeFilterForModel } from "@/lib/annee-scope";
@@ -25,9 +25,10 @@ export default async function NouvelleFacturePage({
     `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
   const anneeFilter = anneeFilterForModel("classe", anneeActuelle);
   const siteFilter = siteFilterForModel("eleve", session.user);
-  const [eleves, classes, tarifs] = await Promise.all([
-    prisma.eleve.findMany({
-      where: { tenantId: session.user.tenantId, ...siteFilter, statut: "ACTIF" },
+  const tenantIdBatch = session.user.tenantId;
+  const [eleves, classes, tarifs] = await rlsBatch((db) => [
+    db.eleve.findMany({
+      where: { tenantId: tenantIdBatch, ...siteFilter, statut: "ACTIF" },
       select: {
         id: true,
         nom: true,
@@ -38,20 +39,20 @@ export default async function NouvelleFacturePage({
       },
       orderBy: [{ nom: "asc" }],
     }),
-    prisma.classe.findMany({
+    db.classe.findMany({
       // mergeFilters : les fragments de site et d'année encapsulent tous deux
       // leur prédicat dans `AND`. Étalés dans le même objet, le second
       // écraserait le premier et le filtre de site disparaîtrait.
       where: mergeFilters(
-        { tenantId: session.user.tenantId },
+        { tenantId: tenantIdBatch },
         siteFilterForModel("classe", session.user),
         anneeFilter,
       ),
       select: { id: true, nom: true, niveau: true },
       orderBy: { nom: "asc" },
     }),
-    prisma.tarifNiveau.findMany({
-      where: { tenantId: session.user.tenantId, annee: anneeActuelle, actif: true },
+    db.tarifNiveau.findMany({
+      where: { tenantId: tenantIdBatch, annee: anneeActuelle, actif: true },
     }),
   ]);
 

@@ -1,6 +1,5 @@
 import { auth } from "@/lib/auth";
-import prisma from "@/lib/prisma";
-import { runWithTenant } from "@/lib/prisma";
+import { runWithTenant, rlsBatch } from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { VieScolaireView } from "@/components/vie-scolaire/VieScolaireView";
 import { getTranslations } from "next-intl/server";
@@ -43,9 +42,9 @@ const getVieScolaireData = unstable_cache(
         await getAnneeCouranteLibelle(tenantId),
       );
 
-      const [incidents, eleves, classes] = await Promise.all([
+      const [incidents, eleves, classes] = await rlsBatch((db) => [
          
-        prisma.incident.findMany({
+        db.incident.findMany({
           where: {
             tenantId, ...incFilter,
             ...(scope?.isRestricted && scope.classeIds.length > 0
@@ -63,7 +62,7 @@ const getVieScolaireData = unstable_cache(
           take: 100,
         }),
          
-        prisma.eleve.findMany({
+        db.eleve.findMany({
           where: {
             tenantId, statut: "ACTIF", ...eleveFilter,
             ...(scope?.isRestricted && scope.classeIds.length > 0
@@ -76,7 +75,7 @@ const getVieScolaireData = unstable_cache(
           orderBy: [{ nom: "asc" }, { prenom: "asc" }],
         }),
          
-        prisma.classe.findMany({
+        db.classe.findMany({
           where: mergeFilters(
             { tenantId, ...teacherClasseFilter },
             classeFilter,

@@ -4,8 +4,7 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { Header } from "@/components/layout/Header";
 import { ParametresTabs } from "@/components/parametres/ParametresTabs";
-import prisma from "@/lib/prisma";
-import { runWithTenant } from "@/lib/prisma";
+import { runWithTenant, rlsBatch } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import {
   siteFilterForModel,
@@ -51,24 +50,20 @@ const getParametresData = unstable_cache(
     } as SessionSiteClaims;
 
     return runWithTenant(tenantId, siteId, async () => {
-      const annee = await prisma.anneesScolaires.findFirst({
-        where: { tenantId, isCurrent: true },
-      });
-
+      // Deux transactions RLS au total (au lieu de onze) : les classes et les
+      // périodes dépendent de l'année courante, lue dans la première.
       const [
         etablissement,
         users,
         parents,
         eleves,
-        classes,
         matieres,
         regles,
-        periodes,
         sites,
         annees,
-      ] = await Promise.all([
-        prisma.tenant.findUnique({ where: { id: tenantId } }),
-        prisma.user.findMany({
+      ] = await rlsBatch((db) => [
+        db.tenant.findUnique({ where: { id: tenantId } }),
+        db.user.findMany({
           where: { tenantId, ...siteFilterForModel("user", sessionUser) },
           select: {
             id: true, name: true, email: true, emailVerified: true,
@@ -81,7 +76,7 @@ const getParametresData = unstable_cache(
           },
           orderBy: { createdAt: "desc" },
         }),
-        prisma.parent.findMany({
+        db.parent.findMany({
           where: { tenantId, ...siteFilterForModel("parent", sessionUser) },
           include: {
             enfants: {
@@ -96,7 +91,7 @@ const getParametresData = unstable_cache(
           },
           orderBy: { nom: "asc" },
         }),
-        prisma.eleve.findMany({
+        db.eleve.findMany({
           where: { tenantId, statut: "ACTIF", ...siteFilterForModel("eleve", sessionUser) },
           select: {
             id: true, nom: true, prenom: true, matricule: true,
@@ -104,27 +99,15 @@ const getParametresData = unstable_cache(
           },
           orderBy: [{ classe: { nom: "asc" } }, { nom: "asc" }, { prenom: "asc" }],
         }),
-        prisma.classe.findMany({
-          where: { tenantId, ...siteFilterForModel("classe", sessionUser), ...anneeFilterForModel("classe", annee?.libelle) },
-          include: {
-            _count: { select: { eleves: ELEVE_NON_ARCHIVE } },
-            profPrincipal: { select: { user: { select: { name: true } } } },
-            structure: { select: { id: true, nom: true, type: true } },
-          },
-          orderBy: [{ niveau: "asc" }, { nom: "asc" }],
-        }),
-        prisma.matiere.findMany({
+        db.matiere.findMany({
           where: { tenantId, ...siteFilterForModel("matiere", sessionUser) },
           orderBy: { nom: "asc" },
         }),
-        prisma.reglesAppreciation.findMany({
+        db.reglesAppreciation.findMany({
           where: { tenantId },
           orderBy: [{ contexte: "asc" }, { seuilMin: "asc" }],
         }),
-        annee
-          ? prisma.periode.findMany({ where: { anneeId: annee.id }, orderBy: { numero: "asc" } })
-          : Promise.resolve([]),
-        prisma.site.findMany({
+        db.site.findMany({
           where: isSiteAdmin
             ? { tenantId, deletedAt: null }
             : { tenantId, deletedAt: null, userSites: { some: { userId } } },
@@ -138,10 +121,25 @@ const getParametresData = unstable_cache(
           },
           orderBy: { createdAt: "asc" },
         }),
-        prisma.anneesScolaires.findMany({
+        db.anneesScolaires.findMany({
           where: { tenantId },
           orderBy: { dateDebut: "desc" },
         }),
+      ]);
+
+      const annee = annees.find((a) => a.isCurrent) ?? null;
+
+      const [classes, periodes] = await rlsBatch((db) => [
+        db.classe.findMany({
+          where: { tenantId, ...siteFilterForModel("classe", sessionUser), ...anneeFilterForModel("classe", annee?.libelle) },
+          include: {
+            _count: { select: { eleves: ELEVE_NON_ARCHIVE } },
+            profPrincipal: { select: { user: { select: { name: true } } } },
+            structure: { select: { id: true, nom: true, type: true } },
+          },
+          orderBy: [{ niveau: "asc" }, { nom: "asc" }],
+        }),
+        db.periode.findMany({ where: { anneeId: annee?.id ?? "__none__" }, orderBy: { numero: "asc" } }),
       ]);
 
       return {

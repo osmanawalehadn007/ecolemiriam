@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect, notFound } from "next/navigation";
-import prisma, { runWithTenant } from "@/lib/prisma";
+import prisma, { runWithTenant, rlsBatch } from "@/lib/prisma";
 import { siteFilterForModel, eleveScopeFilter, type SessionSiteClaims } from "@/lib/site-scope";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import type { Role } from "@prisma/client";
@@ -112,17 +112,19 @@ const getEleveDetailData = unstable_cache(
 
       // Matières (pour le sélecteur de dispense) + dispenses existantes de l'élève
       // + situation financière — tout dans le même contexte RLS.
-      const [matieres, dispensesRaw, situationFinanciere] = await Promise.all([
-        prisma.matiere.findMany({
+      const [[matieres, dispensesRaw], situationFinanciere] = await Promise.all([
+        rlsBatch((db) => [
+        db.matiere.findMany({
           where: { tenantId, ...matiereFilter },
           select: { id: true, nom: true, code: true },
           orderBy: { nom: "asc" },
         }),
-        prisma.dispenseMatiere.findMany({
+        db.dispenseMatiere.findMany({
           where: { tenantId, eleveId: id, ...dispenseFilter },
           include: { matiere: { select: { nom: true } } },
           orderBy: { createdAt: "desc" },
         }),
+        ]),
         getSituationFinanciere(id, tenantId),
       ]);
 

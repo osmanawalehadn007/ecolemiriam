@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
-import prisma, { runWithTenant } from "@/lib/prisma";
+import { runWithTenant, rlsBatch } from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { ExamensManager } from "@/components/examens/ExamensManager";
 import { SiteTabs } from "@/components/sites/SiteTabs";
@@ -46,8 +46,11 @@ const getExamensData = unstable_cache(
             ? { id: "__none__" as const }
             : {};
 
-      const [examens, classes, matieres] = await Promise.all([
-        prisma.examen.findMany({
+      const anneeLibelle = await getAnneeCouranteLibelle(tenantId);
+
+
+      const [examens, classes, matieres] = await rlsBatch((db) => [
+        db.examen.findMany({
           where: { tenantId, ...siteFilterForModel("examen", claims), ...teacherExamenFilter },
           include: {
             sessions: {
@@ -62,16 +65,16 @@ const getExamensData = unstable_cache(
           },
           orderBy: { dateDebut: "desc" },
         }),
-        prisma.classe.findMany({
+        db.classe.findMany({
           where: mergeFilters(
             { tenantId, ...teacherClasseFilter },
             siteFilterForModel("classe", claims),
-            anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+            anneeFilterForModel("classe", anneeLibelle),
           ),
           select: { id: true, nom: true, niveau: true, siteId: true, site: { select: { nom: true } } },
           orderBy: { nom: "asc" },
         }),
-        prisma.matiere.findMany({
+        db.matiere.findMany({
           where: {
             tenantId,
             ...siteFilterForModel("matiere", claims),

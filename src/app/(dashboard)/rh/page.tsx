@@ -1,6 +1,5 @@
 import { auth } from "@/lib/auth";
-import prisma from "@/lib/prisma";
-import { runWithTenant } from "@/lib/prisma";
+import { runWithTenant, rlsBatch } from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { RHView } from "@/components/rh/RHView";
 import { getTranslations } from "next-intl/server";
@@ -22,9 +21,11 @@ const getEnseignantsRH = unstable_cache(
     const classeFilter = siteFilterForModel("classe", sessionUser);
 
     return runWithTenant(tenantId, siteId, async () => {
-      const [enseignants, absencesPersonnel, congesPersonnel, classes, matieres] = await Promise.all([
+      const anneeLibelle = await getAnneeCouranteLibelle(tenantId);
+
+      const [enseignants, absencesPersonnel, congesPersonnel, classes, matieres] = await rlsBatch((db) => [
          
-        prisma.enseignant.findMany({
+        db.enseignant.findMany({
           where: { tenantId, ...ensFilter },
           include: {
             user: {
@@ -68,7 +69,7 @@ const getEnseignantsRH = unstable_cache(
           orderBy: { user: { name: "asc" } },
         }),
          
-        prisma.absencePersonnel.findMany({
+        db.absencePersonnel.findMany({
           where: { tenantId, ...absFilter },
           include: {
             enseignant: { select: { id: true, user: { select: { name: true } } } },
@@ -78,7 +79,7 @@ const getEnseignantsRH = unstable_cache(
           take: 50,
         }),
          
-        prisma.congePersonnel.findMany({
+        db.congePersonnel.findMany({
           where: { tenantId, ...congeFilter },
           include: {
             enseignant: { select: { id: true, user: { select: { name: true } } } },
@@ -90,18 +91,18 @@ const getEnseignantsRH = unstable_cache(
         }),
         // Classes pour le dialog d'affectation
          
-        prisma.classe.findMany({
+        db.classe.findMany({
           where: mergeFilters(
             { tenantId },
             classeFilter,
-            anneeFilterForModel("classe", await getAnneeCouranteLibelle(tenantId)),
+            anneeFilterForModel("classe", anneeLibelle),
           ),
           select: { id: true, nom: true, niveau: true, siteId: true },
           orderBy: { nom: "asc" },
         }),
         // Matières pour le dialog d'affectation
         // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-        prisma.matiere.findMany({
+        db.matiere.findMany({
           where: { tenantId },
           select: { id: true, nom: true, code: true },
           orderBy: { nom: "asc" },

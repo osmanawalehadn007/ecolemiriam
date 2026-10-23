@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
+import { rlsBatch } from "@/lib/prisma";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
 import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
 import { anneeFilterForModel } from "@/lib/annee-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
@@ -25,10 +25,11 @@ export default async function AttestationsPage() {
     "classe",
     await getAnneeCouranteLibelle(session.user.tenantId!),
   );
-  const [classes, tenant] = await Promise.all([
-    prisma.classe.findMany({
+  const tenantIdBatch = session.user.tenantId;
+  const [classes, tenant] = await rlsBatch((db) => [
+    db.classe.findMany({
       where: mergeFilters(
-        { tenantId: session.user.tenantId },
+        { tenantId: tenantIdBatch },
         siteFilter,
         anneeFilter,
         scope?.isRestricted && scope.classeIds.length > 0
@@ -47,8 +48,8 @@ export default async function AttestationsPage() {
       },
       orderBy: { nom: "asc" },
     }),
-    prisma.tenant.findUnique({
-      where: { id: session.user.tenantId },
+    db.tenant.findUnique({
+      where: { id: tenantIdBatch },
       select: {
         name: true, city: true, country: true, phone: true, email: true,
         address: true, logoUrl: true, chefEtablissement: true,

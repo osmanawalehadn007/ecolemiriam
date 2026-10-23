@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
+import { rlsBatch } from "@/lib/prisma";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
 import { siteFilterForModel, mergeFilters } from "@/lib/site-scope";
 import { getTeacherScope, isTeacherRole } from "@/lib/teacher-classes";
 import { anneeFilterForModel } from "@/lib/annee-scope";
@@ -25,10 +25,11 @@ export default async function RapportClassePage() {
     "classe",
     await getAnneeCouranteLibelle(session.user.tenantId!),
   );
-  const [classes, periodes] = await Promise.all([
-    prisma.classe.findMany({
+  const tenantIdBatch = session.user.tenantId;
+  const [classes, periodes] = await rlsBatch((db) => [
+    db.classe.findMany({
       where: mergeFilters(
-        { tenantId: session.user.tenantId },
+        { tenantId: tenantIdBatch },
         siteFilter,
         anneeFilter,
         scope?.isRestricted && scope.classeIds.length > 0
@@ -40,8 +41,8 @@ export default async function RapportClassePage() {
       select: { id: true, nom: true, niveau: true },
       orderBy: { nom: "asc" },
     }),
-    prisma.periode.findMany({
-      where: { annee: { tenantId: session.user.tenantId } },
+    db.periode.findMany({
+      where: { annee: { tenantId: tenantIdBatch } },
       select: { id: true, nom: true, numero: true, isCurrent: true },
       orderBy: { numero: "asc" },
     }),

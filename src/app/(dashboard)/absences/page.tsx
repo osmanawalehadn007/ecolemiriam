@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
+import { rlsBatch } from "@/lib/prisma";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { AbsencesStats } from "@/components/absences/AbsencesStats";
 import { AbsencesList } from "@/components/absences/AbsencesList";
@@ -33,13 +33,13 @@ async function getAbsencesData(
         : {}
   );
 
-  const [absenceStats, recentesAbsences] = await Promise.all([
-    prisma.absence.groupBy({
+  const [absenceStats, recentesAbsences] = await rlsBatch((db) => [
+    db.absence.groupBy({
       by: ["statut"],
       where: { ...absenceWhere, date: { gte: sevenDaysAgo } },
       _count: true,
     }),
-    prisma.absence.findMany({
+    db.absence.findMany({
       where: absenceWhere,
       orderBy: { date: "desc" },
       take: 50,

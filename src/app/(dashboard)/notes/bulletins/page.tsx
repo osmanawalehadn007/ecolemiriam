@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
+import { rlsBatch } from "@/lib/prisma";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { BulletinsManager } from "@/components/bulletins/BulletinsManager";
 import { BulletinsList } from "@/components/bulletins/BulletinsList";
@@ -35,9 +35,9 @@ async function getBulletinsData(
     hasPersonalScope ? { eleves: { some: personalClasse } } : {}
   );
 
-  const [classes, periodes] = await Promise.all([
+  const [classes, periodes] = await rlsBatch((db) => [
     // eslint-disable-next-line ecolemiriam/require-site-filter, ecolemiriam/require-annee-filter -- écran de bulletins : les années révolues doivent rester consultables (la période choisie porte l'année)
-    prisma.classe.findMany({
+    db.classe.findMany({
       where: classeWhere,
       include: {
         // eslint-disable-next-line ecolemiriam/require-site-filter -- include filtré par le where parent (tenantId sur la table racine)
@@ -46,7 +46,7 @@ async function getBulletinsData(
       },
       orderBy: { nom: "asc" },
     }),
-    prisma.periode.findMany({
+    db.periode.findMany({
       where: { annee: { tenantId } },
       orderBy: { numero: "asc" },
       include: { annee: { select: { id: true, libelle: true } } },

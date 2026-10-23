@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
-import { runWithTenant } from "@/lib/prisma";
+import { runWithTenant, rlsBatch } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { Header } from "@/components/layout/Header";
 import { CahierTextView } from "@/components/cahier-texte/CahierTextView";
@@ -57,8 +57,8 @@ const getCahierTexteData = unstable_cache(
       const anneeCourante = await getAnneeCouranteLibelle(tenantId);
       const anneeFilter = anneeFilterForModel("classe", anneeCourante);
 
-      const [entries, classes, matieres, enseignants] = await Promise.all([
-        prisma.cahierTexte.findMany({
+      const [entries, classes, matieres, enseignants] = await rlsBatch((db) => [
+        db.cahierTexte.findMany({
           where: mergeFilters(
             entryWhere,
             anneeFilterForModel("cahierTexte", anneeCourante),
@@ -89,7 +89,7 @@ const getCahierTexteData = unstable_cache(
           take: 100,
         }),
         // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-        prisma.classe.findMany({
+        db.classe.findMany({
           where: mergeFilters(
             { tenantId },
             anneeFilter,
@@ -103,7 +103,7 @@ const getCahierTexteData = unstable_cache(
           orderBy: { nom: "asc" },
         }),
         // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-        prisma.matiere.findMany({
+        db.matiere.findMany({
           where: {
             tenantId,
             ...(scope?.isRestricted && scope.matiereIds.length > 0
@@ -114,7 +114,7 @@ const getCahierTexteData = unstable_cache(
           orderBy: { nom: "asc" },
         }),
         // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId : le caller (server component) a déjà vérifié l'accès via getServerSession + checkPermission
-        prisma.enseignant.findMany({
+        db.enseignant.findMany({
           where: { tenantId },
           select: { id: true, specialite: true, user: { select: { name: true } } },
           orderBy: { user: { name: "asc" } },

@@ -15,4 +15,4 @@
 
 export { prismaWithRls as default } from "./prisma-rls";
 export { prismaWithRls as prisma } from "./prisma-rls";
-export { runWithTenant, runWithRlsBatch, getCurrentRlsContext, registerAuthFetcher } from "./prisma-rls";
+export { runWithTenant, runWithRlsBatch, rlsBatch, getCurrentRlsContext, registerAuthFetcher } from "./prisma-rls";

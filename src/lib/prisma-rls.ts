@@ -117,6 +117,30 @@ export function registerAuthFetcher(fn: SessionFetcher): void {
 }
 
 // ------------------------------------------------------------
+// Résolution du contexte (ALS d'abord, puis fetchers de session)
+// ------------------------------------------------------------
+
+async function resolveRlsContext(): Promise<RlsContext | null> {
+  const stored = rlsStorage.getStore();
+  if (stored) return stored;
+  for (const fetcher of authFetchers) {
+    try {
+      const session = await fetcher();
+      if (session?.user?.tenantId) {
+        return {
+          tenantId: session.user.tenantId ?? null,
+          siteId: session.user.siteId ?? null,
+          role: session.user.role ?? null,
+        };
+      }
+    } catch {
+      // Ce fetcher a échoué, essayer le suivant
+    }
+  }
+  return null;
+}
+
+// ------------------------------------------------------------
 // Extension Prisma
 // ------------------------------------------------------------
 
@@ -139,25 +163,7 @@ const rlsExtension = Prisma.defineExtension((client) => {
           return query(args);
         }
 
-        // Récupérer le contexte tenant (ALS d'abord, puis fetchers)
-        let ctx = rlsStorage.getStore();
-        if (!ctx && authFetchers.length > 0) {
-          for (const fetcher of authFetchers) {
-            try {
-              const session = await fetcher();
-              if (session?.user?.tenantId) {
-                ctx = {
-                  tenantId: session.user.tenantId ?? null,
-                  siteId: session.user.siteId ?? null,
-                  role: session.user.role ?? null,
-                };
-                break;
-              }
-            } catch {
-              // Ce fetcher a échoué, essayer le suivant
-            }
-          }
-        }
+        const ctx = await resolveRlsContext();
 
         // Pas de contexte → fail-closed explicite (N-5)
         // Avant : on exécutait sans SET LOCAL et la DB renvoyait 0 ligne
@@ -365,4 +371,40 @@ export async function runWithRlsBatch<T>(
       )
     )
   );
+}
+
+/**
+ * Exécute plusieurs requêtes Prisma indépendantes en UN SEUL aller-retour
+ * Node → moteur, dans une seule transaction RLS, sur une seule connexion.
+ *
+ * `Promise.all([prisma.a…, prisma.b…])` ouvre une transaction par requête
+ * (N connexions prélevées sur le pool, N `set_config`). Ici, le contexte
+ * tenant est posé une fois puis toutes les requêtes s'enchaînent :
+ *
+ *   const [eleves, classes] = await rlsBatch((db) => [
+ *     db.eleve.count({ where }),
+ *     db.classe.findMany({ where }),
+ *   ]);
+ *
+ * Le callback reçoit le client NON étendu : le contexte est déjà posé par la
+ * transaction, l'extension ne doit pas le reposer. Il doit retourner des
+ * requêtes non attendues (pas de `await`) ; toute valeur à résoudre avant
+ * (année courante, scope) se calcule en amont.
+ */
+export async function rlsBatch<T extends Prisma.PrismaPromise<unknown>[]>(
+  build: (db: PrismaClient) => [...T]
+): Promise<{ [K in keyof T]: Awaited<T[K]> }> {
+  const ctx = await resolveRlsContext();
+  if (!ctx || !ctx.tenantId) {
+    throw new Error("rlsBatch: contexte tenant manquant — appelez runWithTenant() ou auth().");
+  }
+  await assertRlsEnforceable();
+
+  const setContext =
+    ctx.role === "SUPER_ADMIN"
+      ? prismaApp.$executeRaw`SELECT set_config('app.is_super_admin', 'true', true)`
+      : prismaApp.$executeRaw`SELECT set_config('app.tenant_id', ${ctx.tenantId}, true), set_config('app.site_id', ${ctx.siteId ?? ""}, true)`;
+
+  const results = await prismaApp.$transaction([setContext, ...build(prismaApp as PrismaClient)]);
+  return results.slice(1) as { [K in keyof T]: Awaited<T[K]> };
 }

@@ -1,6 +1,5 @@
 import { auth } from "@/lib/auth";
-import prisma from "@/lib/prisma";
-import { runWithTenant } from "@/lib/prisma";
+import { runWithTenant, rlsBatch } from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { CommunicationView } from "@/components/communication/CommunicationView";
 import { getTranslations } from "next-intl/server";
@@ -35,14 +34,14 @@ const getCommunicationData = unstable_cache(
         "classe",
         await getAnneeCouranteLibelle(tenantId),
       );
-      const [notifications, classes] = await Promise.all([
-        prisma.notification.findMany({
+      const [notifications, classes] = await rlsBatch((db) => [
+        db.notification.findMany({
           where: { tenantId, ...notifFilter },
           include: { envoyePar: { select: { name: true, avatarUrl: true } } },
           orderBy: { createdAt: "desc" },
           take: 50,
         }),
-        prisma.classe.findMany({
+        db.classe.findMany({
           where: mergeFilters(
             { tenantId },
             classeFilter,

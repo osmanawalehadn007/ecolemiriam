@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { guardPage } from "@/lib/guard-page";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
-import { runWithTenant } from "@/lib/prisma";
+import { runWithTenant, rlsBatch } from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { FinanceView } from "@/components/finances/FinanceView";
 import { SiteTabs } from "@/components/sites/SiteTabs";
@@ -124,72 +124,55 @@ const getFinanceDataCached = unstable_cache(
       // Priorité : jour précis > mois précis > période relative
       const { start, end } = dayRange ?? monthRange ?? getPeriodRange(periode);
 
-      const [availableMonths, totalAgg, paiementsParMethodeAgg, totalFacturesAgg, cashPendingAgg, cashPending, totalDepensesAgg, depenses, budgets, remisesCaisse, facturesPeriode, paiementsListe, paiementsJour] = await Promise.all([
+      // Une seule transaction RLS pour les 13 requêtes (au lieu d'une par
+      // requête) ; `getRemisesCaisse` a ses propres requêtes et part en parallèle.
+      const [[factureDates, paiementDates, depenseDates, totalAgg, paiementsParMethodeAgg, totalFacturesAgg, cashPendingAgg, cashPending, totalDepensesAgg, depenses, budgets, facturesPeriode, paiementsListe], remisesCaisse, paiementsJour] = await Promise.all([
+        rlsBatch((db) => [
         // Mois disponibles
-        (async () => {
-          const [factureDates, paiementDates, depenseDates] = await Promise.all([
-            prisma.facture.findMany({
-              where: { tenantId, ...siteFilter },
-              select: { createdAt: true },
-              orderBy: { createdAt: "desc" },
-              take: 500,
-            }),
-            // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
-            prisma.paiement.findMany({
-              where: { facture: { tenantId, ...siteFilter } },
-              select: { date: true },
-              orderBy: { date: "desc" },
-              take: 500,
-            }),
-            prisma.depense.findMany({
-              where: { tenantId, ...depenseFilter },
-              select: { date: true },
-              orderBy: { date: "desc" },
-              take: 500,
-            }),
-          ]);
-          const months = new Set<string>();
-          for (const f of factureDates) {
-            const d = new Date(f.createdAt);
-            months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
-          }
-          for (const p of paiementDates) {
-            const d = new Date(p.date);
-            months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
-          }
-          for (const d of depenseDates) {
-            const dt = new Date(d.date);
-            months.add(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`);
-          }
-          const now = new Date();
-          months.add(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
-          return Array.from(months).sort((a, b) => b.localeCompare(a));
-        })(),
+        db.facture.findMany({
+          where: { tenantId, ...siteFilter },
+          select: { createdAt: true },
+          orderBy: { createdAt: "desc" },
+          take: 500,
+        }),
         // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
-        prisma.paiement.aggregate({
+        db.paiement.findMany({
+          where: { facture: { tenantId, ...siteFilter } },
+          select: { date: true },
+          orderBy: { date: "desc" },
+          take: 500,
+        }),
+        db.depense.findMany({
+          where: { tenantId, ...depenseFilter },
+          select: { date: true },
+          orderBy: { date: "desc" },
+          take: 500,
+        }),
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
+        db.paiement.aggregate({
           _sum: { montant: true },
           where: { date: { gte: start, lte: end }, facture: { tenantId, ...siteFilter } },
         }),
         // Montants perçus par moyen de paiement : un agrégat exact, là où la liste
         // des paiements était tronquée à 200 lignes.
         // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
-        prisma.paiement.groupBy({
+        db.paiement.groupBy({
           by: ["methode", "devise"],
           _sum: { montant: true },
           _count: { _all: true },
           where: { date: { gte: start, lte: end }, facture: { tenantId, ...siteFilter } },
         }),
-        prisma.facture.aggregate({
+        db.facture.aggregate({
           _sum: { montant: true },
           where: { tenantId, ...siteFilter, createdAt: { gte: start, lte: end } },
         }),
         // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
-        prisma.paiement.aggregate({
+        db.paiement.aggregate({
           _sum: { montant: true },
           where: { methode: "espèces", depotBanque: null, directorRecu: false, date: { gte: start, lte: end }, facture: { tenantId, ...siteFilter } },
         }),
         // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
-        prisma.paiement.findMany({
+        db.paiement.findMany({
           where: { methode: "espèces", depotBanque: null, directorRecu: false, date: { gte: start, lte: end }, facture: { tenantId, ...siteFilter } },
           include: {
             facture: { select: { numero: true, site: { select: { nom: true } }, eleve: { select: { nom: true, prenom: true } } } },
@@ -198,27 +181,25 @@ const getFinanceDataCached = unstable_cache(
           orderBy: { date: "desc" },
           take: 100,
         }),
-        prisma.depense.aggregate({
+        db.depense.aggregate({
           _sum: { montant: true },
           where: { tenantId, ...depenseFilter, date: { gte: start, lte: end } },
         }),
-        prisma.depense.findMany({
+        db.depense.findMany({
           where: { tenantId, ...depenseFilter, date: { gte: start, lte: end } },
           include: { createdBy: { select: { name: true } }, autorisePar: { select: { name: true } }, payePar: { select: { name: true } }, site: { select: { nom: true } } },
           orderBy: { date: "desc" },
           take: 100,
         }),
-        prisma.budget.findMany({
+        db.budget.findMany({
           where: { tenantId, ...budgetFilter },
           orderBy: { createdAt: "desc" },
           take: 100,
         }),
-        getRemisesCaisse(activeSite === "all" ? null : activeSite),
-         
         // Factures émises : on ne garde que les impayées et celles réglées au
         // moins en partie en espèces ; celles payées uniquement par Waafi,
         // CAC Pay, virement ou carte sont exclues de la page Finances.
-        prisma.facture.findMany({
+        db.facture.findMany({
           where: {
             tenantId,
             ...siteFilter,
@@ -241,7 +222,7 @@ const getFinanceDataCached = unstable_cache(
         // Les totaux par moyen viennent de l'agrégat exact (`groupBy`) : cette
         // liste est tronquée à 200 lignes.
         // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
-        prisma.paiement.findMany({
+        db.paiement.findMany({
           where: {
             date: { gte: start, lte: end },
             ...(methodesPourFiltre(methodeFiltre) ? { methode: { in: methodesPourFiltre(methodeFiltre)! } } : {}),
@@ -259,21 +240,42 @@ const getFinanceDataCached = unstable_cache(
                 : [{ date: "desc" }],
           take: 200,
         }),
+        ]),
+        getRemisesCaisse(activeSite === "all" ? null : activeSite),
         // Vue « jour précis » : tous les encaissements du jour, SANS le filtre de
         // moyen de paiement, pour que les soldes matin / après-midi restent exacts.
         dayRange
-          ? // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
-            prisma.paiement.findMany({
-              where: { date: { gte: start, lte: end }, facture: { tenantId, ...siteFilter } },
-              include: {
-                facture: { select: { numero: true, site: { select: { nom: true } }, eleve: { select: { nom: true, prenom: true } } } },
-                enregistrePar: { select: { name: true } },
-              },
-              orderBy: { date: "asc" },
-              take: 500,
-            })
-          : Promise.resolve([]),
+          ? rlsBatch((db) => [
+              // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
+              db.paiement.findMany({
+                where: { date: { gte: start, lte: end }, facture: { tenantId, ...siteFilter } },
+                include: {
+                  facture: { select: { numero: true, site: { select: { nom: true } }, eleve: { select: { nom: true, prenom: true } } } },
+                  enregistrePar: { select: { name: true } },
+                },
+                orderBy: { date: "asc" },
+                take: 500,
+              }),
+            ]).then(([rows]) => rows)
+          : Promise.resolve(null),
       ]);
+
+      const months = new Set<string>();
+      for (const f of factureDates) {
+        const d = new Date(f.createdAt);
+        months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+      }
+      for (const p of paiementDates) {
+        const d = new Date(p.date);
+        months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+      }
+      for (const d of depenseDates) {
+        const dt = new Date(d.date);
+        months.add(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`);
+      }
+      const now = new Date();
+      months.add(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+      const availableMonths = Array.from(months).sort((a, b) => b.localeCompare(a));
 
       return {
         availableMonths,
@@ -297,7 +299,7 @@ const getFinanceDataCached = unstable_cache(
         })),
         facturesPeriode,
         paiementsListe,
-        paiementsJour: dayRange ? paiementsJour : null,
+        paiementsJour,
       };
     });
   },
