@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { createDepense, deleteDepense } from "@/lib/actions/finances";
 import { getUsersForTenant } from "@/lib/actions/parametres";
 import { peutAutoriserDepense, peutPayerDepense } from "@/lib/depense-habilitations";
-import { formatDate } from "@/lib/utils";
+import { DateHeure } from "@/components/ui/DateHeure";
 import { toast } from "sonner";
 
 interface Depense {
@@ -250,7 +250,7 @@ export function DepensesSection({
               <tbody>
                 {depenses.map((d) => (
                   <tr key={d.id} className="border-b last:border-0">
-                    <td className="py-2 pr-2 whitespace-nowrap">{formatDate(d.date)}</td>
+                    <td className="py-2 pr-2"><DateHeure value={d.date} /></td>
                     <td className="py-2 pr-2">{d.categorie}</td>
                     <td className="py-2 pr-2">{d.fournisseur ?? "—"}</td>
                     <td className="py-2 pr-2 text-muted-foreground">{d.description ?? "—"}</td>

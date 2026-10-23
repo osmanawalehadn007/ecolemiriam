@@ -124,7 +124,7 @@ const getFinanceDataCached = unstable_cache(
       // Priorité : jour précis > mois précis > période relative
       const { start, end } = dayRange ?? monthRange ?? getPeriodRange(periode);
 
-      const [availableMonths, totalAgg, paiementsParMethodeAgg, totalFacturesAgg, cashPendingAgg, cashPending, totalDepensesAgg, depenses, budgets, remisesCaisse, facturesPeriode, paiementsListe] = await Promise.all([
+      const [availableMonths, totalAgg, paiementsParMethodeAgg, totalFacturesAgg, cashPendingAgg, cashPending, totalDepensesAgg, depenses, budgets, remisesCaisse, facturesPeriode, paiementsListe, paiementsJour] = await Promise.all([
         // Mois disponibles
         (async () => {
           const [factureDates, paiementDates, depenseDates] = await Promise.all([
@@ -186,11 +186,11 @@ const getFinanceDataCached = unstable_cache(
         // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
         prisma.paiement.aggregate({
           _sum: { montant: true },
-          where: { methode: "espèces", depotBanque: null, directorRecu: false, facture: { tenantId, ...siteFilter } },
+          where: { methode: "espèces", depotBanque: null, directorRecu: false, date: { gte: start, lte: end }, facture: { tenantId, ...siteFilter } },
         }),
         // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
         prisma.paiement.findMany({
-          where: { methode: "espèces", depotBanque: null, directorRecu: false, facture: { tenantId, ...siteFilter } },
+          where: { methode: "espèces", depotBanque: null, directorRecu: false, date: { gte: start, lte: end }, facture: { tenantId, ...siteFilter } },
           include: {
             facture: { select: { numero: true, site: { select: { nom: true } }, eleve: { select: { nom: true, prenom: true } } } },
             enregistrePar: { select: { name: true } },
@@ -259,6 +259,20 @@ const getFinanceDataCached = unstable_cache(
                 : [{ date: "desc" }],
           take: 200,
         }),
+        // Vue « jour précis » : tous les encaissements du jour, SANS le filtre de
+        // moyen de paiement, pour que les soldes matin / après-midi restent exacts.
+        dayRange
+          ? // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
+            prisma.paiement.findMany({
+              where: { date: { gte: start, lte: end }, facture: { tenantId, ...siteFilter } },
+              include: {
+                facture: { select: { numero: true, site: { select: { nom: true } }, eleve: { select: { nom: true, prenom: true } } } },
+                enregistrePar: { select: { name: true } },
+              },
+              orderBy: { date: "asc" },
+              take: 500,
+            })
+          : Promise.resolve([]),
       ]);
 
       return {
@@ -283,10 +297,11 @@ const getFinanceDataCached = unstable_cache(
         })),
         facturesPeriode,
         paiementsListe,
+        paiementsJour: dayRange ? paiementsJour : null,
       };
     });
   },
-  ["finances-data-v6"],
+  ["finances-data-v8"],
   { revalidate: 30, tags: ["finances-data"] }
 );
 
@@ -356,7 +371,7 @@ export default async function FinancesPage(
     activeTri,
   );
 
-  const { availableMonths, totalEncaisse, totalFactures, resteAEncaisser, soldeCaisse, cashPendingTotal, cashPending, totalDepenses, depenses, budgets, remisesCaisse, recettesParMethode, facturesPeriode, paiementsListe } = cached;
+  const { availableMonths, totalEncaisse, totalFactures, resteAEncaisser, soldeCaisse, cashPendingTotal, cashPending, totalDepenses, depenses, budgets, remisesCaisse, recettesParMethode, facturesPeriode, paiementsListe, paiementsJour } = cached;
 
   const currentSiteName = activeSite === "all"
     ? tCommon("allSites")
@@ -393,6 +408,7 @@ export default async function FinancesPage(
           recettesParMethode={recettesParMethode}
           facturesPeriode={facturesPeriode}
           paiementsListe={paiementsListe}
+          paiementsJour={paiementsJour}
           activeMethode={activeMethode}
           activeTri={activeTri}
           remisesCaisse={remisesCaisse}
