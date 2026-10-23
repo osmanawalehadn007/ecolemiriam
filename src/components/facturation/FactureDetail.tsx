@@ -330,7 +330,7 @@ export function FactureDetail({ facture, userRole }: FactureDetailProps) {
               </p>
               {facture.createdBy && (
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {t("recordedBy")}: <span className="font-medium text-gray-600 dark:text-gray-300">{facture.createdBy.name}</span>
+                  {t("recordedBy")}: <span className="font-medium text-gray-600 dark:text-gray-300">{facture.createdBy.name}</span> · {formatDateHeure(facture.createdAt)}
                 </p>
               )}
             </div>
@@ -529,7 +529,9 @@ export function FactureDetail({ facture, userRole }: FactureDetailProps) {
                         <PaymentMethodBadge method={p.methode} t={t} />
                       </td>
                       <td className="px-4 py-2 text-muted-foreground">{p.reference ?? "—"}</td>
-                      <td className="px-4 py-2 text-muted-foreground">{p.enregistrePar?.name ?? "—"}</td>
+                      <td className="px-4 py-2 text-muted-foreground">
+                        {p.enregistrePar?.name ?? "—"} · <span className="whitespace-nowrap">{formatDateHeure(p.date)}</span>
+                      </td>
                       <td className="px-4 py-2 text-center">
                         {!p.estContrePassation && (
                           <a

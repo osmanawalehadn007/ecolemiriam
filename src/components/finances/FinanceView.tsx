@@ -637,6 +637,7 @@ export function FinanceView({
                           <th className="px-3 py-2 text-left font-medium">{t("student")}</th>
                           <th className="px-3 py-2 text-left font-medium">{t("invoice")}</th>
                           <th className="px-3 py-2 text-left font-medium">{t("method")} / {t("reference")}</th>
+                          <th className="px-3 py-2 text-left font-medium">{t("recordedBy")}</th>
                           <th className="px-3 py-2 text-right font-medium">{t("amount")}</th>
                         </tr>
                       </thead>
@@ -652,13 +653,16 @@ export function FinanceView({
                               </Badge>
                               {p.reference && <span className="ml-2 font-mono text-xs text-muted-foreground">{p.reference}</span>}
                             </td>
+                            <td className="px-3 py-2 text-muted-foreground">
+                              {p.enregistrePar?.name ?? "—"} · <span className="whitespace-nowrap">{formatDateHeure(p.date)}</span>
+                            </td>
                             <td className={cn("px-3 py-2 text-right font-medium whitespace-nowrap", p.montant < 0 && "text-red-600")}>
                               {formatCurrency(p.montant, p.devise)}
                             </td>
                           </tr>
                         ))}
                         {paiementsListe.length === 0 && (
-                          <tr><td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">{t("noPayments")}</td></tr>
+                          <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">{t("noPayments")}</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -743,7 +747,9 @@ export function FinanceView({
                         <td className="py-2 pr-2">{p.facture.eleve ? `${p.facture.eleve.prenom ? `${p.facture.eleve.prenom} ` : ""}${p.facture.eleve.nom}` : "—"}</td>
                         <td className="py-2 pr-2">{p.facture.numero}</td>
                         <td className="py-2 pr-2 text-right font-medium">{formatCurrency(p.montant, p.devise)}</td>
-                        <td className="py-2 pr-2 text-muted-foreground">{p.enregistrePar?.name ?? "—"}</td>
+                        <td className="py-2 pr-2 text-muted-foreground">
+                          {p.enregistrePar?.name ?? "—"} · <span className="whitespace-nowrap">{formatDateHeure(p.date)}</span>
+                        </td>
                         <td className="py-2 text-right">
                           <div className="flex justify-end gap-2">
                             {canWriteFinance && (

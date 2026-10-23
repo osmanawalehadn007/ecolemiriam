@@ -231,7 +231,7 @@ export async function GET(
             <td style="font-weight:600;color:#059669">${formatMoney(p.montant, p.devise)}</td>
             <td style="text-transform:capitalize">${p.methode}</td>
             <td>${p.reference ?? "—"}</td>
-            <td>${p.enregistrePar?.name ?? "—"}</td>
+            <td>${p.enregistrePar?.name ?? "—"} · ${formatDateHeure(p.date)}</td>
           </tr>
           `).join("")}
         </tbody>

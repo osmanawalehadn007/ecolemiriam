@@ -4,7 +4,7 @@ import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { canAccessSite } from "@/lib/site-filter";
 import { niveauToLabel } from "@/lib/niveau";
-import { formatHeure } from "@/lib/utils";
+import { formatHeure, formatDateHeure } from "@/lib/utils";
 
 export async function GET(
   req: NextRequest,
@@ -160,7 +160,7 @@ export async function GET(
       <div class="row"><span class="label">Libellé</span><span class="value">${paiement.facture.libelle}</span></div>
       <div class="row"><span class="label">Méthode</span><span class="value" style="text-transform:capitalize">${paiement.methode}</span></div>
       ${paiement.reference ? `<div class="row"><span class="label">Référence</span><span class="value">${paiement.reference}</span></div>` : ""}
-      ${paiement.enregistrePar ? `<div class="row"><span class="label">Enregistré par</span><span class="value">${paiement.enregistrePar.name}</span></div>` : ""}
+      ${paiement.enregistrePar ? `<div class="row"><span class="label">Enregistré par</span><span class="value">${paiement.enregistrePar.name} · ${formatDateHeure(paiement.date)}</span></div>` : ""}
 
       <div class="amount-box">
         <div class="label">Montant reçu</div>

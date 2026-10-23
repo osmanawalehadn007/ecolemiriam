@@ -95,8 +95,10 @@ describe("FacturesTable", () => {
 
   it("displays createdBy name when present", () => {
     render(<FacturesTable factures={mockFactures} />);
-    expect(screen.getByText("Admin")).toBeInTheDocument();
-    expect(screen.getByText("Secretary")).toBeInTheDocument();
+    // Le nom est suivi de la date et de l'heure d'enregistrement (heure de Djibouti).
+    expect(screen.getByText(/^Admin ·/)).toBeInTheDocument();
+    expect(screen.getByText(/^Secretary ·/)).toBeInTheDocument();
+    expect(screen.getAllByText("01/01/2025 03:00:00").length).toBeGreaterThan(0);
   });
 
   it("displays dash when createdBy is null", () => {
