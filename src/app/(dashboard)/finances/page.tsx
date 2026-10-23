@@ -11,7 +11,7 @@ import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-scope";
 import { getSitesForUser } from "@/lib/actions/eleve";
 import { getSiteColorMap } from "@/lib/site-colors";
 import { getRemisesCaisse } from "@/lib/actions/finances";
-import { PAYMENT_METHODS } from "@/lib/payment-methods";
+import { PAYMENT_METHODS, type PaymentMethodType } from "@/lib/payment-methods";
 import { unstable_cache } from "next/cache";
 import {
   startOfDay,
@@ -23,6 +23,20 @@ import {
   startOfYear,
   endOfYear,
 } from "date-fns";
+
+export type TriPaiements = "date" | "montant" | "methode";
+
+/**
+ * Filtre « moyen de paiement » : soit un moyen précis (waffi, saba_pay…), soit
+ * une famille entière (CASH, MOBILE_MONEY, BANK, CARD). Renvoie la liste des
+ * identifiants de moyens retenus, ou null pour ne rien filtrer.
+ */
+function methodesPourFiltre(filtre: string | null): string[] | null {
+  if (!filtre) return null;
+  const parType = PAYMENT_METHODS.filter((m) => m.type === (filtre as PaymentMethodType)).map((m) => m.id);
+  if (parType.length > 0) return parType;
+  return PAYMENT_METHODS.some((m) => m.id === filtre) ? [filtre] : null;
+}
 
 type Periode = "today" | "week" | "month" | "semester" | "year";
 export type FinanceType = "all" | "recettes" | "depenses" | "factures";
@@ -79,6 +93,8 @@ const getFinanceDataCached = unstable_cache(
     periode: Periode,
     activeSite: string,
     monthParam: string | null,
+    methodeFiltre: string | null,
+    tri: TriPaiements,
   ) => {
     const claims: SessionSiteClaims = {
       role: role as SessionSiteClaims["role"],
@@ -96,7 +112,7 @@ const getFinanceDataCached = unstable_cache(
 
       const { start, end } = monthRange ?? getPeriodRange(periode);
 
-      const [availableMonths, totalAgg, paiementsParMethodeAgg, totalFacturesAgg, cashPendingAgg, cashPending, totalDepensesAgg, depenses, budgets, remisesCaisse, facturesPeriode] = await Promise.all([
+      const [availableMonths, totalAgg, paiementsParMethodeAgg, totalFacturesAgg, cashPendingAgg, cashPending, totalDepensesAgg, depenses, budgets, remisesCaisse, facturesPeriode, paiementsListe] = await Promise.all([
         // Mois disponibles
         (async () => {
           const [factureDates, paiementDates, depenseDates] = await Promise.all([
@@ -209,6 +225,28 @@ const getFinanceDataCached = unstable_cache(
           orderBy: { createdAt: "desc" },
           take: 200,
         }),
+        // Paiements encaissés sur la période, filtrables par moyen de paiement.
+        // Les totaux par moyen viennent de l'agrégat exact (`groupBy`) : cette
+        // liste est tronquée à 200 lignes.
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
+        prisma.paiement.findMany({
+          where: {
+            date: { gte: start, lte: end },
+            ...(methodesPourFiltre(methodeFiltre) ? { methode: { in: methodesPourFiltre(methodeFiltre)! } } : {}),
+            facture: { tenantId, ...siteFilter },
+          },
+          include: {
+            facture: { select: { numero: true, site: { select: { nom: true } }, eleve: { select: { nom: true, prenom: true } } } },
+            enregistrePar: { select: { name: true } },
+          },
+          orderBy:
+            tri === "montant"
+              ? [{ montant: "desc" }, { date: "desc" }]
+              : tri === "methode"
+                ? [{ methode: "asc" }, { date: "desc" }]
+                : [{ date: "desc" }],
+          take: 200,
+        }),
       ]);
 
       return {
@@ -232,16 +270,17 @@ const getFinanceDataCached = unstable_cache(
           nombre: g._count._all,
         })),
         facturesPeriode,
+        paiementsListe,
       };
     });
   },
-  ["finances-data-v4"],
+  ["finances-data-v5"],
   { revalidate: 30, tags: ["finances-data"] }
 );
 
 export default async function FinancesPage(
   props: {
-    searchParams: Promise<{ siteId?: string; periode?: string; month?: string; type?: string }>;
+    searchParams: Promise<{ siteId?: string; periode?: string; month?: string; type?: string; methode?: string; tri?: string }>;
   }
 ) {
   const searchParams = await props.searchParams;
@@ -258,7 +297,7 @@ export default async function FinancesPage(
   ]);
 
   const sessionSiteId = (session.user as { siteId?: string | null }).siteId ?? null;
-  const { siteId, periode, month, type } = sp;
+  const { siteId, periode, month, type, methode, tri } = sp;
 
   const activeSite = (() => {
     if (!siteId) return sessionSiteId ? sessionSiteId : "all";
@@ -280,6 +319,10 @@ export default async function FinancesPage(
   const validTypes: FinanceType[] = ["all", "recettes", "depenses", "factures"];
   const activeType: FinanceType = validTypes.includes(type as FinanceType) ? (type as FinanceType) : "all";
 
+  // Filtre par moyen de paiement et tri de la liste (valeurs inconnues ignorées)
+  const activeMethode = methode && methodesPourFiltre(methode) ? methode : null;
+  const activeTri: TriPaiements = tri === "montant" || tri === "methode" ? tri : "date";
+
   const siteIdsJson = JSON.stringify((session.user as { siteIds?: string[] | null }).siteIds ?? null);
   const tenantHasSites = (session.user as { tenantHasSites?: boolean }).tenantHasSites ?? false;
 
@@ -293,9 +336,11 @@ export default async function FinancesPage(
     activePeriode,
     activeSite,
     activeMonth,
+    activeMethode,
+    activeTri,
   );
 
-  const { availableMonths, totalEncaisse, totalFactures, resteAEncaisser, soldeCaisse, cashPendingTotal, cashPending, totalDepenses, depenses, budgets, remisesCaisse, recettesParMethode, facturesPeriode } = cached;
+  const { availableMonths, totalEncaisse, totalFactures, resteAEncaisser, soldeCaisse, cashPendingTotal, cashPending, totalDepenses, depenses, budgets, remisesCaisse, recettesParMethode, facturesPeriode, paiementsListe } = cached;
 
   const currentSiteName = activeSite === "all"
     ? tCommon("allSites")
@@ -331,6 +376,9 @@ export default async function FinancesPage(
           budgets={budgets}
           recettesParMethode={recettesParMethode}
           facturesPeriode={facturesPeriode}
+          paiementsListe={paiementsListe}
+          activeMethode={activeMethode}
+          activeTri={activeTri}
           remisesCaisse={remisesCaisse}
           activeSite={activeSite}
           activePeriode={activePeriode}

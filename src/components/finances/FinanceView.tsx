@@ -24,7 +24,7 @@ import { DepensesSection } from "./DepensesSection";
 import { BudgetSection } from "./BudgetSection";
 import { RemiseCaisseSection } from "./RemiseCaisseSection";
 import { hasPermission } from "@/lib/client-permissions";
-import { getPaymentMethodType } from "@/lib/payment-methods";
+import { getPaymentMethodType, getPaymentMethodLabelKey, getPaymentMethodColor } from "@/lib/payment-methods";
 
 type Periode = "today" | "week" | "month" | "semester" | "year";
 type FinanceType = "all" | "recettes" | "depenses" | "factures";
@@ -146,6 +146,9 @@ export function FinanceView({
   budgets,
   recettesParMethode,
   facturesPeriode,
+  paiementsListe,
+  activeMethode,
+  activeTri,
   remisesCaisse,
   activeSite,
   activePeriode,
@@ -168,6 +171,9 @@ export function FinanceView({
   budgets: Budget[];
   recettesParMethode: RecetteParMethode[];
   facturesPeriode: FacturePeriode[];
+  paiementsListe: Paiement[];
+  activeMethode: string | null;
+  activeTri: "date" | "montant" | "methode";
   remisesCaisse: RemiseCaisse[];
   activeSite: string;
   activePeriode: Periode;
@@ -181,6 +187,7 @@ export function FinanceView({
 }) {
   const t = useTranslations("finances");
   const tCommon = useTranslations("common");
+  const tMoyen = useTranslations("facturation"); // libellés des moyens de paiement
   const router = useRouter();
   const searchParams = useSearchParams();
   const canWriteFinance = hasPermission(currentUser.role, "finance:write");
@@ -228,6 +235,19 @@ export function FinanceView({
   function setType(type: FinanceType) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("type", type);
+    router.push(`/finances?${params.toString()}`);
+  }
+
+  function setMethode(valeur: string | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (valeur) params.set("methode", valeur);
+    else params.delete("methode");
+    router.push(`/finances?${params.toString()}`);
+  }
+
+  function setTri(tri: "date" | "montant" | "methode") {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tri", tri);
     router.push(`/finances?${params.toString()}`);
   }
 
@@ -288,6 +308,23 @@ export function FinanceView({
       };
     })
     .filter((r) => r.nombre > 0);
+
+  // Détail par moyen précis (Waffi, Saba Pay…), toutes devises confondues.
+  const recettesParMoyen = Array.from(
+    recettesParMethode.reduce((acc, r) => {
+      const cur = acc.get(r.methode) ?? { methode: r.methode, montant: 0, nombre: 0 };
+      cur.montant += r.montant;
+      cur.nombre += r.nombre;
+      return acc.set(r.methode, cur);
+    }, new Map<string, { methode: string; montant: number; nombre: number }>()).values(),
+  ).sort((a, b) => b.montant - a.montant);
+  const libelleMoyen = (id: string) => {
+    const cle = getPaymentMethodLabelKey(id);
+    return cle === "method" ? id : tMoyen(cle);
+  };
+  const moyenCorrespond = (id: string) =>
+    !activeMethode || id === activeMethode || getPaymentMethodType(id) === activeMethode;
+  const totalFiltre = recettesParMethode.filter((r) => moyenCorrespond(r.methode)).reduce((n, r) => ({ montant: n.montant + r.montant, nombre: n.nombre + r.nombre }), { montant: 0, nombre: 0 });
 
   const facturesPayees = facturesPeriode.filter((f) => f.statut === "PAYEE").length;
   const facturesEnAttente = facturesPeriode.filter((f) => f.statut === "EN_ATTENTE").length;
@@ -489,12 +526,107 @@ export function FinanceView({
                 </div>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {recettesParType.map((r) => (
-                    <div key={r.type} className="rounded-xl border bg-muted/30 px-3 py-2">
+                    <button
+                      key={r.type}
+                      type="button"
+                      onClick={() => setMethode(activeMethode === r.type ? null : r.type)}
+                      className={cn(
+                        "rounded-xl border bg-muted/30 px-3 py-2 text-left transition-colors hover:bg-muted/60",
+                        activeMethode === r.type && "border-primary ring-1 ring-primary",
+                      )}
+                    >
                       <p className="text-xs text-muted-foreground">{t(`methodType_${r.type}`)}</p>
                       <p className="text-lg font-bold">{formatCurrency(r.montant, currency)}</p>
                       <p className="text-xs text-muted-foreground">{t("paymentsCount", { count: r.nombre })}</p>
-                    </div>
+                    </button>
                   ))}
+                </div>
+
+                {/* Détail par moyen précis, cliquable pour filtrer la liste */}
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">{t("filterByMethod")}</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setMethode(null)}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                        !activeMethode ? "bg-primary text-white border-primary" : "hover:bg-muted",
+                      )}
+                    >
+                      {t("allMethods")} · {nombrePaiements}
+                    </button>
+                    {recettesParMoyen.map((m) => (
+                      <button
+                        key={m.methode}
+                        type="button"
+                        onClick={() => setMethode(activeMethode === m.methode ? null : m.methode)}
+                        className={cn(
+                          "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                          activeMethode === m.methode ? "bg-primary text-white border-primary" : "hover:bg-muted",
+                        )}
+                      >
+                        {libelleMoyen(m.methode)} · {formatCurrency(m.montant, currency)} ({m.nombre})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Liste des paiements, filtrée et triable */}
+                <div>
+                  <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-medium text-muted-foreground">{t("sortBy")}</span>
+                    {([["date", t("date")], ["montant", t("amount")], ["methode", t("method")]] as const).map(([cle, label]) => (
+                      <button
+                        key={cle}
+                        type="button"
+                        onClick={() => setTri(cle)}
+                        className={cn(
+                          "rounded-md px-2 py-1 font-medium transition-colors",
+                          activeTri === cle ? "bg-primary text-white" : "bg-muted hover:bg-muted/70",
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    <span className="ml-auto text-muted-foreground">
+                      {formatCurrency(totalFiltre.montant, currency)} · {t("paymentsCount", { count: totalFiltre.nombre })}
+                      {paiementsListe.length < totalFiltre.nombre && ` — ${t("paymentsShown", { shown: paiementsListe.length, total: totalFiltre.nombre })}`}
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto rounded-lg border">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 text-xs text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">{t("date")}</th>
+                          <th className="px-3 py-2 text-left font-medium">{t("student")}</th>
+                          <th className="px-3 py-2 text-left font-medium">{t("invoice")}</th>
+                          <th className="px-3 py-2 text-left font-medium">{t("method")}</th>
+                          <th className="px-3 py-2 text-right font-medium">{t("amount")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paiementsListe.map((p) => (
+                          <tr key={p.id} className="border-t">
+                            <td className="px-3 py-2 whitespace-nowrap">{formatDate(p.date)}</td>
+                            <td className="px-3 py-2">{p.facture.eleve ? `${p.facture.eleve.prenom ?? ""} ${p.facture.eleve.nom}`.trim() : "—"}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{p.facture.numero}</td>
+                            <td className="px-3 py-2">
+                              <Badge variant="secondary" className="text-xs" data-color={getPaymentMethodColor(p.methode)}>
+                                {libelleMoyen(p.methode)}
+                              </Badge>
+                            </td>
+                            <td className={cn("px-3 py-2 text-right font-medium whitespace-nowrap", p.montant < 0 && "text-red-600")}>
+                              {formatCurrency(p.montant, p.devise)}
+                            </td>
+                          </tr>
+                        ))}
+                        {paiementsListe.length === 0 && (
+                          <tr><td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">{t("noPayments")}</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
