@@ -2904,6 +2904,8 @@
     "paymentsShown": "{shown} affichés sur {total}",
     "sortBy": "Trier par",
     "filterByMethod": "Filtrer par moyen de paiement",
+    "preciseDay": "Jour précis",
+    "resetDay": "Réinitialiser le jour",
     "unpaidReportPdf": "Rapport des impayés (PDF)",
     "expensesTitle": "Dépenses",
     "noExpenses": "Aucune dépense pour cette période.",

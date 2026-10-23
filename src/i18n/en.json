@@ -2896,6 +2896,8 @@
     "paymentsShown": "{shown} shown out of {total}",
     "sortBy": "Sort by",
     "filterByMethod": "Filter by payment method",
+    "preciseDay": "Specific day",
+    "resetDay": "Reset day",
     "unpaidReportPdf": "Unpaid tuition report (PDF)",
     "expensesTitle": "Expenses",
     "noExpenses": "No expenses for this period.",

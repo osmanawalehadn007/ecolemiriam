@@ -4,6 +4,7 @@ import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { canAccessSite } from "@/lib/site-filter";
 import { niveauToLabel } from "@/lib/niveau";
+import { formatHeure } from "@/lib/utils";
 
 export async function GET(
   req: NextRequest,
@@ -129,8 +130,8 @@ export async function GET(
           <div class="recu-num">N° ${recuNumber}</div>
         </div>
         <div style="text-align:right">
-          <div style="font-size:13px;opacity:0.9">${new Date(paiement.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}</div>
-          <div style="font-size:11px;opacity:0.7">${new Date(paiement.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>
+          <div style="font-size:13px;opacity:0.9">${new Date(paiement.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric", timeZone: "Africa/Djibouti" })}</div>
+          <div style="font-size:11px;opacity:0.7">${formatHeure(paiement.date)}</div>
         </div>
       </div>
     </div>

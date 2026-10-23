@@ -2808,6 +2808,8 @@
     "paymentsShown": "{shown} la muujiyay {total} ka mid ah",
     "sortBy": "U kala sooc",
     "filterByMethod": "Ku shaandhee habka lacag bixinta",
+    "preciseDay": "Maalin gaar ah",
+    "resetDay": "Dib u deji maalinta",
     "unpaidReportPdf": "Warbixinta lacagaha aan la bixin (PDF)",
     "expensesTitle": "Expenses",
     "noExpenses": "No expenses for this period.",

@@ -14,7 +14,7 @@ vi.mock("./DepensesSection", () => ({ DepensesSection: () => null }));
 vi.mock("./BudgetSection", () => ({ BudgetSection: () => null }));
 vi.mock("./RemiseCaisseSection", () => ({ RemiseCaisseSection: () => null }));
 
-const rendre = (recettesParMethode: unknown[], facturesPeriode: unknown[] = [], activeType = "recettes", resteAEncaisser = 20000, soldeCaisse = 80000, paiementsListe: unknown[] = [], activeMethode: string | null = null) =>
+const rendre = (recettesParMethode: unknown[], facturesPeriode: unknown[] = [], activeType = "recettes", resteAEncaisser = 20000, soldeCaisse = 80000, paiementsListe: unknown[] = [], activeMethode: string | null = null, activeJour: string | null = null) =>
   render(
     <FinanceView
       totalEncaisse={80000}
@@ -35,6 +35,7 @@ const rendre = (recettesParMethode: unknown[], facturesPeriode: unknown[] = [], 
       activeSite="all"
       activePeriode="month"
       activeMonth={null}
+      activeJour={activeJour}
       activeType={activeType}
       availableMonths={[]}
       siteColors={{}}
@@ -71,6 +72,20 @@ describe("FinanceView — montants perçus", () => {
     expect(push).toHaveBeenLastCalledWith("/finances?methode=waffi");
     fireEvent.click(screen.getByText("methodType_CASH"));
     expect(push).toHaveBeenLastCalledWith("/finances?methode=CASH");
+  });
+
+  it("choisir un jour précis remplace le mois et la période dans l'adresse", () => {
+    push.mockClear();
+    rendre(recettes);
+    fireEvent.change(screen.getByLabelText("preciseDay"), { target: { value: "2026-10-05" } });
+    expect(push).toHaveBeenLastCalledWith("/finances?jour=2026-10-05");
+  });
+
+  it("propose de réinitialiser le jour quand il est actif", () => {
+    push.mockClear();
+    rendre(recettes, [], "recettes", 0, 0, [], null, "2026-10-05");
+    fireEvent.click(screen.getByText("resetDay"));
+    expect(push).toHaveBeenLastCalledWith("/finances?");
   });
 
   it("indique l'absence de paiement", () => {

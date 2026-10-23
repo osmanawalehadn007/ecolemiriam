@@ -33,7 +33,7 @@ import {
 } from "@/lib/actions/facture";
 import { getPaymentMethodsForSelect, getPaymentMethodType, getPaymentMethodColor } from "@/lib/payment-methods";
 import { useTranslations } from "next-intl";
-import { cn } from "@/lib/utils";
+import { cn, formatDateHeure } from "@/lib/utils";
 
 interface Paiement {
   id: string;
@@ -518,7 +518,7 @@ export function FactureDetail({ facture, userRole }: FactureDetailProps) {
                 <tbody>
                   {facture.paiements.map((p) => (
                     <tr key={p.id} className={cn("border-b hover:bg-muted/30", p.estContrePassation && "bg-red-50 dark:bg-red-950/20")}>
-                      <td className="px-4 py-2">{new Date(p.date).toLocaleDateString("fr-FR")}</td>
+                      <td className="px-4 py-2">{formatDateHeure(p.date)}</td>
                       <td className={cn("px-4 py-2 text-right font-medium", p.estContrePassation ? "text-red-600" : "text-green-600")}>
                         {formatMoney(p.montant, p.devise)}
                         {p.estContrePassation && (

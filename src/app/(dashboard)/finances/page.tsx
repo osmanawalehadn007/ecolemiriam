@@ -77,6 +77,15 @@ function getMonthRange(monthParam: string) {
   };
 }
 
+/** Plage pour un jour précis (format "YYYY-MM-DD") ; null si la date n'existe pas. */
+function getDayRange(jourParam: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(jourParam)) return null;
+  const [y, m, d] = jourParam.split("-").map((n) => parseInt(n, 10));
+  const date = new Date(y, m - 1, d);
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return null;
+  return { start: startOfDay(date), end: endOfDay(date) };
+}
+
 /** Moyens de paiement en espèces (type CASH dans PAYMENT_METHODS). */
 const METHODES_ESPECES = PAYMENT_METHODS.filter((m) => m.type === "CASH").map((m) => m.id);
 
@@ -93,6 +102,7 @@ const getFinanceDataCached = unstable_cache(
     periode: Periode,
     activeSite: string,
     monthParam: string | null,
+    jourParam: string | null,
     methodeFiltre: string | null,
     tri: TriPaiements,
   ) => {
@@ -104,13 +114,15 @@ const getFinanceDataCached = unstable_cache(
     };
 
     const monthRange = monthParam ? getMonthRange(monthParam) : null;
+    const dayRange = jourParam ? getDayRange(jourParam) : null;
 
     return runWithTenant(tenantId, siteId, async () => {
       const siteFilter = siteFilterForModel("facture", claims);
       const depenseFilter = siteFilterForModel("depense", claims);
       const budgetFilter = siteFilterForModel("budget", claims);
 
-      const { start, end } = monthRange ?? getPeriodRange(periode);
+      // Priorité : jour précis > mois précis > période relative
+      const { start, end } = dayRange ?? monthRange ?? getPeriodRange(periode);
 
       const [availableMonths, totalAgg, paiementsParMethodeAgg, totalFacturesAgg, cashPendingAgg, cashPending, totalDepensesAgg, depenses, budgets, remisesCaisse, facturesPeriode, paiementsListe] = await Promise.all([
         // Mois disponibles
@@ -274,13 +286,13 @@ const getFinanceDataCached = unstable_cache(
       };
     });
   },
-  ["finances-data-v5"],
+  ["finances-data-v6"],
   { revalidate: 30, tags: ["finances-data"] }
 );
 
 export default async function FinancesPage(
   props: {
-    searchParams: Promise<{ siteId?: string; periode?: string; month?: string; type?: string; methode?: string; tri?: string }>;
+    searchParams: Promise<{ siteId?: string; periode?: string; month?: string; type?: string; methode?: string; tri?: string; jour?: string }>;
   }
 ) {
   const searchParams = await props.searchParams;
@@ -297,7 +309,7 @@ export default async function FinancesPage(
   ]);
 
   const sessionSiteId = (session.user as { siteId?: string | null }).siteId ?? null;
-  const { siteId, periode, month, type, methode, tri } = sp;
+  const { siteId, periode, month, type, methode, tri, jour } = sp;
 
   const activeSite = (() => {
     if (!siteId) return sessionSiteId ? sessionSiteId : "all";
@@ -314,6 +326,9 @@ export default async function FinancesPage(
   // Mode "mois spécifique" : si month=YYYY-MM est fourni, il override la période
   const monthRange = month ? getMonthRange(month) : null;
   const activeMonth: string | null = monthRange ? (month ?? null) : null;
+
+  // Mode « jour précis » : jour=YYYY-MM-DD l'emporte sur le mois et la période
+  const activeJour: string | null = jour && getDayRange(jour) ? jour : null;
 
   // Filtre par type
   const validTypes: FinanceType[] = ["all", "recettes", "depenses", "factures"];
@@ -336,6 +351,7 @@ export default async function FinancesPage(
     activePeriode,
     activeSite,
     activeMonth,
+    activeJour,
     activeMethode,
     activeTri,
   );
@@ -383,6 +399,7 @@ export default async function FinancesPage(
           activeSite={activeSite}
           activePeriode={activePeriode}
           activeMonth={activeMonth}
+          activeJour={activeJour}
           activeType={activeType}
           availableMonths={availableMonths}
           siteColors={siteColors}

@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateHeure } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { CalendarDays, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, FileText, LayoutGrid } from "lucide-react";
@@ -153,6 +153,7 @@ export function FinanceView({
   activeSite,
   activePeriode,
   activeMonth,
+  activeJour,
   activeType,
   availableMonths,
   siteColors,
@@ -178,6 +179,7 @@ export function FinanceView({
   activeSite: string;
   activePeriode: Periode;
   activeMonth: string | null;
+  activeJour: string | null;
   activeType: FinanceType;
   availableMonths: string[];
   siteColors: Record<string, SiteColor>;
@@ -218,11 +220,25 @@ export function FinanceView({
     const params = new URLSearchParams(searchParams.toString());
     params.set("periode", periode);
     params.delete("month");
+    params.delete("jour");
+    router.push(`/finances?${params.toString()}`);
+  }
+
+  function setJour(jour: string | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (jour) {
+      params.set("jour", jour);
+      params.delete("month");
+      params.delete("periode");
+    } else {
+      params.delete("jour");
+    }
     router.push(`/finances?${params.toString()}`);
   }
 
   function setMonth(monthKey: string | null) {
     const params = new URLSearchParams(searchParams.toString());
+    params.delete("jour");
     if (monthKey) {
       params.set("month", monthKey);
       params.delete("periode");
@@ -349,7 +365,9 @@ export function FinanceView({
   };
   const stats = [statFacture, statEncaisse, statReste, statDepenses, statSolde];
 
-  const exportHref = activeMonth
+  const exportHref = activeJour
+    ? `/api/finances/export?siteId=${activeSite}&jour=${activeJour}&type=${activeType}`
+    : activeMonth
     ? `/api/finances/export?siteId=${activeSite}&month=${activeMonth}&type=${activeType}`
     : `/api/finances/export?siteId=${activeSite}&periode=${activePeriode}&type=${activeType}`;
 
@@ -378,7 +396,7 @@ export function FinanceView({
               onClick={() => setPeriode(p.key)}
               className={cn(
                 "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                activePeriode === p.key && !activeMonth
+                activePeriode === p.key && !activeMonth && !activeJour
                   ? "bg-primary text-white"
                   : "bg-gray-100 dark:bg-gray-800 text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700"
               )}
@@ -443,6 +461,23 @@ export function FinanceView({
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
+        </div>
+
+        <div className="flex items-center gap-2 border-l pl-3">
+          <label htmlFor="jour-precis" className="text-sm font-medium text-muted-foreground">{t("preciseDay")}</label>
+          <Input
+            id="jour-precis"
+            type="date"
+            className="h-8 w-40 text-sm"
+            value={activeJour ?? ""}
+            max={todayInputValue()}
+            onChange={(e) => setJour(e.target.value || null)}
+          />
+          {activeJour && (
+            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setJour(null)}>
+              {t("resetDay")}
+            </Button>
+          )}
         </div>
 
         {activeMonth && (
@@ -608,7 +643,7 @@ export function FinanceView({
                       <tbody>
                         {paiementsListe.map((p) => (
                           <tr key={p.id} className="border-t">
-                            <td className="px-3 py-2 whitespace-nowrap">{formatDate(p.date)}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">{formatDateHeure(p.date)}</td>
                             <td className="px-3 py-2">{p.facture.eleve ? `${p.facture.eleve.prenom ?? ""} ${p.facture.eleve.nom}`.trim() : "—"}</td>
                             <td className="px-3 py-2 text-muted-foreground">{p.facture.numero}</td>
                             <td className="px-3 py-2">
@@ -704,7 +739,7 @@ export function FinanceView({
                   <tbody>
                     {cashPending.map((p) => (
                       <tr key={p.id} className="border-b last:border-0">
-                        <td className="py-2 pr-2 whitespace-nowrap">{formatDate(p.date)}</td>
+                        <td className="py-2 pr-2 whitespace-nowrap">{formatDateHeure(p.date)}</td>
                         <td className="py-2 pr-2">{p.facture.eleve ? `${p.facture.eleve.prenom ? `${p.facture.eleve.prenom} ` : ""}${p.facture.eleve.nom}` : "—"}</td>
                         <td className="py-2 pr-2">{p.facture.numero}</td>
                         <td className="py-2 pr-2 text-right font-medium">{formatCurrency(p.montant, p.devise)}</td>
