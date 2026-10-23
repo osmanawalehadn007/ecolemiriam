@@ -357,6 +357,15 @@ export function FinanceView({
         >
           {t("exportExcel")}
         </a>
+        {/* Rapport des impayés à ce jour : le PDF est généré puis téléchargé au clic. */}
+        <a
+          href={`/api/finances/impayes-pdf?siteId=${activeSite}`}
+          download
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-200"
+        >
+          <FileText className="h-3.5 w-3.5" />
+          {t("unpaidReportPdf")}
+        </a>
       </div>
 
       {/* ── Sélecteur de mois spécifique ── */}

@@ -2899,6 +2899,7 @@
     "recordedBy": "Enregistré par",
     "totalExpenses": "Dépenses (période)",
     "exportExcel": "Exporter Excel",
+    "unpaidReportPdf": "Rapport des impayés (PDF)",
     "expensesTitle": "Dépenses",
     "noExpenses": "Aucune dépense pour cette période.",
     "category": "Catégorie",
