@@ -11,7 +11,7 @@ import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-scope";
 import { getSitesForUser } from "@/lib/actions/eleve";
 import { getSiteColorMap } from "@/lib/site-colors";
 import { getRemisesCaisse } from "@/lib/actions/finances";
-import { PAYMENT_METHODS } from "@/lib/payment-methods";
+import { PAYMENT_METHODS, type PaymentMethodType } from "@/lib/payment-methods";
 import { unstable_cache } from "next/cache";
 import {
   startOfDay,
@@ -23,6 +23,20 @@ import {
   startOfYear,
   endOfYear,
 } from "date-fns";
+
+export type TriPaiements = "date" | "montant" | "methode";
+
+/**
+ * Filtre « moyen de paiement » : soit un moyen précis (waffi, saba_pay…), soit
+ * une famille entière (CASH, MOBILE_MONEY, BANK, CARD). Renvoie la liste des
+ * identifiants de moyens retenus, ou null pour ne rien filtrer.
+ */
+function methodesPourFiltre(filtre: string | null): string[] | null {
+  if (!filtre) return null;
+  const parType = PAYMENT_METHODS.filter((m) => m.type === (filtre as PaymentMethodType)).map((m) => m.id);
+  if (parType.length > 0) return parType;
+  return PAYMENT_METHODS.some((m) => m.id === filtre) ? [filtre] : null;
+}
 
 type Periode = "today" | "week" | "month" | "semester" | "year";
 export type FinanceType = "all" | "recettes" | "depenses" | "factures";
@@ -63,6 +77,15 @@ function getMonthRange(monthParam: string) {
   };
 }
 
+/** Plage pour un jour précis (format "YYYY-MM-DD") ; null si la date n'existe pas. */
+function getDayRange(jourParam: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(jourParam)) return null;
+  const [y, m, d] = jourParam.split("-").map((n) => parseInt(n, 10));
+  const date = new Date(y, m - 1, d);
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return null;
+  return { start: startOfDay(date), end: endOfDay(date) };
+}
+
 /** Moyens de paiement en espèces (type CASH dans PAYMENT_METHODS). */
 const METHODES_ESPECES = PAYMENT_METHODS.filter((m) => m.type === "CASH").map((m) => m.id);
 
@@ -79,6 +102,9 @@ const getFinanceDataCached = unstable_cache(
     periode: Periode,
     activeSite: string,
     monthParam: string | null,
+    jourParam: string | null,
+    methodeFiltre: string | null,
+    tri: TriPaiements,
   ) => {
     const claims: SessionSiteClaims = {
       role: role as SessionSiteClaims["role"],
@@ -88,15 +114,17 @@ const getFinanceDataCached = unstable_cache(
     };
 
     const monthRange = monthParam ? getMonthRange(monthParam) : null;
+    const dayRange = jourParam ? getDayRange(jourParam) : null;
 
     return runWithTenant(tenantId, siteId, async () => {
       const siteFilter = siteFilterForModel("facture", claims);
       const depenseFilter = siteFilterForModel("depense", claims);
       const budgetFilter = siteFilterForModel("budget", claims);
 
-      const { start, end } = monthRange ?? getPeriodRange(periode);
+      // Priorité : jour précis > mois précis > période relative
+      const { start, end } = dayRange ?? monthRange ?? getPeriodRange(periode);
 
-      const [availableMonths, totalAgg, paiementsParMethodeAgg, totalFacturesAgg, cashPendingAgg, cashPending, totalDepensesAgg, depenses, budgets, remisesCaisse, facturesPeriode] = await Promise.all([
+      const [availableMonths, totalAgg, paiementsParMethodeAgg, totalFacturesAgg, cashPendingAgg, cashPending, totalDepensesAgg, depenses, budgets, remisesCaisse, facturesPeriode, paiementsListe] = await Promise.all([
         // Mois disponibles
         (async () => {
           const [factureDates, paiementDates, depenseDates] = await Promise.all([
@@ -209,6 +237,28 @@ const getFinanceDataCached = unstable_cache(
           orderBy: { createdAt: "desc" },
           take: 200,
         }),
+        // Paiements encaissés sur la période, filtrables par moyen de paiement.
+        // Les totaux par moyen viennent de l'agrégat exact (`groupBy`) : cette
+        // liste est tronquée à 200 lignes.
+        // eslint-disable-next-line ecolemiriam/require-site-filter -- lookup par ID + tenantId
+        prisma.paiement.findMany({
+          where: {
+            date: { gte: start, lte: end },
+            ...(methodesPourFiltre(methodeFiltre) ? { methode: { in: methodesPourFiltre(methodeFiltre)! } } : {}),
+            facture: { tenantId, ...siteFilter },
+          },
+          include: {
+            facture: { select: { numero: true, site: { select: { nom: true } }, eleve: { select: { nom: true, prenom: true } } } },
+            enregistrePar: { select: { name: true } },
+          },
+          orderBy:
+            tri === "montant"
+              ? [{ montant: "desc" }, { date: "desc" }]
+              : tri === "methode"
+                ? [{ methode: "asc" }, { date: "desc" }]
+                : [{ date: "desc" }],
+          take: 200,
+        }),
       ]);
 
       return {
@@ -232,16 +282,17 @@ const getFinanceDataCached = unstable_cache(
           nombre: g._count._all,
         })),
         facturesPeriode,
+        paiementsListe,
       };
     });
   },
-  ["finances-data-v4"],
+  ["finances-data-v6"],
   { revalidate: 30, tags: ["finances-data"] }
 );
 
 export default async function FinancesPage(
   props: {
-    searchParams: Promise<{ siteId?: string; periode?: string; month?: string; type?: string }>;
+    searchParams: Promise<{ siteId?: string; periode?: string; month?: string; type?: string; methode?: string; tri?: string; jour?: string }>;
   }
 ) {
   const searchParams = await props.searchParams;
@@ -258,7 +309,7 @@ export default async function FinancesPage(
   ]);
 
   const sessionSiteId = (session.user as { siteId?: string | null }).siteId ?? null;
-  const { siteId, periode, month, type } = sp;
+  const { siteId, periode, month, type, methode, tri, jour } = sp;
 
   const activeSite = (() => {
     if (!siteId) return sessionSiteId ? sessionSiteId : "all";
@@ -276,9 +327,16 @@ export default async function FinancesPage(
   const monthRange = month ? getMonthRange(month) : null;
   const activeMonth: string | null = monthRange ? (month ?? null) : null;
 
+  // Mode « jour précis » : jour=YYYY-MM-DD l'emporte sur le mois et la période
+  const activeJour: string | null = jour && getDayRange(jour) ? jour : null;
+
   // Filtre par type
   const validTypes: FinanceType[] = ["all", "recettes", "depenses", "factures"];
   const activeType: FinanceType = validTypes.includes(type as FinanceType) ? (type as FinanceType) : "all";
+
+  // Filtre par moyen de paiement et tri de la liste (valeurs inconnues ignorées)
+  const activeMethode = methode && methodesPourFiltre(methode) ? methode : null;
+  const activeTri: TriPaiements = tri === "montant" || tri === "methode" ? tri : "date";
 
   const siteIdsJson = JSON.stringify((session.user as { siteIds?: string[] | null }).siteIds ?? null);
   const tenantHasSites = (session.user as { tenantHasSites?: boolean }).tenantHasSites ?? false;
@@ -293,9 +351,12 @@ export default async function FinancesPage(
     activePeriode,
     activeSite,
     activeMonth,
+    activeJour,
+    activeMethode,
+    activeTri,
   );
 
-  const { availableMonths, totalEncaisse, totalFactures, resteAEncaisser, soldeCaisse, cashPendingTotal, cashPending, totalDepenses, depenses, budgets, remisesCaisse, recettesParMethode, facturesPeriode } = cached;
+  const { availableMonths, totalEncaisse, totalFactures, resteAEncaisser, soldeCaisse, cashPendingTotal, cashPending, totalDepenses, depenses, budgets, remisesCaisse, recettesParMethode, facturesPeriode, paiementsListe } = cached;
 
   const currentSiteName = activeSite === "all"
     ? tCommon("allSites")
@@ -331,10 +392,14 @@ export default async function FinancesPage(
           budgets={budgets}
           recettesParMethode={recettesParMethode}
           facturesPeriode={facturesPeriode}
+          paiementsListe={paiementsListe}
+          activeMethode={activeMethode}
+          activeTri={activeTri}
           remisesCaisse={remisesCaisse}
           activeSite={activeSite}
           activePeriode={activePeriode}
           activeMonth={activeMonth}
+          activeJour={activeJour}
           activeType={activeType}
           availableMonths={availableMonths}
           siteColors={siteColors}

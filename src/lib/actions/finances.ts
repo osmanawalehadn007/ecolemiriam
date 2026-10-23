@@ -4,9 +4,14 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { siteFilterForModel } from "@/lib/site-scope";
+import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-scope";
 import { checkPermission } from "@/lib/rbac";
-import { ROLES_AUTORISATION_DEPENSE, ROLES_EMISSION_DEPENSE } from "@/lib/depense-roles";
+import {
+  MESSAGE_AUTORISATEUR_REFUSE,
+  MESSAGE_PAYEUR_REFUSE,
+  peutAutoriserDepense,
+  peutPayerDepense,
+} from "@/lib/depense-habilitations";
 
 const DepenseSchema = z.object({
   categorie: z.string().min(1, "La catégorie est requise"),
@@ -62,6 +67,44 @@ export async function getBudgets(siteId: string | null) {
   });
 }
 
+/**
+ * Vérifie qu'une personne désignée sur une dépense (autorisation ou paiement)
+ * est bien habilitée ET bien dans le périmètre du demandeur.
+ *
+ * Le contrôle est refait ici, et pas seulement dans les menus déroulants : un
+ * appel direct à la server action (client modifié, script, future API) ne doit
+ * pas pouvoir désigner n'importe qui comme auteur d'une autorisation ou d'un
+ * paiement.
+ */
+async function verifierHabilitationDepense(options: {
+  userId: string;
+  tenantId: string;
+  claims: SessionSiteClaims;
+  /** « Autorisateur » ou « Payeur » — sert au message d'erreur. */
+  libelle: string;
+  estHabilitee: (role: string | null | undefined) => boolean;
+  messageRefus: string;
+}): Promise<void> {
+  const personne = await prisma.user.findFirst({
+    // Même périmètre que les listes déroulantes (`getUsersForTenant`) : une
+    // personne hors du périmètre du demandeur ne peut pas être désignée, et ne
+    // lui est de toute façon pas proposée.
+    where: {
+      id: options.userId,
+      tenantId: options.tenantId,
+      ...siteFilterForModel("user", options.claims),
+    },
+    select: { name: true, role: true },
+  });
+
+  if (!personne) {
+    throw new Error(`${options.libelle} introuvable dans cet établissement`);
+  }
+  if (!options.estHabilitee(personne.role)) {
+    throw new Error(`${options.messageRefus} (${personne.name} — ${personne.role})`);
+  }
+}
+
 export async function createDepense(data: z.infer<typeof DepenseSchema>) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
@@ -74,19 +117,29 @@ export async function createDepense(data: z.infer<typeof DepenseSchema>) {
     throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
   }
 
-  // Le formulaire ne propose que les bons rôles ; on le vérifie aussi ici.
-  const { autoriseParId, payeParId } = parsed.data;
-  if (autoriseParId) {
-    const ok = await prisma.user.count({
-      where: { id: autoriseParId, tenantId: session.user.tenantId, ...siteFilterForModel("user", session.user), role: { in: [...ROLES_AUTORISATION_DEPENSE] } },
+  // Habilitations : autorisateur = responsable d'établissement (TENANT_ADMIN)
+  // ou chef d'établissement (PRINCIPAL) ; payeur = comptable/caissier
+  // (ACCOUNTANT). Référentiel partagé avec les menus déroulants
+  // (src/lib/depense-habilitations.ts) et avec les triggers PostgreSQL.
+  if (parsed.data.autoriseParId) {
+    await verifierHabilitationDepense({
+      userId: parsed.data.autoriseParId,
+      tenantId: session.user.tenantId,
+      claims: session.user,
+      libelle: "Autorisateur",
+      estHabilitee: peutAutoriserDepense,
+      messageRefus: MESSAGE_AUTORISATEUR_REFUSE,
     });
-    if (!ok) throw new Error("Une dépense ne peut être autorisée que par le directeur ou le principal");
   }
-  if (payeParId) {
-    const ok = await prisma.user.count({
-      where: { id: payeParId, tenantId: session.user.tenantId, ...siteFilterForModel("user", session.user), role: { in: [...ROLES_EMISSION_DEPENSE] } },
+  if (parsed.data.payeParId) {
+    await verifierHabilitationDepense({
+      userId: parsed.data.payeParId,
+      tenantId: session.user.tenantId,
+      claims: session.user,
+      libelle: "Payeur",
+      estHabilitee: peutPayerDepense,
+      messageRefus: MESSAGE_PAYEUR_REFUSE,
     });
-    if (!ok) throw new Error("Une dépense ne peut être émise que par le comptable");
   }
 
   await prisma.depense.create({

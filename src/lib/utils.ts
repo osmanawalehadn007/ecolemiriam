@@ -12,6 +12,26 @@ export function formatDate(date: Date | string, fmt = "dd MMMM yyyy") {
   return format(new Date(date), fmt, { locale: fr });
 }
 
+/**
+ * Date et heure d'un événement horodaté (ex. encaissement), toujours à l'heure
+ * de Djibouti : le même instant s'affiche pareil sur le serveur (UTC) et dans
+ * le navigateur, sans écart d'hydratation ni décalage de 3 h sur les reçus.
+ */
+const TZ_DJIBOUTI = "Africa/Djibouti";
+const fmtJour = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ_DJIBOUTI, day: "2-digit", month: "2-digit", year: "numeric" });
+const fmtHeure = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ_DJIBOUTI, hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+
+/** « 14:32:07 » */
+export function formatHeure(date: Date | string) {
+  return fmtHeure.format(new Date(date));
+}
+
+/** « 05/10/2026 14:32:07 » */
+export function formatDateHeure(date: Date | string) {
+  const d = new Date(date);
+  return `${fmtJour.format(d)} ${fmtHeure.format(d)}`;
+}
+
 /** Temps relatif en français : "il y a 3 minutes" */
 export function timeAgo(date: Date | string) {
   return formatDistanceToNow(new Date(date), { addSuffix: true, locale: fr });

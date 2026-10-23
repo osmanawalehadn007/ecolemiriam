@@ -4,6 +4,7 @@ import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { canAccessSite } from "@/lib/site-filter";
 import { niveauToLabel } from "@/lib/niveau";
+import { formatHeure, formatDateHeure } from "@/lib/utils";
 
 export async function GET(
   req: NextRequest,
@@ -129,8 +130,8 @@ export async function GET(
           <div class="recu-num">N° ${recuNumber}</div>
         </div>
         <div style="text-align:right">
-          <div style="font-size:13px;opacity:0.9">${new Date(paiement.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}</div>
-          <div style="font-size:11px;opacity:0.7">${new Date(paiement.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>
+          <div style="font-size:13px;opacity:0.9">${new Date(paiement.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric", timeZone: "Africa/Djibouti" })}</div>
+          <div style="font-size:11px;opacity:0.7">${formatHeure(paiement.date)}</div>
         </div>
       </div>
     </div>
@@ -159,7 +160,7 @@ export async function GET(
       <div class="row"><span class="label">Libellé</span><span class="value">${paiement.facture.libelle}</span></div>
       <div class="row"><span class="label">Méthode</span><span class="value" style="text-transform:capitalize">${paiement.methode}</span></div>
       ${paiement.reference ? `<div class="row"><span class="label">Référence</span><span class="value">${paiement.reference}</span></div>` : ""}
-      ${paiement.enregistrePar ? `<div class="row"><span class="label">Enregistré par</span><span class="value">${paiement.enregistrePar.name}</span></div>` : ""}
+      ${paiement.enregistrePar ? `<div class="row"><span class="label">Enregistré par</span><span class="value">${paiement.enregistrePar.name} · ${formatDateHeure(paiement.date)}</span></div>` : ""}
 
       <div class="amount-box">
         <div class="label">Montant reçu</div>

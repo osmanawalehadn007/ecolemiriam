@@ -232,7 +232,7 @@ describe("facture actions", () => {
     it("throws when facture not found", async () => {
       mockPrisma.facture.findFirst.mockResolvedValue(null);
       await expect(
-        enregistrerPaiement("f1", { montant: 1000, methode: "waffi" })
+        enregistrerPaiement("f1", { montant: 1000, methode: "waffi", reference: "TX-1" })
       ).rejects.toThrow("Facture non trouvée");
     });
 
@@ -278,7 +278,7 @@ describe("facture actions", () => {
         paiements: [],
       });
       mockPrisma.paiement.create.mockResolvedValue({ id: "p2" });
-      await enregistrerPaiement("f1", { montant: 10000, methode: "cac_pay" });
+      await enregistrerPaiement("f1", { montant: 10000, methode: "cac_pay", reference: "TX-2" });
       expect(mockPrisma.facture.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: { statut: "EN_ATTENTE" },
@@ -296,12 +296,29 @@ describe("facture actions", () => {
         paiements: [],
       });
       mockPrisma.paiement.create.mockResolvedValue({ id: "p3" });
-      await enregistrerPaiement("f1", { montant: 10000, methode: "dahab_plus" });
+      await enregistrerPaiement("f1", { montant: 10000, methode: "dahab_plus", reference: "TX-3" });
       expect(mockPrisma.facture.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: { statut: "EN_RETARD" },
         })
       );
+    });
+
+    it("exige la référence pour un paiement mobile money", async () => {
+      await expect(
+        enregistrerPaiement("f1", { montant: 1000, methode: "waffi" })
+      ).rejects.toThrow("référence de la transaction est obligatoire");
+      await expect(
+        enregistrerPaiement("f1", { montant: 1000, methode: "saba_pay", reference: "   " })
+      ).rejects.toThrow("référence de la transaction est obligatoire");
+      expect(mockPrisma.paiement.create).not.toHaveBeenCalled();
+    });
+
+    it("enregistre la référence mobile money sans les espaces autour", async () => {
+      mockPrisma.facture.findFirst.mockResolvedValue({ id: "f1", montant: 1000, statut: "EN_ATTENTE", echeance: null, paiements: [] });
+      mockPrisma.paiement.create.mockResolvedValue({ id: "p5" });
+      await enregistrerPaiement("f1", { montant: 1000, methode: "waffi", reference: "  WF123  " });
+      expect(mockPrisma.paiement.create.mock.calls[0][0].data.reference).toBe("WF123");
     });
 
     it("handles null reference", async () => {
@@ -313,7 +330,7 @@ describe("facture actions", () => {
         paiements: [],
       });
       mockPrisma.paiement.create.mockResolvedValue({ id: "p4" });
-      await enregistrerPaiement("f1", { montant: 1000, methode: "saba_pay" });
+      await enregistrerPaiement("f1", { montant: 1000, methode: "espèces" });
       const call = mockPrisma.paiement.create.mock.calls[0][0];
       expect(call.data.reference).toBeNull();
     });

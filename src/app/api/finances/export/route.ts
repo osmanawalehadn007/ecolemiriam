@@ -4,6 +4,7 @@ import { checkPermission } from "@/lib/rbac";
 import prisma from "@/lib/prisma";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { getSitesForUser } from "@/lib/actions/eleve";
+import { formatDateHeure, formatHeure } from "@/lib/utils";
 import { rateLimit, getClientIP } from "@/lib/security/rateLimit";
 import ExcelJS from "exceljs";
 import {
@@ -70,7 +71,11 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const siteId = searchParams.get("siteId") || "all";
   const periode = (searchParams.get("periode") as Periode) || "month";
-  const { start, end } = getPeriodRange(periode);
+  // Jour précis (?jour=YYYY-MM-DD) : prioritaire sur la période.
+  const jourParam = searchParams.get("jour");
+  const jour = jourParam && /^\d{4}-\d{2}-\d{2}$/.test(jourParam) ? new Date(`${jourParam}T00:00:00`) : null;
+  const { start, end } =
+    jour && !isNaN(jour.getTime()) ? { start: startOfDay(jour), end: endOfDay(jour) } : getPeriodRange(periode);
 
   const validSites = await getSitesForUser();
   const activeSite = siteId === "all" || validSites.some((s) => s.id === siteId) ? siteId : "all";
@@ -125,6 +130,7 @@ export async function GET(req: NextRequest) {
   const encaissements = wb.addWorksheet("Encaissements");
   encaissements.columns = [
     { header: "Date", key: "date", width: 15 },
+    { header: "Heure", key: "heure", width: 12 },
     { header: "Élève", key: "eleve", width: 25 },
     { header: "Facture", key: "facture", width: 18 },
     { header: "Méthode", key: "methode", width: 15 },
@@ -132,7 +138,8 @@ export async function GET(req: NextRequest) {
   ];
   encaissements.addRows(
     paiements.map((p) => ({
-      date: p.date.toISOString().split("T")[0],
+      date: formatDateHeure(p.date).split(" ")[0],
+      heure: formatHeure(p.date),
       eleve: p.facture.eleve ? `${p.facture.eleve.prenom ? `${p.facture.eleve.prenom} ` : ""}${p.facture.eleve.nom}` : "—",
       facture: p.facture.numero,
       methode: p.methode,

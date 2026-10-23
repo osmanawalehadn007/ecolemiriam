@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { FinanceView } from "@/components/finances/FinanceView";
 
+const push = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => ({ push, refresh: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock("next/link", () => ({
@@ -13,7 +14,7 @@ vi.mock("./DepensesSection", () => ({ DepensesSection: () => null }));
 vi.mock("./BudgetSection", () => ({ BudgetSection: () => null }));
 vi.mock("./RemiseCaisseSection", () => ({ RemiseCaisseSection: () => null }));
 
-const rendre = (recettesParMethode: unknown[], facturesPeriode: unknown[] = [], activeType = "recettes", resteAEncaisser = 20000, soldeCaisse = 80000) =>
+const rendre = (recettesParMethode: unknown[], facturesPeriode: unknown[] = [], activeType = "recettes", resteAEncaisser = 20000, soldeCaisse = 80000, paiementsListe: unknown[] = [], activeMethode: string | null = null, activeJour: string | null = null) =>
   render(
     <FinanceView
       totalEncaisse={80000}
@@ -27,10 +28,14 @@ const rendre = (recettesParMethode: unknown[], facturesPeriode: unknown[] = [], 
       budgets={[]}
       recettesParMethode={recettesParMethode}
       facturesPeriode={facturesPeriode}
+      paiementsListe={paiementsListe as never}
+      activeMethode={activeMethode}
+      activeTri="date"
       remisesCaisse={[]}
       activeSite="all"
       activePeriode="month"
       activeMonth={null}
+      activeJour={activeJour}
       activeType={activeType}
       availableMonths={[]}
       siteColors={{}}
@@ -41,16 +46,48 @@ const rendre = (recettesParMethode: unknown[], facturesPeriode: unknown[] = [], 
   );
 
 describe("FinanceView — montants perçus", () => {
-  it("affiche des indicateurs par moyen de paiement, sans liste de paiements", () => {
-    rendre([
-      { methode: "espèces", devise: "DJF", montant: 50000, nombre: 3 },
-      { methode: "waffi", devise: "DJF", montant: 30000, nombre: 2 },
-    ]);
+  const paiement = (id: string, methode: string, montant: number) => ({
+    id, montant, devise: "DJF", methode, reference: null, date: "2026-10-05T08:00:00Z",
+    facture: { numero: `FAC-${id}`, site: null, eleve: { nom: "Diallo", prenom: "Awa" } },
+    enregistrePar: null,
+  });
+  const recettes = [
+    { methode: "espèces", devise: "DJF", montant: 50000, nombre: 3 },
+    { methode: "waffi", devise: "DJF", montant: 30000, nombre: 2 },
+  ];
+
+  it("classe les paiements par type et par moyen précis, avec la liste", () => {
+    rendre(recettes, [], "recettes", 20000, 80000, [paiement("1", "waffi", 30000), paiement("2", "espèces", 50000)]);
     expect(screen.getByText("methodType_CASH")).toBeTruthy();
     expect(screen.getByText("methodType_MOBILE_MONEY")).toBeTruthy();
-    expect(screen.queryByText("invoice")).toBeNull();
-    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByText(/^waffi · /)).toBeTruthy(); // puce du moyen précis
+    expect(screen.getByRole("table")).toBeTruthy();
+    expect(screen.getByText("FAC-1")).toBeTruthy();
   });
+
+  it("filtre par moyen précis ou par type au clic", () => {
+    push.mockClear();
+    rendre(recettes);
+    fireEvent.click(screen.getByText(/^waffi · /));
+    expect(push).toHaveBeenLastCalledWith("/finances?methode=waffi");
+    fireEvent.click(screen.getByText("methodType_CASH"));
+    expect(push).toHaveBeenLastCalledWith("/finances?methode=CASH");
+  });
+
+  it("choisir un jour précis remplace le mois et la période dans l'adresse", () => {
+    push.mockClear();
+    rendre(recettes);
+    fireEvent.change(screen.getByLabelText("preciseDay"), { target: { value: "2026-10-05" } });
+    expect(push).toHaveBeenLastCalledWith("/finances?jour=2026-10-05");
+  });
+
+  it("propose de réinitialiser le jour quand il est actif", () => {
+    push.mockClear();
+    rendre(recettes, [], "recettes", 0, 0, [], null, "2026-10-05");
+    fireEvent.click(screen.getByText("resetDay"));
+    expect(push).toHaveBeenLastCalledWith("/finances?");
+  });
+
   it("indique l'absence de paiement", () => {
     rendre([]);
     expect(screen.getByText("noPayments")).toBeTruthy();

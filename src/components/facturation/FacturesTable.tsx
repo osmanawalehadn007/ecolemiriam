@@ -11,6 +11,7 @@ import { useTranslations } from "next-intl";
 import { StudentSearch } from "./StudentSearch";
 import { getPaymentMethod, getPaymentMethodType } from "@/lib/payment-methods";
 import { trierFactures } from "@/lib/facturation/tri";
+import { formatDateHeure } from "@/lib/utils";
 
 interface FactureWithRelations {
   id: string;
@@ -361,7 +362,7 @@ export function FacturesTable({ factures }: FacturesTableProps) {
                           <Badge variant={cfg.variant}>{t(cfg.labelKey)}</Badge>
                         </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">
-                          {f.createdBy?.name ?? "—"}
+                          {f.createdBy?.name ?? "—"} · <span className="whitespace-nowrap">{formatDateHeure(f.createdAt)}</span>
                         </td>
                         <td className="px-4 py-3 text-right">
                           <Button asChild variant="ghost" size="sm" className="gap-1">

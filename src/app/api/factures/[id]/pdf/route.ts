@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { canAccessSite } from "@/lib/site-filter";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { niveauToLabel } from "@/lib/niveau";
+import { formatDateHeure } from "@/lib/utils";
 
 export async function GET(
   _req: NextRequest,
@@ -226,11 +227,11 @@ export async function GET(
         <tbody>
           ${facture.paiements.map((p) => `
           <tr>
-            <td>${new Date(p.date).toLocaleDateString("fr-FR")}</td>
+            <td>${formatDateHeure(p.date)}</td>
             <td style="font-weight:600;color:#059669">${formatMoney(p.montant, p.devise)}</td>
             <td style="text-transform:capitalize">${p.methode}</td>
             <td>${p.reference ?? "—"}</td>
-            <td>${p.enregistrePar?.name ?? "—"}</td>
+            <td>${p.enregistrePar?.name ?? "—"} · ${formatDateHeure(p.date)}</td>
           </tr>
           `).join("")}
         </tbody>

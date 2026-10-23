@@ -3,7 +3,7 @@
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
-import { PAYMENT_METHOD_IDS } from "@/lib/payment-methods";
+import { PAYMENT_METHOD_IDS, getPaymentMethodType } from "@/lib/payment-methods";
 import { checkPermission } from "@/lib/rbac";
 import { eleveScopeFilter, isRelationScopedRole, siteFilterForModel } from "@/lib/site-scope";
 import { z } from "zod";
@@ -38,6 +38,12 @@ const PaiementSchema = z.object({
     message: "Le moyen de paiement est invalide",
   }),
   reference: z.string().optional(),
+}).superRefine((v, ctx) => {
+  // Un paiement mobile money (Waffi, Saba Pay, CAC Pay…) doit porter la
+  // référence de la transaction : c'est la seule preuve rapprochable du relevé.
+  if (getPaymentMethodType(v.methode) === "MOBILE_MONEY" && !v.reference?.trim()) {
+    ctx.addIssue({ code: "custom", path: ["reference"], message: "La référence de la transaction est obligatoire pour un paiement mobile money" });
+  }
 });
 
 export type PaiementFormData = z.infer<typeof PaiementSchema>;
@@ -436,7 +442,7 @@ export async function enregistrerPaiement(factureId: string, data: PaiementFormD
       montant: values.montant,
       devise: facture.devise,
       methode: values.methode,
-      reference: values.reference || null,
+      reference: values.reference?.trim() || null,
       enregistreParId: session.user.id,
     },
   });

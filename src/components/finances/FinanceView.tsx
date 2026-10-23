@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateHeure } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { CalendarDays, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, FileText, LayoutGrid } from "lucide-react";
@@ -24,7 +24,7 @@ import { DepensesSection } from "./DepensesSection";
 import { BudgetSection } from "./BudgetSection";
 import { RemiseCaisseSection } from "./RemiseCaisseSection";
 import { hasPermission } from "@/lib/client-permissions";
-import { getPaymentMethodType } from "@/lib/payment-methods";
+import { getPaymentMethodType, getPaymentMethodLabelKey, getPaymentMethodColor } from "@/lib/payment-methods";
 
 type Periode = "today" | "week" | "month" | "semester" | "year";
 type FinanceType = "all" | "recettes" | "depenses" | "factures";
@@ -146,10 +146,14 @@ export function FinanceView({
   budgets,
   recettesParMethode,
   facturesPeriode,
+  paiementsListe,
+  activeMethode,
+  activeTri,
   remisesCaisse,
   activeSite,
   activePeriode,
   activeMonth,
+  activeJour,
   activeType,
   availableMonths,
   siteColors,
@@ -168,10 +172,14 @@ export function FinanceView({
   budgets: Budget[];
   recettesParMethode: RecetteParMethode[];
   facturesPeriode: FacturePeriode[];
+  paiementsListe: Paiement[];
+  activeMethode: string | null;
+  activeTri: "date" | "montant" | "methode";
   remisesCaisse: RemiseCaisse[];
   activeSite: string;
   activePeriode: Periode;
   activeMonth: string | null;
+  activeJour: string | null;
   activeType: FinanceType;
   availableMonths: string[];
   siteColors: Record<string, SiteColor>;
@@ -181,6 +189,7 @@ export function FinanceView({
 }) {
   const t = useTranslations("finances");
   const tCommon = useTranslations("common");
+  const tMoyen = useTranslations("facturation"); // libellés des moyens de paiement
   const router = useRouter();
   const searchParams = useSearchParams();
   const canWriteFinance = hasPermission(currentUser.role, "finance:write");
@@ -211,11 +220,25 @@ export function FinanceView({
     const params = new URLSearchParams(searchParams.toString());
     params.set("periode", periode);
     params.delete("month");
+    params.delete("jour");
+    router.push(`/finances?${params.toString()}`);
+  }
+
+  function setJour(jour: string | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (jour) {
+      params.set("jour", jour);
+      params.delete("month");
+      params.delete("periode");
+    } else {
+      params.delete("jour");
+    }
     router.push(`/finances?${params.toString()}`);
   }
 
   function setMonth(monthKey: string | null) {
     const params = new URLSearchParams(searchParams.toString());
+    params.delete("jour");
     if (monthKey) {
       params.set("month", monthKey);
       params.delete("periode");
@@ -228,6 +251,19 @@ export function FinanceView({
   function setType(type: FinanceType) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("type", type);
+    router.push(`/finances?${params.toString()}`);
+  }
+
+  function setMethode(valeur: string | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (valeur) params.set("methode", valeur);
+    else params.delete("methode");
+    router.push(`/finances?${params.toString()}`);
+  }
+
+  function setTri(tri: "date" | "montant" | "methode") {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tri", tri);
     router.push(`/finances?${params.toString()}`);
   }
 
@@ -289,6 +325,23 @@ export function FinanceView({
     })
     .filter((r) => r.nombre > 0);
 
+  // Détail par moyen précis (Waffi, Saba Pay…), toutes devises confondues.
+  const recettesParMoyen = Array.from(
+    recettesParMethode.reduce((acc, r) => {
+      const cur = acc.get(r.methode) ?? { methode: r.methode, montant: 0, nombre: 0 };
+      cur.montant += r.montant;
+      cur.nombre += r.nombre;
+      return acc.set(r.methode, cur);
+    }, new Map<string, { methode: string; montant: number; nombre: number }>()).values(),
+  ).sort((a, b) => b.montant - a.montant);
+  const libelleMoyen = (id: string) => {
+    const cle = getPaymentMethodLabelKey(id);
+    return cle === "method" ? id : tMoyen(cle);
+  };
+  const moyenCorrespond = (id: string) =>
+    !activeMethode || id === activeMethode || getPaymentMethodType(id) === activeMethode;
+  const totalFiltre = recettesParMethode.filter((r) => moyenCorrespond(r.methode)).reduce((n, r) => ({ montant: n.montant + r.montant, nombre: n.nombre + r.nombre }), { montant: 0, nombre: 0 });
+
   const facturesPayees = facturesPeriode.filter((f) => f.statut === "PAYEE").length;
   const facturesEnAttente = facturesPeriode.filter((f) => f.statut === "EN_ATTENTE").length;
   const facturesEnRetard = facturesPeriode.filter((f) => f.statut === "EN_RETARD").length;
@@ -312,7 +365,9 @@ export function FinanceView({
   };
   const stats = [statFacture, statEncaisse, statReste, statDepenses, statSolde];
 
-  const exportHref = activeMonth
+  const exportHref = activeJour
+    ? `/api/finances/export?siteId=${activeSite}&jour=${activeJour}&type=${activeType}`
+    : activeMonth
     ? `/api/finances/export?siteId=${activeSite}&month=${activeMonth}&type=${activeType}`
     : `/api/finances/export?siteId=${activeSite}&periode=${activePeriode}&type=${activeType}`;
 
@@ -341,7 +396,7 @@ export function FinanceView({
               onClick={() => setPeriode(p.key)}
               className={cn(
                 "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                activePeriode === p.key && !activeMonth
+                activePeriode === p.key && !activeMonth && !activeJour
                   ? "bg-primary text-white"
                   : "bg-gray-100 dark:bg-gray-800 text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700"
               )}
@@ -356,6 +411,15 @@ export function FinanceView({
           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900 dark:text-emerald-200"
         >
           {t("exportExcel")}
+        </a>
+        {/* Rapport des impayés à ce jour : le PDF est généré puis téléchargé au clic. */}
+        <a
+          href={`/api/finances/impayes-pdf?siteId=${activeSite}`}
+          download
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-200"
+        >
+          <FileText className="h-3.5 w-3.5" />
+          {t("unpaidReportPdf")}
         </a>
       </div>
 
@@ -397,6 +461,23 @@ export function FinanceView({
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
+        </div>
+
+        <div className="flex items-center gap-2 border-l pl-3">
+          <label htmlFor="jour-precis" className="text-sm font-medium text-muted-foreground">{t("preciseDay")}</label>
+          <Input
+            id="jour-precis"
+            type="date"
+            className="h-8 w-40 text-sm"
+            value={activeJour ?? ""}
+            max={todayInputValue()}
+            onChange={(e) => setJour(e.target.value || null)}
+          />
+          {activeJour && (
+            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setJour(null)}>
+              {t("resetDay")}
+            </Button>
+          )}
         </div>
 
         {activeMonth && (
@@ -480,12 +561,112 @@ export function FinanceView({
                 </div>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {recettesParType.map((r) => (
-                    <div key={r.type} className="rounded-xl border bg-muted/30 px-3 py-2">
+                    <button
+                      key={r.type}
+                      type="button"
+                      onClick={() => setMethode(activeMethode === r.type ? null : r.type)}
+                      className={cn(
+                        "rounded-xl border bg-muted/30 px-3 py-2 text-left transition-colors hover:bg-muted/60",
+                        activeMethode === r.type && "border-primary ring-1 ring-primary",
+                      )}
+                    >
                       <p className="text-xs text-muted-foreground">{t(`methodType_${r.type}`)}</p>
                       <p className="text-lg font-bold">{formatCurrency(r.montant, currency)}</p>
                       <p className="text-xs text-muted-foreground">{t("paymentsCount", { count: r.nombre })}</p>
-                    </div>
+                    </button>
                   ))}
+                </div>
+
+                {/* Détail par moyen précis, cliquable pour filtrer la liste */}
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">{t("filterByMethod")}</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setMethode(null)}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                        !activeMethode ? "bg-primary text-white border-primary" : "hover:bg-muted",
+                      )}
+                    >
+                      {t("allMethods")} · {nombrePaiements}
+                    </button>
+                    {recettesParMoyen.map((m) => (
+                      <button
+                        key={m.methode}
+                        type="button"
+                        onClick={() => setMethode(activeMethode === m.methode ? null : m.methode)}
+                        className={cn(
+                          "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                          activeMethode === m.methode ? "bg-primary text-white border-primary" : "hover:bg-muted",
+                        )}
+                      >
+                        {libelleMoyen(m.methode)} · {formatCurrency(m.montant, currency)} ({m.nombre})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Liste des paiements, filtrée et triable */}
+                <div>
+                  <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-medium text-muted-foreground">{t("sortBy")}</span>
+                    {([["date", t("date")], ["montant", t("amount")], ["methode", t("method")]] as const).map(([cle, label]) => (
+                      <button
+                        key={cle}
+                        type="button"
+                        onClick={() => setTri(cle)}
+                        className={cn(
+                          "rounded-md px-2 py-1 font-medium transition-colors",
+                          activeTri === cle ? "bg-primary text-white" : "bg-muted hover:bg-muted/70",
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    <span className="ml-auto text-muted-foreground">
+                      {formatCurrency(totalFiltre.montant, currency)} · {t("paymentsCount", { count: totalFiltre.nombre })}
+                      {paiementsListe.length < totalFiltre.nombre && ` — ${t("paymentsShown", { shown: paiementsListe.length, total: totalFiltre.nombre })}`}
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto rounded-lg border">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 text-xs text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">{t("date")}</th>
+                          <th className="px-3 py-2 text-left font-medium">{t("student")}</th>
+                          <th className="px-3 py-2 text-left font-medium">{t("invoice")}</th>
+                          <th className="px-3 py-2 text-left font-medium">{t("method")} / {t("reference")}</th>
+                          <th className="px-3 py-2 text-left font-medium">{t("recordedBy")}</th>
+                          <th className="px-3 py-2 text-right font-medium">{t("amount")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paiementsListe.map((p) => (
+                          <tr key={p.id} className="border-t">
+                            <td className="px-3 py-2 whitespace-nowrap">{formatDateHeure(p.date)}</td>
+                            <td className="px-3 py-2">{p.facture.eleve ? `${p.facture.eleve.prenom ?? ""} ${p.facture.eleve.nom}`.trim() : "—"}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{p.facture.numero}</td>
+                            <td className="px-3 py-2">
+                              <Badge variant="secondary" className="text-xs" data-color={getPaymentMethodColor(p.methode)}>
+                                {libelleMoyen(p.methode)}
+                              </Badge>
+                              {p.reference && <span className="ml-2 font-mono text-xs text-muted-foreground">{p.reference}</span>}
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground">
+                              {p.enregistrePar?.name ?? "—"} · <span className="whitespace-nowrap">{formatDateHeure(p.date)}</span>
+                            </td>
+                            <td className={cn("px-3 py-2 text-right font-medium whitespace-nowrap", p.montant < 0 && "text-red-600")}>
+                              {formatCurrency(p.montant, p.devise)}
+                            </td>
+                          </tr>
+                        ))}
+                        {paiementsListe.length === 0 && (
+                          <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">{t("noPayments")}</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
@@ -562,11 +743,13 @@ export function FinanceView({
                   <tbody>
                     {cashPending.map((p) => (
                       <tr key={p.id} className="border-b last:border-0">
-                        <td className="py-2 pr-2 whitespace-nowrap">{formatDate(p.date)}</td>
+                        <td className="py-2 pr-2 whitespace-nowrap">{formatDateHeure(p.date)}</td>
                         <td className="py-2 pr-2">{p.facture.eleve ? `${p.facture.eleve.prenom ? `${p.facture.eleve.prenom} ` : ""}${p.facture.eleve.nom}` : "—"}</td>
                         <td className="py-2 pr-2">{p.facture.numero}</td>
                         <td className="py-2 pr-2 text-right font-medium">{formatCurrency(p.montant, p.devise)}</td>
-                        <td className="py-2 pr-2 text-muted-foreground">{p.enregistrePar?.name ?? "—"}</td>
+                        <td className="py-2 pr-2 text-muted-foreground">
+                          {p.enregistrePar?.name ?? "—"} · <span className="whitespace-nowrap">{formatDateHeure(p.date)}</span>
+                        </td>
                         <td className="py-2 text-right">
                           <div className="flex justify-end gap-2">
                             {canWriteFinance && (

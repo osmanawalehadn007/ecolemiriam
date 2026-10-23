@@ -1,0 +1,121 @@
+name: Cron — Rapport des mensualités impayées
+
+# ============================================================
+# Le 10 de chaque mois : un PDF par site listant les élèves qui n'ont pas
+# soldé leurs mensualités (par structure puis par classe, avec l'impayé du mois
+# et le cumul de l'année scolaire). Les PDF sont publiés en artefact du run.
+#
+# Appelle `/api/cron/rapport-impayes` (protégé par CRON_SECRET) DEPUIS
+# l'instance, via le tunnel IAP — même montage que `cron-facturation.yml`, et
+# pour la même raison : ne pas dépendre de l'edge Cloudflare.
+#
+# Lecture seule : rien n'est écrit en base, rejouer est sans risque.
+# Prérequis : le secret `CRON_SECRET` (Actions), identique à celui de l'application.
+# ============================================================
+on:
+  schedule:
+    # 10 du mois, 03:00 UTC = 06:00 à Djibouti. L'échéance d'une mensualité est
+    # le 10 : le rapport sort le jour où elle tombe.
+    - cron: "0 3 10 * *"
+  workflow_dispatch:
+    inputs:
+      mois:
+        description: "Mois 1-12 (vide = mois courant)"
+        required: false
+        default: ""
+      annee:
+        description: "Année civile, ex. 2026 (vide = année courante)"
+        required: false
+        default: ""
+
+concurrency:
+  group: rapport-impayes
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # Workload Identity Federation (tunnel IAP)
+
+env:
+  GCP_PROJECT: ecole-miriam
+  GCP_ZONE: us-central1-a
+  GCP_INSTANCE: ecolpro-prod
+  WIF_PROVIDER: projects/994656035611/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+  SA_EMAIL: github-actions-deploy@ecole-miriam.iam.gserviceaccount.com
+
+jobs:
+  rapport:
+    name: Générer les rapports d'impayés
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      # Passés par l'environnement, jamais interpolés dans le script : un input
+      # de workflow_dispatch ne doit pas pouvoir injecter de commande shell.
+      MOIS: ${{ inputs.mois }}
+      ANNEE: ${{ inputs.annee }}
+      CIBLE: 'C=$(docker ps --format "{{.Names}}" | grep "^ecolemiriam-app-" | head -1); [ -n "$C" ] || { echo "aucun conteneur applicatif ; conteneurs presents : $(docker ps --format "{{.Names}}" | tr "\n" " ")"; exit 1; }; docker exec "$C" curl -fsS'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.SA_EMAIL }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Vérifier la configuration
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET absent (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          case "$MOIS" in ""|[1-9]|1[0-2]) ;; *) echo "::error::mois invalide : $MOIS"; exit 1 ;; esac
+          case "$ANNEE" in ""|20[0-9][0-9]) ;; *) echo "::error::annee invalide : $ANNEE"; exit 1 ;; esac
+
+      - name: Générer les PDF sur l'instance
+        run: |
+          ARGS=""
+          [ -n "$MOIS" ] && ARGS="mois=$MOIS"
+          [ -n "$ANNEE" ] && ARGS="$ARGS&annee=$ANNEE"
+          # ssh-retry peut écrire ses messages de relance sur stdout : on ne
+          # garde que la ligne JSON de la réponse.
+          .github/scripts/ssh-retry.sh "$CIBLE -H \"Authorization: Bearer $CRON_SECRET\" \"http://localhost:3000/api/cron/rapport-impayes?$ARGS\"" \
+            | grep '^{' | tail -1 > reponse.json
+          jq -e '.rapports' reponse.json > /dev/null
+
+      - name: Extraire les PDF
+        run: |
+          mkdir -p rapports
+          jq -r '.rapports[] | [.fichier, .pdfBase64] | @tsv' reponse.json | while IFS=$'\t' read -r fichier b64; do
+            echo "$b64" | base64 -d > "rapports/$fichier"
+          done
+          ls -l rapports
+
+      - name: Publier les rapports
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapports-impayes
+          path: rapports/*.pdf
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Résumé
+        if: always()
+        run: |
+          {
+            echo '### Rapports des mensualités impayées'
+            if [ -s reponse.json ]; then
+              echo "Période : $(jq -r '.periode' reponse.json)"
+              echo
+              echo '| Site | Élèves | Impayé du mois | Impayé année |'
+              echo '|---|---:|---:|---:|'
+              jq -r '.rapports[] | "| \(.site) | \(.eleves) | \(.totalMois) | \(.totalAnnee) |"' reponse.json
+            else
+              echo "Aucune réponse exploitable de l'application."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
