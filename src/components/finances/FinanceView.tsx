@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -15,7 +15,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatDate, formatDateHeure } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
+import { DateHeure } from "@/components/ui/DateHeure";
+import { JourneeSection, type PaiementJour } from "./JourneeSection";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { CalendarDays, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, FileText, LayoutGrid } from "lucide-react";
@@ -130,6 +132,12 @@ function formatCurrency(value: number, devise: string) {
   }
 }
 
+/** « AAAA-MM-JJ » → Date locale à minuit (évite le décalage UTC de `new Date("AAAA-MM-JJ")`). */
+function jourLocal(jour: string) {
+  const [y, m, d] = jour.split("-").map((n) => parseInt(n, 10));
+  return new Date(y, m - 1, d);
+}
+
 function todayInputValue() {
   return new Date().toISOString().split("T")[0];
 }
@@ -147,6 +155,7 @@ export function FinanceView({
   recettesParMethode,
   facturesPeriode,
   paiementsListe,
+  paiementsJour,
   activeMethode,
   activeTri,
   remisesCaisse,
@@ -173,6 +182,7 @@ export function FinanceView({
   recettesParMethode: RecetteParMethode[];
   facturesPeriode: FacturePeriode[];
   paiementsListe: Paiement[];
+  paiementsJour: PaiementJour[] | null;
   activeMethode: string | null;
   activeTri: "date" | "montant" | "methode";
   remisesCaisse: RemiseCaisse[];
@@ -196,6 +206,7 @@ export function FinanceView({
   const currency = recettesParMethode[0]?.devise ?? facturesPeriode[0]?.devise ?? "DJF";
   const siteColor = activeSite === "all" ? undefined : siteColors[activeSite];
 
+  const jourInputRef = useRef<HTMLInputElement>(null);
   const [depotId, setDepotId] = useState<string | null>(null);
   const [depotBanque, setDepotBanque] = useState("");
   const [depotDate, setDepotDate] = useState(todayInputValue());
@@ -464,15 +475,35 @@ export function FinanceView({
         </div>
 
         <div className="flex items-center gap-2 border-l pl-3">
-          <label htmlFor="jour-precis" className="text-sm font-medium text-muted-foreground">{t("preciseDay")}</label>
-          <Input
-            id="jour-precis"
-            type="date"
-            className="h-8 w-40 text-sm"
-            value={activeJour ?? ""}
-            max={todayInputValue()}
-            onChange={(e) => setJour(e.target.value || null)}
-          />
+          {/* Bouton + calendrier natif : tant qu'aucun jour n'est choisi, la case affiche
+              « Choisissez un jour précis » (pas la date d'aujourd'hui). */}
+          <div className="relative">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={cn("h-8 gap-2 text-sm font-normal", !activeJour && "text-muted-foreground")}
+              onClick={() => {
+                const input = jourInputRef.current;
+                if (!input) return;
+                if (typeof input.showPicker === "function") input.showPicker();
+                else input.click();
+              }}
+            >
+              <CalendarDays className="h-4 w-4" />
+              {activeJour ? formatDate(jourLocal(activeJour)) : t("chooseDay")}
+            </Button>
+            <input
+              ref={jourInputRef}
+              type="date"
+              aria-label={t("chooseDay")}
+              tabIndex={-1}
+              className="pointer-events-none absolute left-0 top-full h-0 w-0 opacity-0"
+              value={activeJour ?? ""}
+              max={todayInputValue()}
+              onChange={(e) => setJour(e.target.value || null)}
+            />
+          </div>
           {activeJour && (
             <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setJour(null)}>
               {t("resetDay")}
@@ -537,8 +568,14 @@ export function FinanceView({
             <p className="text-xs text-muted-foreground">{t("cashPending")}</p>
             <p className="text-2xl font-bold text-red-600">{formatCurrency(cashPendingTotal, currency)}</p>
             <p className="text-xs text-red-500/80 mt-1">{t("cashPendingHint")}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("cashPendingScope")}</p>
           </CardContent>
         </Card>
+      )}
+
+      {/* ── Jour précis : encaissements et dépenses en matin / après-midi, avec soldes ── */}
+      {activeJour && paiementsJour && (
+        <JourneeSection paiements={paiementsJour} depenses={depenses} currency={currency} formatMontant={formatCurrency} />
       )}
 
       {/* ── Montants perçus : un indicateur, pas la liste des paiements ── */}
@@ -644,7 +681,7 @@ export function FinanceView({
                       <tbody>
                         {paiementsListe.map((p) => (
                           <tr key={p.id} className="border-t">
-                            <td className="px-3 py-2 whitespace-nowrap">{formatDateHeure(p.date)}</td>
+                            <td className="px-3 py-2"><DateHeure value={p.date} /></td>
                             <td className="px-3 py-2">{p.facture.eleve ? `${p.facture.eleve.prenom ?? ""} ${p.facture.eleve.nom}`.trim() : "—"}</td>
                             <td className="px-3 py-2 text-muted-foreground">{p.facture.numero}</td>
                             <td className="px-3 py-2">
@@ -653,9 +690,7 @@ export function FinanceView({
                               </Badge>
                               {p.reference && <span className="ml-2 font-mono text-xs text-muted-foreground">{p.reference}</span>}
                             </td>
-                            <td className="px-3 py-2 text-muted-foreground">
-                              {p.enregistrePar?.name ?? "—"} · <span className="whitespace-nowrap">{formatDateHeure(p.date)}</span>
-                            </td>
+                            <td className="px-3 py-2 text-muted-foreground">{p.enregistrePar?.name ?? "—"}</td>
                             <td className={cn("px-3 py-2 text-right font-medium whitespace-nowrap", p.montant < 0 && "text-red-600")}>
                               {formatCurrency(p.montant, p.devise)}
                             </td>
@@ -743,13 +778,11 @@ export function FinanceView({
                   <tbody>
                     {cashPending.map((p) => (
                       <tr key={p.id} className="border-b last:border-0">
-                        <td className="py-2 pr-2 whitespace-nowrap">{formatDateHeure(p.date)}</td>
+                        <td className="py-2 pr-2"><DateHeure value={p.date} /></td>
                         <td className="py-2 pr-2">{p.facture.eleve ? `${p.facture.eleve.prenom ? `${p.facture.eleve.prenom} ` : ""}${p.facture.eleve.nom}` : "—"}</td>
                         <td className="py-2 pr-2">{p.facture.numero}</td>
                         <td className="py-2 pr-2 text-right font-medium">{formatCurrency(p.montant, p.devise)}</td>
-                        <td className="py-2 pr-2 text-muted-foreground">
-                          {p.enregistrePar?.name ?? "—"} · <span className="whitespace-nowrap">{formatDateHeure(p.date)}</span>
-                        </td>
+                        <td className="py-2 pr-2 text-muted-foreground">{p.enregistrePar?.name ?? "—"}</td>
                         <td className="py-2 text-right">
                           <div className="flex justify-end gap-2">
                             {canWriteFinance && (

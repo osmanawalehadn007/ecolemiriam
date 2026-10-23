@@ -26,6 +26,24 @@ export function formatHeure(date: Date | string) {
   return fmtHeure.format(new Date(date));
 }
 
+/** « 05/10/2026 » (heure de Djibouti) */
+export function formatJour(date: Date | string) {
+  return fmtJour.format(new Date(date));
+}
+
+/** Heure de l'horloge de Djibouti, 0 à 23. */
+export function heureDjibouti(date: Date | string): number {
+  return parseInt(fmtHeure.format(new Date(date)).slice(0, 2), 10);
+}
+
+/** Heure de bascule entre la matinée et l'après-midi (13 h, heure de Djibouti). */
+export const HEURE_BASCULE_DEMI_JOURNEE = 13;
+
+/** « matin » avant 13 h, « apres_midi » à partir de 13 h (heure de Djibouti). */
+export function demiJournee(date: Date | string): "matin" | "apres_midi" {
+  return heureDjibouti(date) < HEURE_BASCULE_DEMI_JOURNEE ? "matin" : "apres_midi";
+}
+
 /** « 05/10/2026 14:32:07 » */
 export function formatDateHeure(date: Date | string) {
   const d = new Date(date);

@@ -133,6 +133,17 @@ describe("siteFilterForModel", () => {
     });
   });
 
+  // Régression : la page RH plantait (« Unknown argument `siteId` ») car
+  // Enseignant n'a pas de colonne siteId, seulement la relation `sites`.
+  it("suit la chaîne de relations jusqu'à EnseignantSite", () => {
+    const viaSites = { enseignant: { sites: { some: { siteId: { in: ["s1"] } } } } };
+    expect(siteFilterForModel("absencePersonnel", scoped)).toEqual({ AND: [viaSites] });
+    expect(siteFilterForModel("congePersonnel", scoped)).toEqual({ AND: [viaSites] });
+    expect(siteFilterForModel("bulletinPaie", scoped)).toEqual({
+      AND: [{ ficheRH: viaSites }],
+    });
+  });
+
   // Régression directe : c'est ici que la 500 se produisait.
   it("filtre via la relation pour un modèle sans colonne siteId", () => {
     expect(siteFilterForModel("incident", scoped)).toEqual({

@@ -14,7 +14,7 @@ vi.mock("./DepensesSection", () => ({ DepensesSection: () => null }));
 vi.mock("./BudgetSection", () => ({ BudgetSection: () => null }));
 vi.mock("./RemiseCaisseSection", () => ({ RemiseCaisseSection: () => null }));
 
-const rendre = (recettesParMethode: unknown[], facturesPeriode: unknown[] = [], activeType = "recettes", resteAEncaisser = 20000, soldeCaisse = 80000, paiementsListe: unknown[] = [], activeMethode: string | null = null, activeJour: string | null = null) =>
+const rendre = (recettesParMethode: unknown[], facturesPeriode: unknown[] = [], activeType = "recettes", resteAEncaisser = 20000, soldeCaisse = 80000, paiementsListe: unknown[] = [], activeMethode: string | null = null, activeJour: string | null = null, paiementsJour: unknown[] | null = null, cashPendingTotal = 0) =>
   render(
     <FinanceView
       totalEncaisse={80000}
@@ -22,13 +22,14 @@ const rendre = (recettesParMethode: unknown[], facturesPeriode: unknown[] = [], 
       resteAEncaisser={resteAEncaisser}
       soldeCaisse={soldeCaisse}
       totalDepenses={0}
-      cashPendingTotal={0}
+      cashPendingTotal={cashPendingTotal}
       cashPending={[]}
       depenses={[]}
       budgets={[]}
       recettesParMethode={recettesParMethode}
       facturesPeriode={facturesPeriode}
       paiementsListe={paiementsListe as never}
+      paiementsJour={paiementsJour as never}
       activeMethode={activeMethode}
       activeTri="date"
       remisesCaisse={[]}
@@ -77,8 +78,17 @@ describe("FinanceView — montants perçus", () => {
   it("choisir un jour précis remplace le mois et la période dans l'adresse", () => {
     push.mockClear();
     rendre(recettes);
-    fireEvent.change(screen.getByLabelText("preciseDay"), { target: { value: "2026-10-05" } });
+    fireEvent.change(screen.getByLabelText("chooseDay"), { target: { value: "2026-10-05" } });
     expect(push).toHaveBeenLastCalledWith("/finances?jour=2026-10-05");
+  });
+
+  it("affiche « chooseDay » tant qu'aucun jour n'est choisi, puis seulement la date choisie", () => {
+    const { unmount } = rendre(recettes);
+    expect(screen.getByRole("button", { name: /chooseDay/ })).toBeTruthy();
+    unmount();
+    rendre(recettes, [], "recettes", 0, 0, [], null, "2026-10-05");
+    expect(screen.queryByRole("button", { name: /chooseDay/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /5 octobre 2026/ })).toBeTruthy();
   });
 
   it("propose de réinitialiser le jour quand il est actif", () => {
@@ -86,6 +96,12 @@ describe("FinanceView — montants perçus", () => {
     rendre(recettes, [], "recettes", 0, 0, [], null, "2026-10-05");
     fireEvent.click(screen.getByText("resetDay"));
     expect(push).toHaveBeenLastCalledWith("/finances?");
+  });
+
+  it("la carte de liquidité non versée précise qu'elle porte sur la période affichée", () => {
+    rendre(recettes, [], "all", 0, 0, [], null, null, null, 12000);
+    expect(screen.getByText("cashPending")).toBeTruthy();
+    expect(screen.getByText("cashPendingScope")).toBeTruthy();
   });
 
   it("indique l'absence de paiement", () => {

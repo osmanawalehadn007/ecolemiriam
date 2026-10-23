@@ -499,14 +499,30 @@ export function siteFilterForModel(
     : { siteId: { in: scope.siteIds } };
 
   if (path === "column") return { AND: [inSites] };
-  if ("one" in path) return { AND: [{ [path.one]: inSites }] };
+  return { AND: [relationPredicate(path, scope.siteIds)] };
+}
 
+/**
+ * Prédicat de site pour un modèle rattaché par relation. Si la relation
+ * pointe vers un modèle lui-même rattaché par relation (ex. AbsencePersonnel
+ * → Enseignant → EnseignantSite), on suit la chaîne : Enseignant ne porte pas
+ * de colonne `siteId`, filtrer dessus fait échouer la requête Prisma.
+ */
+function relationPredicate(
+  path: { one: string } | { many: string },
+  siteIds: string[]
+): Record<string, unknown> {
   // Relation vers-plusieurs : strictement rattaché à l'un de mes sites. Le
   // rattachement (ex. EnseignantSite) est obligatoire : un enregistrement sans
   // site n'est visible qu'en vue « tous les sites », jamais sur un site précis.
-  return {
-    AND: [{ [path.many]: { some: { siteId: { in: scope.siteIds } } } }],
-  };
+  if ("many" in path) {
+    return { [path.many]: { some: { siteId: { in: siteIds } } } };
+  }
+  const target = SITE_PATHS[path.one];
+  if (target && typeof target === "object") {
+    return { [path.one]: relationPredicate(target, siteIds) };
+  }
+  return { [path.one]: { siteId: { in: siteIds } } };
 }
 
 /**
