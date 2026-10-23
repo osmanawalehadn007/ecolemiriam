@@ -1033,6 +1033,7 @@
     "transfer": "Transfer",
     "reference": "Reference",
     "referencePlaceholder": "Transaction N°...",
+    "referenceRequired": "Tixraaca macaamilka waa lagama maarmaan lacag bixinta mobile money",
     "validatePayment": "Validate payment",
     "paymentHistory": "Payment history",
     "noPayments": "No payment recorded",

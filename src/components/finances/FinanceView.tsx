@@ -601,7 +601,7 @@ export function FinanceView({
                           <th className="px-3 py-2 text-left font-medium">{t("date")}</th>
                           <th className="px-3 py-2 text-left font-medium">{t("student")}</th>
                           <th className="px-3 py-2 text-left font-medium">{t("invoice")}</th>
-                          <th className="px-3 py-2 text-left font-medium">{t("method")}</th>
+                          <th className="px-3 py-2 text-left font-medium">{t("method")} / {t("reference")}</th>
                           <th className="px-3 py-2 text-right font-medium">{t("amount")}</th>
                         </tr>
                       </thead>
@@ -615,6 +615,7 @@ export function FinanceView({
                               <Badge variant="secondary" className="text-xs" data-color={getPaymentMethodColor(p.methode)}>
                                 {libelleMoyen(p.methode)}
                               </Badge>
+                              {p.reference && <span className="ml-2 font-mono text-xs text-muted-foreground">{p.reference}</span>}
                             </td>
                             <td className={cn("px-3 py-2 text-right font-medium whitespace-nowrap", p.montant < 0 && "text-red-600")}>
                               {formatCurrency(p.montant, p.devise)}

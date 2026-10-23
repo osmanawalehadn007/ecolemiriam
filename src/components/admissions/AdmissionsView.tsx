@@ -18,7 +18,7 @@ import { useTranslations } from "next-intl";
 import { PiecesJustificativesUploader } from "./PiecesJustificativesUploader";
 import { piecesRequisesPresentes } from "@/lib/admissions/pieces-justificatives";
 import { enregistrerPaiement } from "@/lib/actions/facture";
-import { PAYMENT_METHODS } from "@/lib/payment-methods";
+import { PAYMENT_METHODS, getPaymentMethodType } from "@/lib/payment-methods";
 import { optionsMoisScolarite, moisScolariteDefaut } from "@/lib/admissions/mois-scolarite";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -730,6 +730,8 @@ function PaiementInlineModal({
   const [methode, setMethode] = useState("espèces");
   const [reference, setReference] = useState("");
 
+  const referenceObligatoire = getPaymentMethodType(methode) === "MOBILE_MONEY";
+
   function handlePaiement(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
@@ -808,8 +810,9 @@ function PaiementInlineModal({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">{t("paymentReference")}</Label>
+              <Label className="text-xs">{t("paymentReference")}{referenceObligatoire && " *"}</Label>
               <Input
+                required={referenceObligatoire}
                 value={reference}
                 onChange={(e) => setReference(e.target.value)}
                 placeholder={t("paymentReferencePlaceholder")}

@@ -1054,6 +1054,7 @@
     "transfer": "Transfer",
     "reference": "Reference",
     "referencePlaceholder": "Transaction No...",
+    "referenceRequired": "The transaction reference is required for a mobile money payment",
     "validatePayment": "Validate payment",
     "paymentHistory": "Payment history",
     "noPayments": "No payment recorded",

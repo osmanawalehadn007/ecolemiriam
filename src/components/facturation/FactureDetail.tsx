@@ -166,10 +166,17 @@ export function FactureDetail({ facture, userRole }: FactureDetailProps) {
         }
       : undefined);
 
+  // Mobile money : la référence de la transaction est obligatoire.
+  const referenceObligatoire = getPaymentMethodType(paiement.methode) === "MOBILE_MONEY";
+
   async function handlePaiement(e: React.FormEvent) {
     e.preventDefault();
     if (paiement.montant <= 0) {
       toast.error(t("amountPositive"));
+      return;
+    }
+    if (referenceObligatoire && !paiement.reference?.trim()) {
+      toast.error(t("referenceRequired"));
       return;
     }
     setIsPending(true);
@@ -445,9 +452,10 @@ export function FactureDetail({ facture, userRole }: FactureDetailProps) {
                 </select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="reference">{t("reference")}</Label>
+                <Label htmlFor="reference">{t("reference")}{referenceObligatoire && " *"}</Label>
                 <Input
                   id="reference"
+                  required={referenceObligatoire}
                   placeholder={t("referencePlaceholder")}
                   value={paiement.reference ?? ""}
                   onChange={(e) => setPaiement({ ...paiement, reference: e.target.value })}
