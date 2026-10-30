@@ -1,9 +1,10 @@
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import type { BulletinData } from "@/lib/pdf/bulletin-generator";
 import { format } from "date-fns";
 import { libelleRang } from "@/lib/bulletins/bareme";
+import { ajusterPourImpression, retablirApresImpression } from "@/lib/bulletins/ajuster-impression";
 
 /**
  * Bulletin de notes — reproduction du modèle Excel de l'établissement
@@ -100,9 +101,25 @@ function Cell({
 export function BulletinPreview({ data }: Props) {
   const decision = data.decision ?? null;
   const t = (n: number) => data.trimestres.find((x) => x.numero === n);
+  const racine = useRef<HTMLDivElement>(null);
+
+  // Une seule page A4 à l'impression, même avec beaucoup de matières.
+  useEffect(() => {
+    const element = racine.current;
+    if (!element) return;
+    const avant = () => ajusterPourImpression(element);
+    const apres = () => retablirApresImpression(element);
+    window.addEventListener("beforeprint", avant);
+    window.addEventListener("afterprint", apres);
+    return () => {
+      window.removeEventListener("beforeprint", avant);
+      window.removeEventListener("afterprint", apres);
+    };
+  }, []);
 
   return (
     <div
+      ref={racine}
       id="bulletin-document"
       style={{
         width: "200mm",

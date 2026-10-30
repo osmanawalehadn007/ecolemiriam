@@ -63,11 +63,11 @@ export default async function BulletinPage({
             Retour
           </Button>
         </Link>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <TelechargerBulletin nomFichier={nomFichierBulletin(["Bulletin", data.eleveClasse, data.eleveNom, data.elevePrenom, data.periodeNom])} />
           {roleHasPermission(session.user.role, "bulletins:write") && (
             <EnvoyerBulletin eleveId={eleveId} periodeId={periodeId} />
           )}
-          <TelechargerBulletin nomFichier={nomFichierBulletin(["Bulletin", data.eleveClasse, data.eleveNom, data.elevePrenom, data.periodeNom])} />
           <PrintButton />
         </div>
       </div>

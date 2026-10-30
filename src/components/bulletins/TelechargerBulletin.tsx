@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { telechargerBulletinPdf } from "@/lib/bulletins/pdf-client";
+import { BoutonIcone } from "@/components/bulletins/BoutonIcone";
 
-/** Bouton « Enregistrer en PDF » : photographie le bulletin affiché (#bulletin-document). */
-export function TelechargerBulletin({ nomFichier, style }: { nomFichier: string; style?: React.CSSProperties }) {
+/** Icône « Enregistrer / Télécharger » : photographie le bulletin affiché (#bulletin-document) en PDF. */
+export function TelechargerBulletin({ nomFichier }: { nomFichier: string }) {
   const [encours, setEncours] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -25,30 +26,11 @@ export function TelechargerBulletin({ nomFichier, style }: { nomFichier: string;
 
   return (
     <>
-      <button
-        type="button"
-        onClick={telecharger}
-        disabled={encours}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-          border: "1px solid #d1d5db",
-          background: "#fff",
-          color: "#111827",
-          borderRadius: 6,
-          padding: "6px 12px",
-          fontSize: 14,
-          whiteSpace: "nowrap",
-          cursor: encours ? "wait" : "pointer",
-          ...style,
-        }}
-      >
-        {encours ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-        {encours ? "Création du PDF…" : "Enregistrer / Télécharger"}
-      </button>
+      <BoutonIcone titre={encours ? "Création du PDF…" : "Enregistrer / Télécharger (PDF)"} onClick={telecharger} disabled={encours}>
+        {encours ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
+      </BoutonIcone>
       {erreur && (
-        <span role="alert" style={{ color: "#b91c1c", fontSize: 12, alignSelf: "center" }}>
+        <span role="alert" className="self-center text-xs text-red-700">
           {erreur}
         </span>
       )}

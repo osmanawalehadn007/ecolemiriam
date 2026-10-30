@@ -30,7 +30,8 @@ export default async function BulletinPartagePage({ params }: { params: Promise<
   return (
     <div style={{ minHeight: "100vh", background: "#f3f4f6", padding: "16px 0" }} className="print:!bg-white print:!p-0">
       <style dangerouslySetInnerHTML={{ __html: "@page { size: A4; margin: 5mm; }" }} />
-      <div className="print:hidden" style={{ maxWidth: "200mm", margin: "0 auto 12px", display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", padding: "0 12px" }}>
+      {/* Pas de style en ligne sur `display` : il l'emporterait sur `print:hidden` et la barre s'imprimerait. */}
+      <div className="print:hidden mx-auto mb-3 flex max-w-[200mm] flex-wrap items-center justify-end gap-2 px-3">
         <TelechargerBulletin nomFichier={nomFichierBulletin(["Bulletin", data.eleveClasse, data.eleveNom, data.elevePrenom, data.periodeNom])} />
         <PrintBulletinButton />
       </div>
