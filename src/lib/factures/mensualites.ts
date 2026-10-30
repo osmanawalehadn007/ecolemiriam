@@ -207,23 +207,7 @@ export async function genererMensualitesPourTenant(
   /* eslint-disable ecolemiriam/require-site-filter -- `eleveWhere`/`tarifWhere` sont construits par l'appelant via siteFilterForModel(...) (action serveur) ou laissés vides pour un traitement tenant-wide assumé (cron protégé par CRON_SECRET). */
   const eleves = await prisma.eleve.findMany({
     where: { tenantId, statut: "ACTIF", deletedAt: null, ...eleveWhere },
-    include: {
-      classe: { select: { niveau: true, nom: true, annee: true } },
-      tarifPersonnalise: {
-        select: {
-          id: true,
-          niveau: true,
-          mensualite: true,
-          fraisInscription: true,
-          fraisRenouvellement: true,
-          fraisCantine: true,
-          fraisTransport: true,
-          devise: true,
-          nbMois: true,
-          actif: true,
-        },
-      },
-    },
+    include: { classe: { select: { niveau: true, nom: true, annee: true } } },
   });
 
   // La grille peut être saisie pour l'année de la classe de l'élève, qui n'est
@@ -276,70 +260,8 @@ export async function genererMensualitesPourTenant(
   let montantTotal = 0;
 
   for (const eleve of eleves) {
-    // 1. Tarif personnalisé de l'élève (exonération, bourse, tarif spécial).
-    //    S'il est renseigné et actif, il prime sur le tarif standard du niveau.
-    if (eleve.tarifPersonnalise?.actif) {
-      if (dejaFactures.has(eleve.id)) {
-        skipped++;
-        continue;
-      }
-      // Le tarif personnalisé vient de la BDD : il a tous les champs tarif,
-      // sauf `siteId` (null par nature). Construisons un objet compatible
-      // TarifLike pour les calculs.
-      const tarifPerso = {
-        ...eleve.tarifPersonnalise,
-        siteId: null,
-      } as const;
-      const montant =
-        montantMensuel(tarifPerso, {
-          cantine: inclureCantine,
-          transport: inclureTransport,
-        }) +
-        (estRentree
-          ? (inclureFraisInscription ? eleve.tarifPersonnalise.fraisInscription : 0) +
-            (inclureFraisRenouvellement
-              ? eleve.tarifPersonnalise.fraisRenouvellement
-              : 0)
-          : 0);
-
-      if (dryRun) {
-        generated++;
-        montantTotal += montant;
-        continue;
-      }
-
-      const echeance = echeanceMensualite(mois, annee);
-      const numero = await reserverNumeroFacture(tenantId, prefixeNumero(annee));
-
-      try {
-        await prisma.facture.create({
-          data: {
-            tenantId,
-            siteId: eleve.siteId,
-            eleveId: eleve.id,
-            numero,
-            libelle,
-            montant,
-            devise: eleve.tarifPersonnalise.devise,
-            statut: "EN_ATTENTE",
-            mois: cleMois,
-            type: "MENSUALITE",
-          },
-        });
-        generated++;
-        montantTotal += montant;
-      } catch (e) {
-        if (estViolationUnicite(e)) {
-          skipped++;
-          continue;
-        }
-        throw e;
-      }
-      continue;
-    }
-
-    // 2. Tarif du site de l'élève, sinon tarif global, comparés sur une clé de
-    //    niveau canonique : une classe « 1 » et un tarif « 1ère » se rencontrent.
+    // Tarif du site de l'élève, sinon tarif global, comparés sur une clé de
+    // niveau canonique : une classe « 1 » et un tarif « 1ère » se rencontrent.
     const choix = choisirTarif(
       tarifsParAnnee.get(eleve.classe?.annee ?? annee) ?? tarifs,
       eleve.siteId,

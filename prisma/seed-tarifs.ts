@@ -216,43 +216,6 @@ async function main() {
         "."
     );
 
-    // ── Tarif global d'exonération (mensualité 0) pour ce tenant ──
-    // Ce tarif spécial (niveau "EXONERE", siteId null) s'applique à tout
-    // élève auquel on le lie directement via Eleve.tarifPersonnaliseId.
-    // Il prime sur le tarif standard de son niveau.
-    const tarifExonereExistant = await prisma.tarifNiveau.findFirst({
-      where: {
-        tenantId: tenant.id,
-        niveau: "EXONERE",
-        siteId: null,
-      },
-    });
-    if (!tarifExonereExistant) {
-      await prisma.tarifNiveau.create({
-        data: {
-          tenantId: tenant.id,
-          siteId: null,
-          niveau: "EXONERE",
-          annee: annee,
-          mensualite: 0,
-          fraisInscription: 0,
-          fraisRenouvellement: 0,
-          fraisCantine: 0,
-          fraisTransport: 0,
-          devise: "DJF",
-          nbMois: 10,
-          actif: true,
-        },
-      });
-      console.log(`✔ Tarif EXONERE (0 DJF) créé pour ${tenant.name}`);
-    } else if (!tarifExonereExistant.actif) {
-      await prisma.tarifNiveau.update({
-        where: { id: tarifExonereExistant.id },
-        data: { actif: true },
-      });
-      console.log(`✔ Tarif EXONERE réactivé pour ${tenant.name}`);
-    }
-
     // Signaler les années scolaires restées sans grille : elles ne produiraient
     // aucune facture automatique.
     const anneesClasses = await prisma.classe.findMany({

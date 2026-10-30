@@ -49,20 +49,6 @@ const getEleveDetailData = unstable_cache(
         // d'un élève muté suit l'élève et non le site où la pièce a été produite.
         include: {
           classe: { select: { id: true, nom: true, niveau: true } },
-          // Tarif personnalisé (exonération) de l'élève, affiché dans le détail.
-          tarifPersonnalise: {
-            select: {
-              id: true,
-              niveau: true,
-              mensualite: true,
-              fraisInscription: true,
-              fraisRenouvellement: true,
-              fraisCantine: true,
-              fraisTransport: true,
-              devise: true,
-              actif: true,
-            },
-          },
           // Le lien élève↔parent n'a pas de site propre : c'est la filiation qui
           // le borne, et un parent peut avoir des enfants sur plusieurs sites.
           // eslint-disable-next-line ecolemiriam/require-site-filter

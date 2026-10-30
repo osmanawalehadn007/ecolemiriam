@@ -741,11 +741,6 @@ model Eleve {
   classeId String?
   classe   Classe? @relation(fields: [classeId], references: [id])
 
-  // Tarif personnalisé pour cet élève (exonération, bourse, tarif spécial).
-  // S'il est renseigné, ce tarif prime sur le tarif standard du niveau/site.
-  tarifPersonnaliseId   String?
-  tarifPersonnalise     TarifNiveau? @relation(name: "EleveTarif", fields: [tarifPersonnaliseId], references: [id], onDelete: SetNull)
-
   // Compte de connexion élève (optionnel — généré en masse depuis Paramètres/Élèves)
   userId String? @unique
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -1549,9 +1544,6 @@ model TarifNiveau {
   site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
 
   niveau         String  // "Maternelle", "Primaire", "Collège", "Lycée"
-  // Relation avec Eleve (tarif personnalisé)
-  eleves Eleve[] @relation(name: "EleveTarif", map: "eleves_tarif_rel")
-
   annee          String  // "2025-2026"
   mensualite     Float   // montant mensuel scolarité
   fraisInscription Float // première inscription
