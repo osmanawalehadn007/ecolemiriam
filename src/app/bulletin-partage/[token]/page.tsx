@@ -17,7 +17,7 @@ export default async function BulletinPartagePage({ params }: { params: Promise<
     ? await runWithTenant(lien.tenantId, null, () => getBulletinData(lien.eleveId, lien.periodeId, lien.tenantId))
     : null;
 
-  if (!data) {
+  if (!data || !data.isPublie) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "Arial, sans-serif", textAlign: "center" }}>
         Ce lien est invalide ou a expiré. Demandez un nouvel envoi à l&apos;établissement.

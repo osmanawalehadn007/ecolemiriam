@@ -74,6 +74,8 @@ export type BulletinData = {
   appreciation: string | null;
   decision?: string | null;
   decisionPassage: "Admis" | "Ajourné" | null;
+  /** Visible des parents et élèves seulement une fois publié. */
+  isPublie: boolean;
 
   // Rapport trimestriel (trimestres 1 à 3 de l'année) — moyenne, rang, appréciation
   trimestres: BulletinTrimestre[];
@@ -261,6 +263,7 @@ export async function getBulletinData(
     appreciation: bulletin.appreciation,
     decision: bulletin.decision,
     decisionPassage: decisionPassage(bulletin.moyenneGenerale),
+    isPublie: bulletin.isPublie,
     trimestres,
 
     profPrincipalNom: eleve.classe.profPrincipal?.user.name,

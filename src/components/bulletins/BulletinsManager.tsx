@@ -124,6 +124,14 @@ export function BulletinsManager({
         if (!res.ok) throw new Error(data.error ?? t("error"));
         setGenerated((prev) => new Set([...prev, key]));
         toast.success(t("successGenerated", { count: data.count }));
+        if (data.depublies > 0) {
+          setPublished((prev) => {
+            const next = new Set(prev);
+            next.delete(key);
+            return next;
+          });
+          toast.warning(`${data.depublies} bulletin(s) dont la moyenne a changé ont été dépubliés : republiez-les.`);
+        }
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : t("errGeneration"));
       } finally {

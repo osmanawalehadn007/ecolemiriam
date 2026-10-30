@@ -37,6 +37,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Données introuvables" }, { status: 404 });
     }
 
+    // Un parent ou un élève ne voit un bulletin qu'une fois publié.
+    if ((session.user.role === "PARENT" || session.user.role === "STUDENT") && !data.isPublie) {
+      return NextResponse.json({ error: "Données introuvables" }, { status: 404 });
+    }
+
     return NextResponse.json(data);
   } catch (error) {
     console.error("[API/bulletins/preview]", error);

@@ -162,6 +162,15 @@ export async function POST(req: NextRequest) {
 
     // 2. Generate bulletins for each student (sequential to avoid connection pool exhaustion)
     console.log("[generer] step 12: generating bulletins for", classe.eleves.length, "students");
+    // Bulletins déjà générés : on conserve l'appréciation saisie au conseil de classe et
+    // on dépublie un bulletin publié dont la moyenne change.
+    const existants = new Map(
+      (await prisma.bulletin.findMany({
+        where: { tenantId, ...siteFilterForModel("bulletin", session.user), periodeId, eleveId: { in: classe.eleves.map((e) => e.id) } },
+        select: { eleveId: true, appreciation: true, moyenneGenerale: true, isPublie: true },
+      })).map((b) => [b.eleveId, b])
+    );
+    let depublies = 0;
     const bulletinsGlobalAverages: { eleveId: string; moyenne: number | null }[] = [];
     for (const eleve of classe.eleves) {
       const absEleve = absences.filter(a => a.eleveId === eleve.id);
@@ -225,14 +234,24 @@ export async function POST(req: NextRequest) {
       const moyenneGenerale = totalCoef > 0 ? Number((totalPoints / totalCoef).toFixed(2)) : null;
       const appreciation = genererAppréciation(moyenneGenerale, "BULLETIN_PERIODE", reglesAppreciation);
 
+      const existant = existants.get(eleve.id);
+      // Appréciation saisie à la main : elle diffère de celle que le barème donnait à l'ancienne moyenne.
+      const appreciationManuelle =
+        existant?.appreciation && existant.appreciation !== genererAppréciation(existant.moyenneGenerale, "BULLETIN_PERIODE", reglesAppreciation)
+          ? existant.appreciation
+          : null;
+      const doitDepublier = !!existant?.isPublie && existant.moyenneGenerale !== moyenneGenerale;
+      if (doitDepublier) depublies++;
+
       // Save bulletin
       const bulletin = await prisma.bulletin.upsert({
         where: { eleveId_periodeId: { eleveId: eleve.id, periodeId } },
         update: {
           moyenneGenerale,
           heuresAbsence,
-          appreciation,
+          appreciation: appreciationManuelle ?? appreciation,
           effectifClasse: classe.eleves.length,
+          ...(doitDepublier ? { isPublie: false, publishedAt: null } : {}),
         },
         create: {
           tenantId,
@@ -286,7 +305,7 @@ export async function POST(req: NextRequest) {
     }
 
     console.log("[generer] step 15: done, count:", classe.eleves.length);
-    return NextResponse.json({ success: true, count: classe.eleves.length });
+    return NextResponse.json({ success: true, count: classe.eleves.length, depublies });
   } catch (error) {
     console.error("[API/bulletins/generer]", error);
     const message = error instanceof Error ? error.message : "Erreur inconnue";

@@ -33,7 +33,9 @@ export default async function BulletinPage({
 
   const data = await getBulletinData(eleveId, periodeId, session.user.tenantId);
 
-  if (!data) {
+  const nonVisible = (session.user.role === "PARENT" || session.user.role === "STUDENT") && !data?.isPublie;
+
+  if (!data || nonVisible) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-8">
         <p className="text-lg font-semibold text-gray-600 mb-4">
