@@ -2954,6 +2954,7 @@
     "noPayments": "Aucun paiement enregistré pour cette sélection.",
     "date": "Date",
     "student": "Élève",
+    "class": "Classe",
     "invoice": "Facture",
     "method": "Méthode",
     "reference": "Référence",
