@@ -59,7 +59,7 @@ describe("POST /api/bulletins/envoyer", () => {
     const corps = await res.json();
     expect(corps.email).toMatchObject({ envoyes: 2, destinataires: 2, erreur: null, simule: false });
     const [destinataires, sujet, html] = sendEmail.mock.calls[0];
-    expect(destinataires).toEqual(["mere@exemple.dj", "pere@exemple.dj"]);
+    expect(destinataires).toEqual(parents.map((p) => p.parent.email));
     expect(sujet).toContain("Amina HASSAN");
     const lien = /href="([^"]+)"/.exec(html)![1];
     const jeton = lien.split("/bulletin-partage/")[1];
