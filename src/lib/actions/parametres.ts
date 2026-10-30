@@ -1208,7 +1208,7 @@ const PURGE_DELAY_DAYS = 90;
 
 const DeleteSiteSchema = z.object({
   reason: z.enum(["FERMETURE", "FUSION", "ERREUR", "AUTRE"], {
-    errorMap: () => ({ message: "Veuillez sélectionner une raison" }),
+    error: "Veuillez sélectionner une raison",
   }),
   customReason: z.string().optional(),
   confirmName1: z.string().min(1, "Veuillez saisir le nom du site"),
