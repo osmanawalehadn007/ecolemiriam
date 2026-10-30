@@ -1519,8 +1519,12 @@ export async function createAnneeScolaire(data: z.infer<typeof AnneeScolaireSche
 export async function creerPeriodesAnneeCourante() {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
-  const denied = checkPermission(session.user.role, "parametres:write");
-  if (denied) throw new Error("Accès refusé");
+  // Les périodes conditionnent les bulletins : le chef d'établissement (bulletins:write)
+  // peut les créer sans disposer de l'écriture sur le reste des paramètres.
+  const peutCreer =
+    roleHasPermission(session.user.role, "parametres:write") ||
+    roleHasPermission(session.user.role, "bulletins:write");
+  if (!peutCreer) throw new Error("Accès refusé");
 
   const annee = await prisma.anneesScolaires.findFirst({
     where: { tenantId: session.user.tenantId, isCurrent: true },
