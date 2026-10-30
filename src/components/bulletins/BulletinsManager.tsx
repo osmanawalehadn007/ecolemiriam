@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   FileText, Download, Send, CheckCircle,
   Loader2, Eye, Users, ChevronRight, X,
-  BookOpen, TableProperties,
+  BookOpen, TableProperties, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
@@ -498,6 +498,18 @@ export function BulletinsManager({
                       <Button variant="outline" className="gap-2" disabled>
                         <Download className="h-4 w-4" />
                         {t("downloadZip")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        onClick={genererBulletins}
+                        disabled={generating || isPending}
+                      >
+                        {generating ? (
+                          <><Loader2 className="h-4 w-4 animate-spin" />{t("generating")}</>
+                        ) : (
+                          <><RefreshCw className="h-4 w-4" />{t("regenerate")}</>
+                        )}
                       </Button>
                       {!isPublished && (
                         <Button onClick={publierBulletins} disabled={isPending} className="gap-2">

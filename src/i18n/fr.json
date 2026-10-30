@@ -591,6 +591,7 @@
     "step4Desc": "Email + notification ENT + téléchargement PDF",
     "generating": "Génération en cours…",
     "generate": "Générer les bulletins",
+    "regenerate": "Régénérer les bulletins",
     "previewPdf": "Prévisualiser (PDF)",
     "downloadZip": "Télécharger ZIP",
     "publishing": "Publication…",

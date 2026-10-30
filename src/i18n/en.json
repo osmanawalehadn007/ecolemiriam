@@ -591,6 +591,7 @@
     "step4Desc": "Email + portal notification + PDF download",
     "generating": "Generating…",
     "generate": "Generate report cards",
+    "regenerate": "Regenerate report cards",
     "previewPdf": "Preview (PDF)",
     "downloadZip": "Download ZIP",
     "publishing": "Publishing…",

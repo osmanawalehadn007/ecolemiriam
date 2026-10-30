@@ -563,6 +563,7 @@
     "step4Desc": "Email + notification + PDF download",
     "generating": "Generating…",
     "generate": "Generate report cards",
+    "regenerate": "Regenerate report cards",
     "previewPdf": "Arag (PDF)",
     "downloadZip": "Download ZIP",
     "publishing": "Publishing…",

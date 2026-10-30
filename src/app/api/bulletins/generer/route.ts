@@ -12,6 +12,19 @@ const Schema = z.object({
   periodeId: z.string().min(1),
 });
 
+// Textes automatiques des anciennes versions : ils ne comptent pas comme une saisie du conseil de classe.
+const APPRECIATIONS_AUTO_HISTORIQUES = new Set([
+  "Travail à évaluer.",
+  "Non noté",
+  "Excellent trimestre. Résultats remarquables, continuez ainsi.",
+  "Très bons résultats. Élève sérieux et appliqué.",
+  "Bons résultats. Peut encore progresser avec plus d'efforts.",
+  "Résultats satisfaisants. Des efforts supplémentaires sont attendus.",
+  "Résultats moyens. Un travail plus régulier s'impose.",
+  "Résultats insuffisants. Des difficultés persistantes nécessitent un suivi.",
+  "Résultats très insuffisants. Un soutien scolaire est fortement recommandé.",
+]);
+
 type RegleAppreciation = { contexte: string; seuilMin: number; seuilMax: number; libelle: string };
 
 // Cherche une règle configurée pour le contexte donné ; sinon retombe sur les seuils par défaut.
@@ -237,7 +250,7 @@ export async function POST(req: NextRequest) {
       const existant = existants.get(eleve.id);
       // Appréciation saisie à la main : elle diffère de celle que le barème donnait à l'ancienne moyenne.
       const appreciationManuelle =
-        existant?.appreciation && existant.appreciation !== genererAppréciation(existant.moyenneGenerale, "BULLETIN_PERIODE", reglesAppreciation)
+        existant?.appreciation && !APPRECIATIONS_AUTO_HISTORIQUES.has(existant.appreciation) && existant.appreciation !== genererAppréciation(existant.moyenneGenerale, "BULLETIN_PERIODE", reglesAppreciation)
           ? existant.appreciation
           : null;
       const doitDepublier = !!existant?.isPublie && existant.moyenneGenerale !== moyenneGenerale;
