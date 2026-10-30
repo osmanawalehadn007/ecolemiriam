@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     if (!eleve) return NextResponse.json({ error: "Élève introuvable" }, { status: 404 });
 
     const bulletin = await prisma.bulletin.findFirst({
-      where: { eleveId, periodeId, tenantId },
+      where: { eleveId, periodeId, tenantId, ...siteFilterForModel("bulletin", session.user) },
       select: { isPublie: true },
     });
     if (!bulletin) return NextResponse.json({ error: "Bulletin introuvable" }, { status: 404 });
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
       prisma.periode.findFirst({ where: { id: periodeId, annee: { tenantId } }, select: { nom: true } }),
       prisma.eleveParent.findMany({
-        where: { eleveId },
+        where: { eleveId, ...siteFilterForModel("eleveParent", session.user) },
         include: { parent: { select: { email: true, phone: true, phone2: true } } },
       }),
     ]);
