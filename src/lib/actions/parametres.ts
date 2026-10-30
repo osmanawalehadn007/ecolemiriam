@@ -16,11 +16,12 @@ import {
   mergeFilters,
 } from "@/lib/site-scope";
 import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
+import { decouperEnTrimestres } from "@/lib/annee-periodes";
 import { anneeFilterForModel, requireAnneeForCreate } from "@/lib/annee-scope";
 import { isNiveauPrimaire } from "@/lib/utils-classe";
 import { NIVEAUX_CANONIQUES, normaliserNiveau } from "@/lib/niveau";
 import { ELEVE_NON_ARCHIVE } from "@/lib/eleve-filters";
-import { checkPermission } from "@/lib/rbac";
+import { checkPermission, roleHasPermission } from "@/lib/rbac";
 import { generateSecurePassword } from "@/lib/security/password";
 import { sendVerificationEmail } from "@/lib/security/email-verification";
 import type { Prisma, Role } from "@prisma/client";
@@ -1502,10 +1503,46 @@ export async function createAnneeScolaire(data: z.infer<typeof AnneeScolaireSche
       dateDebut,
       dateFin,
       isCurrent: false,
+      // Sans période, aucun bulletin ne peut être généré : trois trimestres par défaut.
+      periodes: { create: decouperEnTrimestres(dateDebut, dateFin) },
     },
   });
 
   revalidatePath("/parametres");
+  return { success: true };
+}
+
+/**
+ * Crée les trois trimestres de l'année courante quand elle n'en a aucune
+ * (années créées avant que la création n'en génère).
+ */
+export async function creerPeriodesAnneeCourante() {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+  // Les périodes conditionnent les bulletins : le chef d'établissement (bulletins:write)
+  // peut les créer sans disposer de l'écriture sur le reste des paramètres.
+  const peutCreer =
+    roleHasPermission(session.user.role, "parametres:write") ||
+    roleHasPermission(session.user.role, "bulletins:write");
+  if (!peutCreer) throw new Error("Accès refusé");
+
+  const annee = await prisma.anneesScolaires.findFirst({
+    where: { tenantId: session.user.tenantId, isCurrent: true },
+    include: { periodes: { select: { id: true } } },
+  });
+  if (!annee) throw new Error("Aucune année scolaire courante : activez d'abord une année.");
+  if (annee.periodes.length > 0) throw new Error("Cette année a déjà des périodes.");
+
+  await prisma.periode.createMany({
+    data: decouperEnTrimestres(annee.dateDebut, annee.dateFin).map((p, i) => ({
+      ...p,
+      anneeId: annee.id,
+      isCurrent: i === 0,
+    })),
+  });
+
+  revalidatePath("/parametres");
+  revalidatePath("/notes/bulletins");
   return { success: true };
 }
 

@@ -3,6 +3,9 @@
  * Récupère les données préparées par le script de génération.
  */
 
+import { appreciationBareme, decisionPassage } from "@/lib/bulletins/bareme";
+import { nomsEnseignantsParMatiere, nomEnseignantMatiere } from "@/lib/bulletins/enseignants";
+
 export type NoteExamen = {
   intitule: string;
   type: string;
@@ -26,6 +29,13 @@ export type NoteMatiere = {
   notesExamen: NoteExamen[];
 };
 
+export type BulletinTrimestre = {
+  numero: number;
+  moyenne: number | null;
+  rang: number | null;
+  appreciation: string;
+};
+
 export type BulletinData = {
   // École
   ecoleName: string;
@@ -45,6 +55,8 @@ export type BulletinData = {
   eleveFiliere?: string | null;
   eleveSexe: "M" | "F";
   eleveDateNaissance?: Date;
+  eleveLieuNaissance?: string | null;
+  elevePhotoUrl?: string | null;
 
   // Période
   periodeNom: string;
@@ -62,6 +74,12 @@ export type BulletinData = {
   effectifClasse: number | null;
   appreciation: string | null;
   decision?: string | null;
+  decisionPassage: "Admis" | "Ajourné" | null;
+  /** Visible des parents et élèves seulement une fois publié. */
+  isPublie: boolean;
+
+  // Rapport trimestriel (trimestres 1 à 3 de l'année) — moyenne, rang, appréciation
+  trimestres: BulletinTrimestre[];
 
   // Prof principal
   profPrincipalNom?: string | null;
@@ -120,6 +138,28 @@ export async function getBulletinData(
 
   if (!bulletin) return null;
 
+  // Rapport trimestriel : bulletins de l'élève sur toutes les périodes de l'année
+  const periodesAnnee = await prisma.periode.findMany({
+    where: { anneeId: periode.anneeId },
+    orderBy: { numero: "asc" },
+    select: { id: true, numero: true },
+  });
+  const bulletinsEleve = await prisma.bulletin.findMany({
+    where: { eleveId, tenantId, periodeId: { in: periodesAnnee.map((p) => p.id) } },
+    select: { periodeId: true, moyenneGenerale: true, rang: true, appreciation: true },
+  });
+  const trimestres: BulletinTrimestre[] = [1, 2, 3].map((numero) => {
+    const p = periodesAnnee.find((x) => x.numero === numero);
+    const b = p ? bulletinsEleve.find((x) => x.periodeId === p.id) : undefined;
+    return {
+      numero,
+      moyenne: b?.moyenneGenerale ?? null,
+      rang: b?.rang ?? null,
+      // Texte enregistré (saisi au conseil de classe, sinon généré) ; barème à défaut.
+      appreciation: b?.appreciation || appreciationBareme(b?.moyenneGenerale),
+    };
+  });
+
   // Récupérer les notes individuelles de l'élève pour cette période
   const notesEleve = await prisma.note.findMany({
     where: { eleveId, periodeId, tenantId },
@@ -160,7 +200,16 @@ export async function getBulletinData(
     },
     select: { matiereId: true, moyenneEleve: true },
   });
+  // Enseignants actuels de la classe : un changement d'affectation se voit sans régénérer.
+  const affectations = await prisma.enseignantAffectation.findMany({
+    where: { tenantId, classeId: eleve.classeId! },
+    include: { enseignant: { include: { user: { select: { name: true } } } } },
+    orderBy: { createdAt: "asc" },
+  });
   /* eslint-enable ecolemiriam/require-site-filter */
+  const profs = nomsEnseignantsParMatiere(
+    affectations.map((a) => ({ matiereId: a.matiereId, nom: a.enseignant.user.name }))
+  );
 
   const moyenneClasseByMatiere: Record<string, number | null> = {};
   const matiereIds = [...new Set(allBulletinsMatieres.map(bm => bm.matiereId))];
@@ -183,7 +232,7 @@ export async function getBulletinData(
     rang: bm.rang,
     moyenneMax: bm.moyenneMax,
     moyenneMin: bm.moyenneMin,
-    nomProfesseur: bm.nomProfesseur,
+    nomProfesseur: nomEnseignantMatiere(profs, bm.matiereId) ?? (bm.nomProfesseur || null),
     appreciation: bm.appreciation,
     notesExamen: notesByMatiere[bm.matiereId] ?? [],
   }));
@@ -208,6 +257,8 @@ export async function getBulletinData(
     eleveFiliere: eleve.classe.filiere,
     eleveSexe: eleve.sexe,
     eleveDateNaissance: eleve.dateNaissance,
+    eleveLieuNaissance: eleve.lieuNaissance,
+    elevePhotoUrl: eleve.photoUrl,
 
     periodeNom: periode.nom,
     periodeNumero: periode.numero,
@@ -222,6 +273,9 @@ export async function getBulletinData(
     effectifClasse: bulletin.effectifClasse,
     appreciation: bulletin.appreciation,
     decision: bulletin.decision,
+    decisionPassage: decisionPassage(bulletin.moyenneGenerale),
+    isPublie: bulletin.isPublie,
+    trimestres,
 
     profPrincipalNom: eleve.classe.profPrincipal?.user.name,
 

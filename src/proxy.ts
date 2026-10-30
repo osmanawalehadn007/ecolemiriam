@@ -23,6 +23,8 @@ const PUBLIC_PREFIXES = [
   "/register",
   // Acceptation d'une invitation : page publique portant un jeton à usage unique.
   "/accept-invitation",
+  // Bulletin partagé par e-mail / WhatsApp : page en lecture seule, protégée par un jeton signé.
+  "/bulletin-partage",
   "/api/auth",
   "/api/health",
   "/_next",

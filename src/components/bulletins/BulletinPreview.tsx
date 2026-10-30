@@ -1,294 +1,337 @@
 "use client";
 
+import type { CSSProperties, ReactNode } from "react";
 import type { BulletinData } from "@/lib/pdf/bulletin-generator";
 import { format } from "date-fns";
-import { fr } from "date-fns/locale";
-import { useTranslations } from "next-intl";
+import { libelleRang } from "@/lib/bulletins/bareme";
+
+/**
+ * Bulletin de notes — reproduction du modèle Excel de l'établissement
+ * (feuille « Bulletin trimestre »). Mise en page en styles inline : le rendu
+ * à l'écran et à l'impression doit rester identique au modèle.
+ */
 
 interface Props {
   data: BulletinData;
 }
 
-function getOrdinal(n: number | null): string {
-  if (!n) return "—";
-  return n === 1 ? "1er" : `${n}e`;
-}
-
-function formatDateFr(date?: Date | null) {
-  if (!date) return "—";
-  return format(new Date(date), "dd/MM/yyyy", { locale: fr });
-}
-
-function fmt(v: number | null): string {
-  return v !== null ? v.toFixed(2) : "—";
-}
-
-const DECISION_LABELS: Record<string, string> = {
-  PASSAGE: "Passage en classe supérieure",
-  REDOUBLEMENT: "Redoublement",
-  FELICITATIONS: "Félicitations",
-  ENCOURAGEMENTS: "Encouragements",
-  AVERTISSEMENT: "Avertissement",
+const C = {
+  jaune: "#FFFF00",
+  bleu: "#D9E2F3",
+  bleuFonce: "#B4C6E7",
+  orange: "#FBE5D6",
+  gris: "#F2F2F2",
+  grisTitre: "#E7E6E6",
+  ocre: "#FFF2CC",
+  ciel: "#DDEBF7",
+  rouge: "#FF0000",
 };
 
+const BORDER = "1.5px solid #000";
+
+const cell = (bg?: string, extra: CSSProperties = {}): CSSProperties => ({
+  border: BORDER,
+  background: bg,
+  padding: "1px 4px",
+  textAlign: "center",
+  verticalAlign: "middle",
+  ...extra,
+});
+
+function formatDateFr(date?: Date | null) {
+  if (!date) return "";
+  return format(new Date(date), "dd/MM/yyyy");
+}
+
+function fmt(v: number | null | undefined): string {
+  return v === null || v === undefined ? "" : String(Math.round(v * 100) / 100);
+}
+
+function libelleAnnee(data: BulletinData): string {
+  const periode = /semestre/i.test(data.periodeNom)
+    ? data.periodeNom
+    : `Trimestre N°${data.periodeNumero}`;
+  return `${periode} :${data.annee}`;
+}
+
+const NUMEROS_ROMAINS = ["I", "II", "III"];
+const BULLETINS = ["1er BULLETIN", "2e BULLETIN", "3e BULLETIN"];
+
+function Case({ coche }: { coche: boolean }) {
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        width: "5mm",
+        height: "5mm",
+        border: "1.5px solid #000",
+        background: "#fff",
+        lineHeight: "4mm",
+        textAlign: "center",
+        fontWeight: 700,
+        fontSize: "11px",
+      }}
+    >
+      {coche ? "✓" : ""}
+    </span>
+  );
+}
+
+function Cell({
+  bg,
+  style,
+  colSpan,
+  rowSpan,
+  children,
+}: {
+  bg?: string;
+  style?: CSSProperties;
+  colSpan?: number;
+  rowSpan?: number;
+  children?: ReactNode;
+}) {
+  return (
+    <td colSpan={colSpan} rowSpan={rowSpan} style={cell(bg, style)}>
+      {children}
+    </td>
+  );
+}
+
 export function BulletinPreview({ data }: Props) {
-  const t = useTranslations("bulletins");
-  const maxExamNotes = Math.max(...data.notes.map((n) => n.notesExamen.length), 0);
+  const decision = data.decision ?? null;
+  const t = (n: number) => data.trimestres.find((x) => x.numero === n);
 
   return (
     <div
-      className="bg-white text-gray-900 font-sans text-[11px] print:text-[10px]"
-      style={{ 
-        width: "210mm", 
-        minHeight: "297mm", 
-        padding: "10mm", 
-        margin: "0 auto", 
+      style={{
+        width: "200mm",
+        margin: "0 auto",
+        padding: "4mm 0",
+        background: "#fff",
+        color: "#000",
+        fontFamily: "Arial, Helvetica, sans-serif",
+        fontSize: "9.5px",
         boxSizing: "border-box",
-        border: "1px solid #000"
+        // Sans cela, les aplats de couleur du modèle ne sortent pas à l'impression.
+        WebkitPrintColorAdjust: "exact",
+        printColorAdjust: "exact",
       }}
     >
-      {/* Header Info */}
-      <div className="flex flex-col mb-4 print:mb-2">
-        {/* En-tête : Logo pleine largeur + Infos établissement centrées */}
-        <div className="flex flex-col items-center mb-2 border-b-2 border-[#1e40af] pb-2 print:mb-1 print:pb-1">
-          {/*
-            `next/image` est inapplicable ici : le logo est téléversé par
-            chaque établissement (URL de stockage arbitraire ou `data:`),
-            hors des `remotePatterns` de next.config, et ce bloc est
-            dimensionné en millimètres pour l'impression.
-          */}
-          {data.ecoleLogo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={data.ecoleLogo}
-              alt="Logo"
-              className="max-h-[40mm] w-full object-contain"
-            />
-          ) : (
-            <div style={{ height: "20mm" }} />
+      {/* En-tête de l'établissement : même bloc que l'attestation de scolarité */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          marginBottom: "3mm",
+          borderBottom: "2px solid #1e40af",
+          paddingBottom: "2mm",
+        }}
+      >
+        {data.ecoleLogo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={data.ecoleLogo}
+            alt="Logo"
+            style={{ maxWidth: "100%", maxHeight: "40mm", objectFit: "contain" }}
+          />
+        ) : (
+          <div style={{ height: "20mm" }} />
+        )}
+        <div style={{ textAlign: "center", lineHeight: 1.2, marginTop: "1mm" }}>
+          <div style={{ fontWeight: 700, fontSize: "14px", color: "#1e40af" }}>{data.ecoleName}</div>
+          {data.ecoleVille && (
+            <div style={{ fontSize: "10px" }}>
+              {data.ecoleVille}
+              {data.ecolePays ? `, ${data.ecolePays}` : ""}
+            </div>
           )}
-          <div className="text-center text-[10px] leading-tight mt-1">
-            <div className="font-bold text-[14px] text-[#1e40af]">{data.ecoleName}</div>
-            {data.ecoleVille && (
-              <div>{data.ecoleVille}{data.ecolePays ? `, ${data.ecolePays}` : ""}</div>
-            )}
-          </div>
         </div>
-
-        {/* Ligne Infos Élève */}
-        <table className="w-full border-collapse border border-black text-center mb-1">
-          <tbody>
-            <tr>
-              <td className="border border-black bg-yellow-100 font-bold p-1 w-16">{t("nom")}</td>
-              <td className="border border-black p-1 uppercase">{data.eleveNom} {data.elevePrenom}</td>
-              <td className="border border-black p-1 w-16">{t("bornOn")}</td>
-              <td className="border border-black p-1">{formatDateFr(data.eleveDateNaissance)}</td>
-              <td className="border border-black p-1 w-16">{t("classe")}</td>
-              <td className="border border-black p-1">{data.eleveClasse}</td>
-              <td className="border border-black p-1 w-16">{t("carnet")}</td>
-              <td className="border border-black p-1">{data.eleveMatricule}</td>
-              <td className="border border-black w-24" rowSpan={2}>
-                <div className="w-full h-full min-h-[80px] bg-gray-200 flex items-center justify-center text-gray-400 text-xs">{t("photo")}</div>
-              </td>
-            </tr>
-            <tr>
-              <td colSpan={8} className="border border-black bg-[#e0f2fe] text-center font-bold p-2">
-                {t("schoolYear")} {data.annee}
-              </td>
-            </tr>
-          </tbody>
-        </table>
       </div>
 
-      {/* Tableau des Disciplines avec notes par examen */}
-      <table className="w-full border-collapse border border-black text-center mb-4 print:mb-2">
-        <thead>
-          <tr className="font-bold bg-white text-[9px]">
-            <th className="border border-black p-1 w-[18%]" rowSpan={2}>{t("disciplines")}</th>
-            <th className="border border-black p-1" rowSpan={2}>{t("coef")}</th>
-            {maxExamNotes > 0 && (
-              <th className="border border-black p-1" colSpan={maxExamNotes}>{t("examNotes")}</th>
-            )}
-            <th className="border border-black p-1" rowSpan={2}>{t("studentAvg")}</th>
-            <th className="border border-black p-1" rowSpan={2}>{t("classAvg")}</th>
-            <th className="border border-black p-1" rowSpan={2}>{t("rankLabel")}</th>
-            <th className="border border-black p-1" rowSpan={2}>M.N +</th>
-            <th className="border border-black p-1" rowSpan={2}>M.N -</th>
-            <th className="border border-black p-1 w-[20%]" rowSpan={2}>{t("observations")}</th>
-          </tr>
-          {maxExamNotes > 0 && (
-            <tr className="font-bold bg-gray-50 text-[8px]">
-              {Array.from({ length: maxExamNotes }, (_, i) => (
-                <th key={i} className="border border-black p-0.5 min-w-[28px]">N{i + 1}</th>
-              ))}
-            </tr>
-          )}
-        </thead>
+      <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", marginTop: "1mm" }}>
+        <colgroup>
+          <col style={{ width: "26.4%" }} />
+          <col style={{ width: "13.4%" }} />
+          <col style={{ width: "12.9%" }} />
+          <col style={{ width: "9.6%" }} />
+          <col style={{ width: "17.5%" }} />
+          <col style={{ width: "20.2%" }} />
+        </colgroup>
         <tbody>
-          {data.notes.map((n) => (
-            <tr key={n.matiereCode}>
-              <td className="border border-black bg-[#ffe4e1] p-1 text-center">
-                <div className="font-bold uppercase text-[#8b0000] text-[9px]">{n.matiereNom}</div>
-                <div className="text-[8px] italic text-gray-700">{n.nomProfesseur ?? "PROFESSEUR"}</div>
-              </td>
-              <td className="border border-black p-1">{n.coefficient}</td>
-              {maxExamNotes > 0 && Array.from({ length: maxExamNotes }, (_, i) => {
-                const note = n.notesExamen[i];
-                return (
-                  <td key={i} className="border border-black p-0.5 text-[9px]">
-                    {note ? (
-                      <span title={`${note.intitule} (${note.type}) - ${formatDateFr(note.date)}`}>
-                        {note.valeur !== null ? note.valeur.toFixed(2) : "—"}
-                      </span>
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </td>
-                );
-              })}
-              <td className="border border-black bg-[#fffacd] p-1 font-bold">
-                {fmt(n.moyenne)}
-              </td>
-              <td className="border border-black bg-[#e0f2fe] p-1 font-bold text-blue-800">
-                {fmt(n.moyenneClasse)}
-              </td>
-              <td className="border border-black bg-[#fffacd] p-1 font-bold text-[#b8860b]">
-                {getOrdinal(n.rang)}/{data.effectifClasse ?? "—"}
-              </td>
-              <td className="border border-black p-1 text-green-700 font-bold">
-                {fmt(n.moyenneMax)}
-              </td>
-              <td className="border border-black p-1 text-red-600 font-bold">
-                {fmt(n.moyenneMin)}
-              </td>
-              <td className="border border-black bg-[#e6f4ea] p-1 italic text-green-800 text-[9px]">
-                {n.appreciation ?? "—"}
-              </td>
+          {/* Identité de l'élève */}
+          {[
+            ["Matricule:", data.eleveMatricule, "Année Scolaire:", libelleAnnee(data)],
+            ["Nom:", data.eleveNom, "Classe:", data.eleveClasse],
+            ["Prénom(s):", data.elevePrenom, "Sexe:", data.eleveSexe],
+            ["Date de Naissance", formatDateFr(data.eleveDateNaissance), "Lieu de Naissance:", data.eleveLieuNaissance ?? ""],
+          ].map(([l1, v1, l2, v2], i) => (
+            <tr key={l1} style={{ height: "6.5mm" }}>
+              <Cell bg={C.jaune} style={{ textAlign: "left", paddingLeft: "6px" }}>{l1}</Cell>
+              <Cell bg={C.bleu} colSpan={2}>{v1}</Cell>
+              {i === 0 && (
+                <Cell rowSpan={4} style={{ padding: 0 }}>
+                  {data.elevePhotoUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={data.elevePhotoUrl}
+                      alt="Photo"
+                      style={{ display: "block", width: "100%", height: "26mm", objectFit: "cover" }}
+                    />
+                  )}
+                </Cell>
+              )}
+              <Cell bg={C.jaune} style={{ textAlign: "right", paddingRight: "6px" }}>{l2}</Cell>
+              <Cell bg={C.bleu} style={{ textAlign: "left", paddingLeft: "6px" }}>{v2}</Cell>
             </tr>
           ))}
+
+          {/* Bandeau */}
+          <tr style={{ height: "9mm" }}>
+            <Cell bg={C.orange} colSpan={6} style={{ fontWeight: 700, fontSize: "13px" }}>
+              BULLETIN SCOLAIRE
+            </Cell>
+          </tr>
+
+          {/* Matières */}
+          <tr style={{ height: "8mm", fontWeight: 700 }}>
+            <Cell>MATIERES</Cell>
+            <Cell>MOYENNE GENERALE</Cell>
+            <Cell>MIN</Cell>
+            <Cell>MAX</Cell>
+            <Cell>MOYENNE GENERALE</Cell>
+            <Cell>APPRECIATIONS</Cell>
+          </tr>
+          {data.notes.map((n) => (
+            <tr key={n.matiereCode} style={{ height: "8mm" }}>
+              <Cell bg={C.orange}>
+                {n.nomProfesseur ? <div>{n.nomProfesseur}</div> : null}
+                <div>{n.matiereNom}</div>
+              </Cell>
+              <Cell bg={C.bleu}>{fmt(n.moyenne)}</Cell>
+              <Cell bg={C.gris}>{fmt(n.moyenneMin)}</Cell>
+              <Cell bg={C.gris}>{fmt(n.moyenneMax)}</Cell>
+              <Cell bg={C.gris}>{fmt(n.moyenneClasse)}</Cell>
+              <Cell bg={C.gris} style={{ textAlign: "left", paddingLeft: "6px" }}>{n.appreciation ?? ""}</Cell>
+            </tr>
+          ))}
+          <tr style={{ height: "7.5mm" }}>
+            <Cell bg={C.orange} style={{ fontWeight: 700, fontSize: "11px" }}>Moyenne generale</Cell>
+            <Cell bg={C.bleu}>{fmt(data.moyenneGenerale)}</Cell>
+            <Cell bg={C.gris} colSpan={2} />
+            <Cell bg={C.gris} style={{ fontWeight: 700 }}>{fmt(data.moyenneClasse)}</Cell>
+            <Cell bg={C.gris} />
+          </tr>
+
+          <tr style={{ height: "3mm" }}>
+            <td colSpan={6} />
+          </tr>
+
+          {/* Rapport trimestriel */}
+          <tr style={{ height: "7mm" }}>
+            <Cell bg={C.bleu} colSpan={6} style={{ fontWeight: 700 }}>RAPPORT TRIMESTRIEL</Cell>
+          </tr>
+          <tr style={{ height: "7mm" }}>
+            {NUMEROS_ROMAINS.map((r) => (
+              <Cell key={r} bg={C.bleu} colSpan={2} style={{ fontWeight: 700 }}>TRIMESTRE {r}</Cell>
+            ))}
+          </tr>
+          <tr style={{ height: "7mm" }}>
+            {[1, 2, 3].map((n) => (
+              <FragmentLigne key={n} label="moy élève" valeur={fmt(t(n)?.moyenne)} />
+            ))}
+          </tr>
+          <tr style={{ height: "7mm" }}>
+            {[1, 2, 3].map((n) => (
+              <FragmentLigne key={n} label="rang" valeur={libelleRang(t(n)?.rang)} noir />
+            ))}
+          </tr>
+
+          {/* Conseil de classe */}
+          <tr style={{ height: "6mm" }}>
+            <Cell colSpan={6} style={{ fontWeight: 700 }}>CONSEIL DE CLASSE</Cell>
+          </tr>
+          <tr style={{ height: "7mm" }}>
+            <Cell bg={C.bleu} colSpan={2}>Absence</Cell>
+            <Cell bg={C.jaune} style={{ fontWeight: 700 }}>{data.heuresAbsence ?? 0}H</Cell>
+            <Cell bg={C.bleuFonce} colSpan={2}>Félicitation</Cell>
+            <Cell><Case coche={decision === "FELICITATIONS"} /></Cell>
+          </tr>
+          <tr style={{ height: "7mm" }}>
+            <Cell bg={C.bleu} colSpan={2}>Avertissement</Cell>
+            <Cell bg={C.orange}><Case coche={decision === "AVERTISSEMENT"} /></Cell>
+            <Cell bg={C.bleuFonce} colSpan={2}>Encouragements</Cell>
+            <Cell><Case coche={decision === "ENCOURAGEMENTS"} /></Cell>
+          </tr>
+          <tr style={{ height: "7mm" }}>
+            <Cell bg={C.bleu} colSpan={2}>Blâme</Cell>
+            <Cell bg={C.orange}><Case coche={decision === "BLAME"} /></Cell>
+            <Cell bg={C.bleuFonce} colSpan={2}>Insuffisants</Cell>
+            <Cell><Case coche={decision === "INSUFFISANTS"} /></Cell>
+          </tr>
+
+          <tr style={{ height: "7mm" }}>
+            <Cell bg={C.grisTitre} colSpan={6} style={{ fontWeight: 700 }}>APPRECIATION DU CONSEIL DE CLASSE</Cell>
+          </tr>
+          {BULLETINS.map((label, i) => (
+            <tr key={label} style={{ height: "7mm" }}>
+              <Cell bg={C.ocre} colSpan={3} style={{ fontWeight: 700 }}>{label}</Cell>
+              <Cell bg={C.jaune} colSpan={3} style={{ fontWeight: 700 }}>{t(i + 1)?.appreciation ?? ""}</Cell>
+            </tr>
+          ))}
+
+          <tr style={{ height: "3mm" }}>
+            <td colSpan={6} />
+          </tr>
+
+          {/* Mention spéciale / cachet */}
+          <tr style={{ height: "6.5mm" }}>
+            <Cell bg={C.ciel} colSpan={4} style={{ fontWeight: 700 }}>MENTION SPECIALE</Cell>
+            <Cell bg={C.ciel} colSpan={2} style={{ fontWeight: 700 }}>Cachet du principal</Cell>
+          </tr>
+          <tr style={{ height: "22mm" }}>
+            <Cell colSpan={4} />
+            <Cell colSpan={2} style={{ position: "relative", padding: 0 }}>
+              {data.cachetUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={data.cachetUrl}
+                  alt="Cachet"
+                  style={{ position: "absolute", inset: 0, margin: "auto", maxHeight: "20mm", maxWidth: "90%", objectFit: "contain", opacity: 0.85 }}
+                />
+              )}
+              {data.signatureUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={data.signatureUrl}
+                  alt="Signature"
+                  style={{ position: "relative", maxHeight: "16mm", maxWidth: "90%", objectFit: "contain" }}
+                />
+              )}
+            </Cell>
+          </tr>
+
+          <tr style={{ height: "9mm" }}>
+            <Cell bg={C.grisTitre} style={{ fontWeight: 700, fontSize: "11px" }}>DECISION FINALE:</Cell>
+            <Cell bg={C.grisTitre} colSpan={2} style={{ fontWeight: 700, fontSize: "12px" }}>
+              {data.decisionPassage ?? ""}
+            </Cell>
+            <Cell bg={C.grisTitre} colSpan={3} style={{ fontWeight: 700, fontSize: "11px", textAlign: "left", paddingLeft: "6px" }}>
+              Vie active:
+            </Cell>
+          </tr>
         </tbody>
-        <tfoot>
-          <tr className="font-bold bg-[#fbcfe8] text-[10px]">
-            <td className="border border-black p-1 text-left pl-2" colSpan={2 + maxExamNotes}>
-              {t("generalAvg")}
-            </td>
-            <td className="border border-black bg-[#bae6fd] p-1 text-blue-900 font-bold">
-              {fmt(data.moyenneGenerale)}
-            </td>
-            <td className="border border-black bg-[#bae6fd] p-1 text-blue-900 font-bold">
-              {fmt(data.moyenneClasse)}
-            </td>
-            <td className="border border-black bg-[#bae6fd] p-1 text-blue-900">
-              {getOrdinal(data.rang)}/{data.effectifClasse ?? "—"}
-            </td>
-            <td className="border border-black p-1 text-green-700">
-              {fmt(data.moyennePremier)}
-            </td>
-            <td className="border border-black p-1">—</td>
-            <td className="border border-black p-1 italic text-left">
-              {data.appreciation ?? ""}
-            </td>
-          </tr>
-        </tfoot>
       </table>
-
-      {/* Tableau des Trimestres */}
-      <table className="w-full border-collapse border border-black text-center mb-4 print:mb-2">
-        <thead>
-          <tr className="font-bold bg-[#fbcfe8] text-[10px]">
-            <th className="border border-black p-2 w-[25%] text-left pl-2">{t("trimesters")}</th>
-            <th className="border border-black p-2">MGC</th>
-            <th className="border border-black p-2">MGE</th>
-            <th className="border border-black p-2">POSITION</th>
-            <th className="border border-black p-2">MG du 1er</th>
-            <th className="border border-black p-2 w-[25%] text-left pl-2">{t("absencesHours")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {/* Trimestre 1 (Actuel ou non) */}
-          <tr>
-            <td className="border border-black p-2 text-left font-bold">{data.periodeNom.toUpperCase()}</td>
-            <td className="border border-black p-2 bg-[#bae6fd] text-blue-900">{fmt(data.moyenneClasse)}</td>
-            <td className="border border-black p-2 bg-[#bae6fd] text-blue-900 font-bold">{fmt(data.moyenneGenerale)}</td>
-            <td className="border border-black p-2 bg-[#bae6fd] text-blue-900">{getOrdinal(data.rang)}/{data.effectifClasse ?? "—"}</td>
-            <td className="border border-black p-2 bg-[#bae6fd] text-blue-900">{fmt(data.moyennePremier)}</td>
-            <td className="border border-black p-2 bg-[#dcfce7] text-green-700 text-left pl-2">{data.heuresAbsence ?? 0} h</td>
-          </tr>
-          {/* Lignes vides pour 2e et 3e Trimestre comme sur l'image */}
-          <tr>
-            <td className="border border-black p-2 text-left font-bold">2e TRIMESTRE</td>
-            <td className="border border-black p-2">-</td>
-            <td className="border border-black p-2">-</td>
-            <td className="border border-black p-2">-</td>
-            <td className="border border-black p-2">-</td>
-            <td className="border border-black p-2">-</td>
-          </tr>
-          <tr>
-            <td className="border border-black p-2 text-left font-bold">3e TRIMESTRE</td>
-            <td className="border border-black p-2">-</td>
-            <td className="border border-black p-2">-</td>
-            <td className="border border-black p-2">-</td>
-            <td className="border border-black p-2">-</td>
-            <td className="border border-black p-2">-</td>
-          </tr>
-        </tbody>
-      </table>
-
-      {/* Décision du conseil + Appréciation générale */}
-      {(data.decision || data.appreciation) && (
-        <table className="w-full border-collapse border border-black text-[10px] mb-4 print:mb-2">
-          <tbody>
-            {data.appreciation && (
-              <tr>
-                <td className="border border-black p-2 font-bold w-[25%] bg-[#fbcfe8]">{t("councilAppreciation")}</td>
-                <td className="border border-black p-2 text-left">{data.appreciation}</td>
-              </tr>
-            )}
-            {data.decision && (
-              <tr>
-                <td className="border border-black p-2 font-bold w-[25%] bg-[#fbcfe8]">{t("decision")}</td>
-                <td className="border border-black p-2 text-left font-bold">{DECISION_LABELS[data.decision] ?? data.decision}</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      )}
-
-      {/* Signature & Cachet du chef d'établissement */}
-      <div className="flex justify-end mt-6 print:mt-3">
-        <div className="text-center text-[10px] w-[60mm]">
-          <p className="mb-1">
-            {data.ecoleVille}, le {formatDateFr(data.generatedAt)}
-          </p>
-          {data.chefEtablissement && <p className="font-bold">{data.chefEtablissement}</p>}
-          {/*
-            `next/image` est inapplicable ici : le cachet et la signature sont
-            téléversés par chaque établissement (URL de stockage arbitraire ou
-            `data:`), donc hors des `remotePatterns` de next.config, et ce bloc
-            est dimensionné en millimètres pour l'impression — l'habillage de
-            `next/image` en casserait la mise en page.
-          */}
-          <div className="relative mt-1 h-[26mm] flex items-center justify-center">
-            {data.cachetUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={data.cachetUrl}
-                alt="Cachet"
-                className="absolute inset-0 m-auto max-h-[26mm] object-contain opacity-80"
-              />
-            )}
-            {data.signatureUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={data.signatureUrl}
-                alt="Signature"
-                className="relative max-h-[20mm] object-contain"
-              />
-            )}
-          </div>
-          <p className="border-t border-black pt-1">{t("headTeacher")}</p>
-        </div>
-      </div>
     </div>
+  );
+}
+
+/** Une paire « libellé / valeur » du rapport trimestriel (2 colonnes). */
+function FragmentLigne({ label, valeur, noir }: { label: string; valeur: string; noir?: boolean }) {
+  return (
+    <>
+      <Cell bg={C.bleu} style={{ fontWeight: 700, textAlign: "left", paddingLeft: "6px" }}>{label}</Cell>
+      <Cell bg={C.jaune} style={{ fontWeight: 700, color: noir ? "#000" : C.rouge }}>{valeur}</Cell>
+    </>
   );
 }

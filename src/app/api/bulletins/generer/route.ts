@@ -5,25 +5,28 @@ import { calculerMoyenne } from "@/lib/utils";
 import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel } from "@/lib/site-scope";
+import { appreciationBareme, rangsCompetition } from "@/lib/bulletins/bareme";
+import { nomsEnseignantsParMatiere, nomEnseignantMatiere } from "@/lib/bulletins/enseignants";
 
 const Schema = z.object({
   classeId: z.string().min(1),
   periodeId: z.string().min(1),
 });
 
-type RegleAppreciation = { contexte: string; seuilMin: number; seuilMax: number; libelle: string };
+// Textes automatiques des anciennes versions : ils ne comptent pas comme une saisie du conseil de classe.
+const APPRECIATIONS_AUTO_HISTORIQUES = new Set([
+  "Travail à évaluer.",
+  "Non noté",
+  "Excellent trimestre. Résultats remarquables, continuez ainsi.",
+  "Très bons résultats. Élève sérieux et appliqué.",
+  "Bons résultats. Peut encore progresser avec plus d'efforts.",
+  "Résultats satisfaisants. Des efforts supplémentaires sont attendus.",
+  "Résultats moyens. Un travail plus régulier s'impose.",
+  "Résultats insuffisants. Des difficultés persistantes nécessitent un suivi.",
+  "Résultats très insuffisants. Un soutien scolaire est fortement recommandé.",
+]);
 
-// Appréciation par défaut (repli quand aucune règle n'est configurée pour le tenant)
-function genererAppréciationDefaut(moyenne: number | null): string {
-  if (!moyenne) return "Travail à évaluer.";
-  if (moyenne >= 18) return "Excellent trimestre. Résultats remarquables, continuez ainsi.";
-  if (moyenne >= 16) return "Très bons résultats. Élève sérieux et appliqué.";
-  if (moyenne >= 14) return "Bons résultats. Peut encore progresser avec plus d'efforts.";
-  if (moyenne >= 12) return "Résultats satisfaisants. Des efforts supplémentaires sont attendus.";
-  if (moyenne >= 10) return "Résultats moyens. Un travail plus régulier s'impose.";
-  if (moyenne >= 8)  return "Résultats insuffisants. Des difficultés persistantes nécessitent un suivi.";
-  return "Résultats très insuffisants. Un soutien scolaire est fortement recommandé.";
-}
+type RegleAppreciation = { contexte: string; seuilMin: number; seuilMax: number; libelle: string };
 
 // Cherche une règle configurée pour le contexte donné ; sinon retombe sur les seuils par défaut.
 function genererAppréciation(
@@ -31,12 +34,12 @@ function genererAppréciation(
   contexte: "NOTE_MATIERE" | "BULLETIN_PERIODE",
   regles: RegleAppreciation[]
 ): string {
-  if (moyenne === null || moyenne === undefined) return "Travail à évaluer.";
+  if (moyenne === null || moyenne === undefined) return "";
   const regle = regles.find(
     (r) => r.contexte === contexte && moyenne >= r.seuilMin && moyenne <= r.seuilMax
   );
   if (regle) return regle.libelle;
-  return genererAppréciationDefaut(moyenne);
+  return appreciationBareme(moyenne);
 }
 
 function calculateHours(heureDebut: string | null, heureFin: string | null): number {
@@ -99,7 +102,7 @@ export async function POST(req: NextRequest) {
 
     console.log("[generer] step 6: fetching notes");
     const allNotes = await prisma.note.findMany({
-      where: { tenantId, ...siteFilterForModel("note", session.user), classeId, periodeId, isPubliee: true },
+      where: { tenantId, ...siteFilterForModel("note", session.user), classeId, periodeId },
       include: { matiere: true },
     });
     console.log("[generer] step 7: notes fetched", allNotes.length);
@@ -128,6 +131,16 @@ export async function POST(req: NextRequest) {
       }
     });
     console.log("[generer] step 11: absences fetched", absences.length);
+
+    // Enseignant(s) de chaque matière dans cette classe (affiché sous la matière du bulletin)
+    const affectations = await prisma.enseignantAffectation.findMany({
+      where: { tenantId, classeId },
+      include: { enseignant: { include: { user: { select: { name: true } } } } },
+      orderBy: { createdAt: "asc" },
+    }).catch(() => []);
+    const profs = nomsEnseignantsParMatiere(
+      affectations.map((a) => ({ matiereId: a.matiereId, nom: a.enseignant.user.name }))
+    );
 
     // 1. Averages per subject per student
     const matieresMap = new Map<string, any>();
@@ -160,6 +173,15 @@ export async function POST(req: NextRequest) {
 
     // 2. Generate bulletins for each student (sequential to avoid connection pool exhaustion)
     console.log("[generer] step 12: generating bulletins for", classe.eleves.length, "students");
+    // Bulletins déjà générés : on conserve l'appréciation saisie au conseil de classe et
+    // on dépublie un bulletin publié dont la moyenne change.
+    const existants = new Map(
+      (await prisma.bulletin.findMany({
+        where: { tenantId, ...siteFilterForModel("bulletin", session.user), periodeId, eleveId: { in: classe.eleves.map((e) => e.id) } },
+        select: { eleveId: true, appreciation: true, moyenneGenerale: true, isPublie: true },
+      })).map((b) => [b.eleveId, b])
+    );
+    let depublies = 0;
     const bulletinsGlobalAverages: { eleveId: string; moyenne: number | null }[] = [];
     for (const eleve of classe.eleves) {
       const absEleve = absences.filter(a => a.eleveId === eleve.id);
@@ -186,7 +208,7 @@ export async function POST(req: NextRequest) {
         if (isDispense) {
           matieresToSave.push({
             matiereId,
-            nomProfesseur: "Professeur",
+            nomProfesseur: nomEnseignantMatiere(profs, matiereId) ?? "",
             coefficient: matiere.coefficient,
             moyenneEleve: null,
             rang: null,
@@ -205,24 +227,32 @@ export async function POST(req: NextRequest) {
         // Rang de l'élève dans cette matière
         let rangMatiere = null;
         if (moy !== null) {
-          const allMoyMatiere = Object.values(eleveMatiereMoyennes[matiereId] || {}).sort((a, b) => b - a);
-          rangMatiere = allMoyMatiere.indexOf(moy) + 1;
+          rangMatiere = 1 + Object.values(eleveMatiereMoyennes[matiereId] || {}).filter((o) => o > moy).length;
         }
 
         matieresToSave.push({
           matiereId,
-          nomProfesseur: "Professeur", // TODO: fetch from EmploiTemps
+          nomProfesseur: nomEnseignantMatiere(profs, matiereId) ?? "",
           coefficient: matiere.coefficient,
           moyenneEleve: moy,
           rang: rangMatiere,
           moyenneMax: matiereStats[matiereId].max,
           moyenneMin: matiereStats[matiereId].min,
-          appreciation: moy !== null ? genererAppréciation(moy, "NOTE_MATIERE", reglesAppreciation) : "Non noté"
+          appreciation: moy !== null ? genererAppréciation(moy, "NOTE_MATIERE", reglesAppreciation) : ""
         });
       }
 
       const moyenneGenerale = totalCoef > 0 ? Number((totalPoints / totalCoef).toFixed(2)) : null;
       const appreciation = genererAppréciation(moyenneGenerale, "BULLETIN_PERIODE", reglesAppreciation);
+
+      const existant = existants.get(eleve.id);
+      // Appréciation saisie à la main : elle diffère de celle que le barème donnait à l'ancienne moyenne.
+      const appreciationManuelle =
+        existant?.appreciation && !APPRECIATIONS_AUTO_HISTORIQUES.has(existant.appreciation) && existant.appreciation !== genererAppréciation(existant.moyenneGenerale, "BULLETIN_PERIODE", reglesAppreciation)
+          ? existant.appreciation
+          : null;
+      const doitDepublier = !!existant?.isPublie && existant.moyenneGenerale !== moyenneGenerale;
+      if (doitDepublier) depublies++;
 
       // Save bulletin
       const bulletin = await prisma.bulletin.upsert({
@@ -230,8 +260,9 @@ export async function POST(req: NextRequest) {
         update: {
           moyenneGenerale,
           heuresAbsence,
-          appreciation,
+          appreciation: appreciationManuelle ?? appreciation,
           effectifClasse: classe.eleves.length,
+          ...(doitDepublier ? { isPublie: false, publishedAt: null } : {}),
         },
         create: {
           tenantId,
@@ -265,7 +296,7 @@ export async function POST(req: NextRequest) {
     const moyenneClasse = validMoyennes.length > 0 ? Number((validMoyennes.reduce((a, b) => a + b, 0) / validMoyennes.length).toFixed(2)) : null;
     const moyennePremier = validMoyennes.length > 0 ? Math.max(...validMoyennes) : null;
 
-    bulletinsGlobalAverages.sort((a, b) => (b.moyenne ?? -1) - (a.moyenne ?? -1));
+    const rangs = rangsCompetition(bulletinsGlobalAverages.map((b) => b.moyenne));
 
     console.log("[generer] step 14: updating bulletins with rankings");
     for (let i = 0; i < bulletinsGlobalAverages.length; i++) {
@@ -277,7 +308,7 @@ export async function POST(req: NextRequest) {
       await prisma.bulletin.updateMany({
         where: { eleveId: b.eleveId, periodeId, tenantId },
         data: {
-          rang: b.moyenne !== null ? i + 1 : null,
+          rang: rangs[i],
           moyenneClasse,
           moyennePremier
         }
@@ -285,7 +316,7 @@ export async function POST(req: NextRequest) {
     }
 
     console.log("[generer] step 15: done, count:", classe.eleves.length);
-    return NextResponse.json({ success: true, count: classe.eleves.length });
+    return NextResponse.json({ success: true, count: classe.eleves.length, depublies });
   } catch (error) {
     console.error("[API/bulletins/generer]", error);
     const message = error instanceof Error ? error.message : "Erreur inconnue";

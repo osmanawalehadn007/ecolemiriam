@@ -54,6 +54,7 @@ describe("construireRapports", () => {
     const e = site1(r).structures[0].classes[0].eleves[0];
     expect(e.resteMois).toBe(7500);
     expect(e.resteAnnee).toBe(17500);
+    expect(e.classe).toBe("CM2 A");
   });
 
   it("garde l'élève qui doit seulement un mois passé, avec 0 pour le mois courant", () => {
@@ -88,6 +89,8 @@ describe("construireRapports", () => {
     expect(s1.structures.map((s) => s.nom)).toEqual(["Primaire", "Collège"]);
     expect(s1.structures[0].classes.map((c) => c.nom)).toEqual(["CM2 A", "CM2 B"]);
     expect(s1.structures[0].classes[0].eleves.map((e) => e.nom)).toEqual(["Abdi", "Ali"]);
+    expect(s1.structures[0].classes[0].eleves[0].classe).toBe("CM2 A");
+    expect(s1.structures[0].classes[1].eleves[0].classe).toBe("CM2 B");
     expect(s1.totalAnnee).toBe(40000);
   });
 
@@ -99,6 +102,9 @@ describe("construireRapports", () => {
     );
     expect(r.find((x) => x.siteId === "s1")!.structures[0].nom).toBe("Sans structure");
     expect(r[r.length - 1].siteNom).toBe("Sans site");
+    // L'élève sans classe a classe === null, l'élève sans site mais avec classe garde sa classe
+    const r2 = construireRapports([facture({ eleveId: "e5", classe: null })], sites, "2026-10");
+    expect(r2.find((x) => x.siteId === "s1")!.structures[0].classes[0].eleves[0].classe).toBeNull();
   });
 });
 

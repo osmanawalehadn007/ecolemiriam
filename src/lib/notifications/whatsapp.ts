@@ -14,6 +14,8 @@ export interface WhatsAppResult {
   success: boolean;
   messageId?: string;
   error?: string;
+  /** Vrai quand aucune clé n'est configurée : rien n'a réellement été envoyé. */
+  simulated?: boolean;
 }
 
 const API_BASE = "https://graph.facebook.com/v18.0";
@@ -48,7 +50,7 @@ export async function sendWhatsAppMessage(
 
   if (!token || !phoneNumberId || token.includes("xxxx")) {
     console.warn(`[WhatsApp] Token manquant — simulation (à: ${to})`);
-    return { success: true, messageId: "sim_" + Date.now() };
+    return { success: true, messageId: "sim_" + Date.now(), simulated: true };
   }
 
   const normalizedTo = normalizePhone(to);
@@ -83,6 +85,57 @@ export async function sendWhatsAppMessage(
       success: true,
       messageId: data.messages?.[0]?.id,
     };
+  } catch (err) {
+    console.error("[WhatsApp] Erreur réseau:", err);
+    return { success: false, error: "Erreur réseau" };
+  }
+}
+
+/**
+ * Envoie un message WhatsApp à partir d'un modèle approuvé par Meta.
+ *
+ * Hors de la fenêtre de 24 h suivant le dernier message du parent, l'API Cloud
+ * refuse le texte libre : seul un modèle approuvé peut alors être envoyé. Les
+ * `variables` remplissent {{1}}, {{2}}… du corps du modèle, dans l'ordre.
+ */
+export async function sendWhatsAppTemplate(
+  to: string,
+  template: string,
+  variables: string[],
+  language = "fr"
+): Promise<WhatsAppResult> {
+  const token = process.env.WHATSAPP_API_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (!token || !phoneNumberId || token.includes("xxxx")) {
+    console.warn(`[WhatsApp] Token manquant — simulation du modèle ${template} (à: ${to})`);
+    return { success: true, messageId: "sim_" + Date.now(), simulated: true };
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: normalizePhone(to),
+        type: "template",
+        template: {
+          name: template,
+          language: { code: language },
+          components: [
+            { type: "body", parameters: variables.map((text) => ({ type: "text", text })) },
+          ],
+        },
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      console.error("[WhatsApp] Erreur API (modèle):", data);
+      return { success: false, error: data.error?.message ?? "Erreur API WhatsApp" };
+    }
+    return { success: true, messageId: data.messages?.[0]?.id };
   } catch (err) {
     console.error("[WhatsApp] Erreur réseau:", err);
     return { success: false, error: "Erreur réseau" };

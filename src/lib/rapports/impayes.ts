@@ -43,6 +43,7 @@ export interface LigneEleve {
   nom: string;
   prenom: string;
   matricule: string;
+  classe: string | null; // nom de la classe de l'élève
   resteMois: number;
   resteAnnee: number;
 }
@@ -117,6 +118,7 @@ export function construireRapports(
           nom: f.eleve.nom,
           prenom: f.eleve.prenom,
           matricule: f.eleve.matricule,
+          classe: f.eleve.classe?.nom ?? null,
           resteMois: 0,
           resteAnnee: 0,
         },

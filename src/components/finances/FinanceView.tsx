@@ -55,7 +55,7 @@ interface Paiement {
   facture: {
     numero: string;
     site: { nom: string } | null;
-    eleve: { nom: string; prenom: string | null } | null;
+    eleve: { nom: string; prenom: string | null; classe?: { nom: string } | null } | null;
   };
   enregistrePar: { name: string | null } | null;
 }
@@ -672,6 +672,7 @@ export function FinanceView({
                         <tr>
                           <th className="px-3 py-2 text-left font-medium">{t("date")}</th>
                           <th className="px-3 py-2 text-left font-medium">{t("student")}</th>
+                          <th className="px-3 py-2 text-left font-medium">{t("class")}</th>
                           <th className="px-3 py-2 text-left font-medium">{t("invoice")}</th>
                           <th className="px-3 py-2 text-left font-medium">{t("method")} / {t("reference")}</th>
                           <th className="px-3 py-2 text-left font-medium">{t("recordedBy")}</th>
@@ -683,6 +684,7 @@ export function FinanceView({
                           <tr key={p.id} className="border-t">
                             <td className="px-3 py-2"><DateHeure value={p.date} /></td>
                             <td className="px-3 py-2">{p.facture.eleve ? `${p.facture.eleve.prenom ?? ""} ${p.facture.eleve.nom}`.trim() : "—"}</td>
+                            <td className="px-3 py-2">{p.facture.eleve?.classe?.nom ?? "—"}</td>
                             <td className="px-3 py-2 text-muted-foreground">{p.facture.numero}</td>
                             <td className="px-3 py-2">
                               <Badge variant="secondary" className="text-xs" data-color={getPaymentMethodColor(p.methode)}>
@@ -697,7 +699,7 @@ export function FinanceView({
                           </tr>
                         ))}
                         {paiementsListe.length === 0 && (
-                          <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">{t("noPayments")}</td></tr>
+                          <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">{t("noPayments")}</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -769,6 +771,7 @@ export function FinanceView({
                     <tr className="border-b text-muted-foreground text-xs">
                       <th className="text-left py-2 pr-2">{t("date")}</th>
                       <th className="text-left py-2 pr-2">{t("student")}</th>
+                      <th className="text-left py-2 pr-2">{t("class")}</th>
                       <th className="text-left py-2 pr-2">{t("invoice")}</th>
                       <th className="text-right py-2 pr-2">{t("amount")}</th>
                       <th className="text-left py-2 pr-2">{t("recordedBy")}</th>
@@ -780,6 +783,7 @@ export function FinanceView({
                       <tr key={p.id} className="border-b last:border-0">
                         <td className="py-2 pr-2"><DateHeure value={p.date} /></td>
                         <td className="py-2 pr-2">{p.facture.eleve ? `${p.facture.eleve.prenom ? `${p.facture.eleve.prenom} ` : ""}${p.facture.eleve.nom}` : "—"}</td>
+                        <td className="py-2 pr-2">{p.facture.eleve?.classe?.nom ?? "—"}</td>
                         <td className="py-2 pr-2">{p.facture.numero}</td>
                         <td className="py-2 pr-2 text-right font-medium">{formatCurrency(p.montant, p.devise)}</td>
                         <td className="py-2 pr-2 text-muted-foreground">{p.enregistrePar?.name ?? "—"}</td>

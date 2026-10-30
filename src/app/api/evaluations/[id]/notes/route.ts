@@ -92,6 +92,23 @@ export async function PUT(
       return NextResponse.json({ error: "Évaluation introuvable" }, { status: 404 });
     }
 
+    // Garde-fou : période clôturée ou date limite de saisie dépassée (comme /api/notes).
+    const periode = await prisma.periode.findFirst({
+      where: { id: evaluation.periodeId, annee: { tenantId: session.user.tenantId } },
+      select: { nom: true, statut: true, dateLimiteSaisie: true },
+    });
+    if (periode && (periode.statut === "CLOTUREE" || (periode.dateLimiteSaisie && periode.dateLimiteSaisie < new Date()))) {
+      return NextResponse.json(
+        {
+          error:
+            periode.statut === "CLOTUREE"
+              ? `La période « ${periode.nom} » est clôturée. La saisie des notes est verrouillée.`
+              : `La date limite de saisie de la période « ${periode.nom} » est dépassée.`,
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const parsed = UpdateNotesSchema.safeParse(body);
 

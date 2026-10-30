@@ -175,7 +175,7 @@ const getFinanceDataCached = unstable_cache(
         db.paiement.findMany({
           where: { methode: "espèces", depotBanque: null, directorRecu: false, date: { gte: start, lte: end }, facture: { tenantId, ...siteFilter } },
           include: {
-            facture: { select: { numero: true, site: { select: { nom: true } }, eleve: { select: { nom: true, prenom: true } } } },
+            facture: { select: { numero: true, site: { select: { nom: true } }, eleve: { select: { nom: true, prenom: true, classe: { select: { nom: true } } } } } },
             enregistrePar: { select: { name: true } },
           },
           orderBy: { date: "desc" },
@@ -229,7 +229,7 @@ const getFinanceDataCached = unstable_cache(
             facture: { tenantId, ...siteFilter },
           },
           include: {
-            facture: { select: { numero: true, site: { select: { nom: true } }, eleve: { select: { nom: true, prenom: true } } } },
+            facture: { select: { numero: true, site: { select: { nom: true } }, eleve: { select: { nom: true, prenom: true, classe: { select: { nom: true } } } } } },
             enregistrePar: { select: { name: true } },
           },
           orderBy:
@@ -250,7 +250,7 @@ const getFinanceDataCached = unstable_cache(
               db.paiement.findMany({
                 where: { date: { gte: start, lte: end }, facture: { tenantId, ...siteFilter } },
                 include: {
-                  facture: { select: { numero: true, site: { select: { nom: true } }, eleve: { select: { nom: true, prenom: true } } } },
+                  facture: { select: { numero: true, site: { select: { nom: true } }, eleve: { select: { nom: true, prenom: true, classe: { select: { nom: true } } } } } },
                   enregistrePar: { select: { name: true } },
                 },
                 orderBy: { date: "asc" },

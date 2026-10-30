@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   FileText, Download, Send, CheckCircle,
   Loader2, Eye, Users, ChevronRight, X,
-  BookOpen, TableProperties,
+  BookOpen, TableProperties, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
@@ -39,7 +39,7 @@ interface EleveConseil {
   matricule: string;
   moyenneGenerale: number | null;
   rang: number | null;
-  decision: "PASSAGE" | "REDOUBLEMENT" | "FELICITATIONS" | "ENCOURAGEMENTS" | "AVERTISSEMENT" | null;
+  decision: "PASSAGE" | "REDOUBLEMENT" | "FELICITATIONS" | "ENCOURAGEMENTS" | "AVERTISSEMENT" | "BLAME" | "INSUFFISANTS" | null;
   appreciation: string;
 }
 
@@ -124,6 +124,14 @@ export function BulletinsManager({
         if (!res.ok) throw new Error(data.error ?? t("error"));
         setGenerated((prev) => new Set([...prev, key]));
         toast.success(t("successGenerated", { count: data.count }));
+        if (data.depublies > 0) {
+          setPublished((prev) => {
+            const next = new Set(prev);
+            next.delete(key);
+            return next;
+          });
+          toast.warning(`${data.depublies} bulletin(s) dont la moyenne a changé ont été dépubliés : republiez-les.`);
+        }
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : t("errGeneration"));
       } finally {
@@ -490,6 +498,18 @@ export function BulletinsManager({
                       <Button variant="outline" className="gap-2" disabled>
                         <Download className="h-4 w-4" />
                         {t("downloadZip")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        onClick={genererBulletins}
+                        disabled={generating || isPending}
+                      >
+                        {generating ? (
+                          <><Loader2 className="h-4 w-4 animate-spin" />{t("generating")}</>
+                        ) : (
+                          <><RefreshCw className="h-4 w-4" />{t("regenerate")}</>
+                        )}
                       </Button>
                       {!isPublished && (
                         <Button onClick={publierBulletins} disabled={isPending} className="gap-2">

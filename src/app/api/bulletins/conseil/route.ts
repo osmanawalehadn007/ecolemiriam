@@ -11,7 +11,7 @@ const Schema = z.object({
   decisions: z.array(
     z.object({
       eleveId: z.string().min(1),
-      decision: z.enum(["PASSAGE", "REDOUBLEMENT", "FELICITATIONS", "ENCOURAGEMENTS", "AVERTISSEMENT"]).nullable(),
+      decision: z.enum(["PASSAGE", "REDOUBLEMENT", "FELICITATIONS", "ENCOURAGEMENTS", "AVERTISSEMENT", "BLAME", "INSUFFISANTS"]).nullable(),
       appreciation: z.string().max(500).optional(),
     })
   ),
