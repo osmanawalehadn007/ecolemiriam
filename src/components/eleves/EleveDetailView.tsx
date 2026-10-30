@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { DispenseMatiereManager } from "./DispenseMatiereManager";
 import { useTranslations } from "next-intl";
-import { deleteEleve } from "@/lib/actions/eleve";
+import { definirTarifPersonnaliseEleve } from "@/lib/actions/eleve";
 import { hasPermission } from "@/lib/client-permissions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -122,6 +122,8 @@ interface Eleve {
   incidents: Incident[];
   factures: Facture[];
   parcours: ParcoursScolaire[];
+  // Tarif personnalisé (exonération) appliqué à cet élève, si défini.
+  tarifPersonnalise?: { id: string; niveau: string; mensualite: number; actif: boolean } | null;
 }
 
 interface MatiereInfo {
@@ -214,7 +216,13 @@ export function EleveDetailView({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const tuteur = eleve.parents.find((p) => p.isGardien) ?? eleve.parents[0];
+  const [isUpdatingTarif, setIsUpdatingTarif] = useState(false);
+  const [showTarifConfirm, setShowTarifConfirm] = useState(false);
+  const [tarifAction, setTarifAction] = useState<"exonerer" | "retablir" | null>(null);
+  const [tarifId, setTarifId] = useState<string | null>(null);
+
+  // Si l'élève a un tarif personnalisé, l'afficher.
+  // `eleve.tarifPersonnalise?.id` n'est pas undefined quand le tarif est défini.
 
   // Compute average per subject from notes
   const notesByMatiere = eleve.notes.reduce<Record<string, { notes: Note[]; nom: string; code: string; couleur: string | null; coeff: number }>>((acc, n) => {
@@ -239,6 +247,26 @@ export function EleveDetailView({
     (s, f) => s + f.paiements.reduce((ps, p) => ps + p.montant, 0),
     0
   );
+
+  async function handleApplyTarif() {
+    if (!tarifAction || !tarifId) return;
+    setIsUpdatingTarif(true);
+    try {
+      const res = await definirTarifPersonnaliseEleve(eleve.id, tarifAction === "exonerer" ? null : tarifId);
+      if (res?.success) {
+        toast.success(t("tarifPersonnaliseSaved"));
+        setShowTarifConfirm(false);
+        setTarifAction(null);
+        setTarifId(null);
+      } else {
+        toast.error(res.error ?? t("error"));
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("error"));
+    } finally {
+      setIsUpdatingTarif(false);
+    }
+  }
 
   async function handleDelete() {
     setIsDeleting(true);
@@ -286,10 +314,152 @@ export function EleveDetailView({
         )}
       </div>
 
+      {/* ── KPI sheet ── */}
+      <Card>
+        <CardContent className="p-6">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <StatCard
+              label={t("totalDue")}
+              value={`${totalDue.toLocaleString()} FDJ`}
+              sub={`${eleve.factures.length} ${t("invoiceCount", { count: eleve.factures.length })}`}
+              color="text-blue-600"
+            />
+            <StatCard
+              label={t("totalPaid")}
+              value={`${totalPaid.toLocaleString()} FDJ`}
+              sub={t("paidStatus", { paid: totalPaid, due: totalDue - totalPaid })}
+              color="text-emerald-600"
+            />
+            <StatCard
+              label={t("totalLate")}
+              value={`${totalLate.toLocaleString()} FDJ`}
+              sub={t("latePeriod", { days: totalLateDays })}
+              color="text-amber-600"
+            />
+            <StatCard
+              label={t("totalOutstanding")}
+              value={`${totalOutstanding.toLocaleString()} FDJ`}
+              sub={t("outstandPeriod", { days: totalOutstandingDays })}
+              color="text-rose-600"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Exonération / tarif personnalisé ── */}
+      {tarifPersonnalise !== undefined && canWriteEleves && (
+        <Card className="mt-6 border-emerald-200 bg-emerald-50/40">
+          <div className="p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <ShieldOff className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+              <h3 className="text-sm font-semibold text-emerald-800">
+                {t("tarifPersonnalise")}
+              </h3>
+            </div>
+
+            {tarifPersonnalise?.id ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-emerald-700">{t("tarifPersonnaliseActive")}</p>
+                  <Badge className="bg-emerald-100 text-emerald-800">
+                    {tarifPersonnalise.mensualite === 0 ? t("exonere") : `Tarif : ${tarifPersonnalise.niveau}`}
+                  </Badge>
+                </div>
+                <div className="flex flex-col gap-2 border-t border-emerald-200 pt-3">
+                  <p className="text-xs text-muted-foreground">{t("tarifPersonnaliseDetails")}</p>
+                  <div className="flex flex-wrap gap-4 text-sm">
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">{t("mensuality")}</p>
+                      <p className="font-semibold text-emerald-700">
+                        {tarifPersonnalise.mensualite === 0 ? "0" : `${tarifPersonnalise.mensualite} FDJ`}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">{t("level")}</p>
+                      <p className="font-semibold text-emerald-700">{niveauToLabel(tarifPersonnalise.niveau)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-3">
+                <p className="text-sm text-muted-foreground">{t("tarifPersonnaliseNone")}</p>
+              </div>
+            )}
+
+            <div className="flex justify-end mt-4">
+              {tarifPersonnalise?.id ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => {
+                    setTarifAction("retablir");
+                    setTarifId(tarifPersonnalise.id);
+                    setShowTarifConfirm(true);
+                  }}
+                >
+                  <ShieldOff className="h-4 w-4" />
+                  {t("retablirTarif")}
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => {
+                    setTarifAction("exonerer");
+                    setTarifId(null);
+                    setShowTarifConfirm(true);
+                  }}
+                >
+                  <Banknote className="h-4 w-4" />
+                  {t("exonerer")}
+                </Button>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Tarif personnalisé confirmation dialog */}
+      {showTarifConfirm && canWriteEleves && (
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowTarifConfirm(false);
+                  setTarifAction(null);
+                  setTarifId(null);
+                }}
+              >
+                {t("cancel")}
+              </Button>
+              <Button
+                variant="emerald"
+                size="sm"
+                className="gap-2"
+                onClick={handleApplyTarif}
+                disabled={isUpdatingTarif}
+              >
+                {isUpdatingTarif ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                {tarifAction === "exonerer" ? t("confirmerExoneration") : t("confirmerRetablir")}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Delete confirmation dialog */}
       {showDeleteConfirm && canWriteEleves && (
-        <Card className="border-destructive/30 bg-destructive/5">
-          <CardContent className="pt-6 space-y-4">
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
               <div className="space-y-1">
@@ -405,6 +575,82 @@ export function EleveDetailView({
           />
         )}
       </div>
+
+      {/* ── Exonération / tarif personnalisé ── */}
+      {tarifPersonnalise !== undefined && canWriteEleves && (
+        <Card className="mt-6 border-emerald-200 bg-emerald-50/40">
+          <div className="p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <ShieldOff className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+              <h3 className="text-sm font-semibold text-emerald-800">
+                {t("tarifPersonnalise")}
+              </h3>
+            </div>
+
+            {tarifPersonnalise?.id ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-emerald-700">{t("tarifPersonnaliseActive")}</p>
+                  <Badge className="bg-emerald-100 text-emerald-800">
+                    {tarifPersonnalise.mensualite === 0 ? t("exonere") : `Tarif : ${tarifPersonnalise.niveau}`}
+                  </Badge>
+                </div>
+                <div className="flex flex-col gap-2 border-t border-emerald-200 pt-3">
+                  <p className="text-xs text-muted-foreground">{t("tarifPersonnaliseDetails")}</p>
+                  <div className="flex flex-wrap gap-4 text-sm">
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">{t("mensuality")}</p>
+                      <p className="font-semibold text-emerald-700">
+                        {tarifPersonnalise.mensualite === 0 ? "0" : `${tarifPersonnalise.mensualite} FDJ`}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">{t("level")}</p>
+                      <p className="font-semibold text-emerald-700">{niveauToLabel(tarifPersonnalise.niveau)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-3">
+                <p className="text-sm text-muted-foreground">{t("tarifPersonnaliseNone")}</p>
+              </div>
+            )}
+
+            <div className="flex justify-end mt-4">
+              {tarifPersonnalise?.id ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => {
+                    setTarifAction("retablir");
+                    setTarifId(tarifPersonnalise.id);
+                    setShowTarifConfirm(true);
+                  }}
+                >
+                  <ShieldOff className="h-4 w-4" />
+                  {t("retablirTarif")}
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => {
+                    setTarifAction("exonerer");
+                    setTarifId(null);
+                    setShowTarifConfirm(true);
+                  }}
+                >
+                  <Banknote className="h-4 w-4" />
+                  {t("exonerer")}
+                </Button>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Parent / tuteur */}
       {tuteur && (

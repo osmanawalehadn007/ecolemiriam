@@ -22,7 +22,8 @@ const BAS = 50;
 
 const COL_NUM = MARGE;
 const COL_NOM = MARGE + 24;
-const COL_MOIS_DROITE = A4.w - MARGE - 130;
+const COL_CLASSE = COL_NOM + 130;
+const COL_MOIS_DROITE = A4.w - MARGE - 120;
 const COL_ANNEE_DROITE = A4.w - MARGE;
 
 /** « 1 250 000 » — espaces simples (l'espace insécable fine d'Intl n'est pas encodable). */
@@ -69,6 +70,7 @@ export async function genererPdfImpayes(opts: {
   const enteteColonnes = () => {
     ecrire("N°", COL_NUM, 8, gras, gris);
     ecrire("Élève (matricule)", COL_NOM, 8, gras, gris);
+    ecrire("Classe", COL_CLASSE, 8, gras, gris);
     droite(`Impayé ${moisNom}`, COL_MOIS_DROITE, 8, gras, gris);
     droite("Total impayé année", COL_ANNEE_DROITE, 8, gras, gris);
     y -= 4;
@@ -128,9 +130,10 @@ export async function genererPdfImpayes(opts: {
           enteteColonnes();
         }
         ecrire(String(i + 1), COL_NUM, 9, police, gris);
-        ecrire(tronque(`${e.nom.toUpperCase()} ${e.prenom}  (${e.matricule})`, police, 9, COL_MOIS_DROITE - COL_NOM - 90), COL_NOM, 9);
+        ecrire(tronque(`${e.nom.toUpperCase()} ${e.prenom}  (${e.matricule})`, police, 9, COL_CLASSE - COL_NOM - 8), COL_NOM, 9);
+        ecrire(tronque(e.classe ?? "—", police, 9, COL_MOIS_DROITE - COL_CLASSE - 8), COL_CLASSE, 9);
         if (e.resteMois > 0) droite(formaterMontant(e.resteMois), COL_MOIS_DROITE, 9);
-        else droite("—", COL_MOIS_DROITE, 9, police, gris);
+        else droite("Payé", COL_MOIS_DROITE, 9, police, gris);
         droite(formaterMontant(e.resteAnnee), COL_ANNEE_DROITE, 9, gras, rouge);
         y -= HAUTEUR_LIGNE;
       });

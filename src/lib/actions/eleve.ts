@@ -574,10 +574,6 @@ export async function deleteEleve(id: string, reason?: string) {
   revalidateTag("dashboard-data", "max");
   return { success: true as boolean, id };
 }
-
-/**
- * Restauration d'un élève supprimé (soft delete).
- */
 export async function restoreEleve(id: string) {
   const session = await auth();
   if (!session?.user?.tenantId) throw new Error("Non autorisé");
