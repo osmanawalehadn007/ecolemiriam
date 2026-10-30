@@ -145,7 +145,7 @@ export async function getBulletinData(
   });
   const bulletinsEleve = await prisma.bulletin.findMany({
     where: { eleveId, tenantId, periodeId: { in: periodesAnnee.map((p) => p.id) } },
-    select: { periodeId: true, moyenneGenerale: true, rang: true },
+    select: { periodeId: true, moyenneGenerale: true, rang: true, appreciation: true },
   });
   const trimestres: BulletinTrimestre[] = [1, 2, 3].map((numero) => {
     const p = periodesAnnee.find((x) => x.numero === numero);
@@ -154,7 +154,8 @@ export async function getBulletinData(
       numero,
       moyenne: b?.moyenneGenerale ?? null,
       rang: b?.rang ?? null,
-      appreciation: appreciationBareme(b?.moyenneGenerale),
+      // Texte enregistré (saisi au conseil de classe, sinon généré) ; barème à défaut.
+      appreciation: b?.appreciation || appreciationBareme(b?.moyenneGenerale),
     };
   });
 
