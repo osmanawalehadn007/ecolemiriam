@@ -21,7 +21,7 @@ import { anneeFilterForModel, requireAnneeForCreate } from "@/lib/annee-scope";
 import { isNiveauPrimaire } from "@/lib/utils-classe";
 import { NIVEAUX_CANONIQUES, normaliserNiveau } from "@/lib/niveau";
 import { ELEVE_NON_ARCHIVE } from "@/lib/eleve-filters";
-import { checkPermission } from "@/lib/rbac";
+import { checkPermission, roleHasPermission } from "@/lib/rbac";
 import { generateSecurePassword } from "@/lib/security/password";
 import { sendVerificationEmail } from "@/lib/security/email-verification";
 import type { Prisma, Role } from "@prisma/client";
