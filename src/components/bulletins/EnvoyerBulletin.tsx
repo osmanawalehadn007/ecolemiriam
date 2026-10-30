@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Mail, MessageCircle } from "lucide-react";
+import { Loader2, Mail } from "lucide-react";
+import { BoutonIcone } from "@/components/bulletins/BoutonIcone";
+import { WhatsAppIcon } from "@/components/bulletins/WhatsAppIcon";
 import { toast } from "sonner";
 
 type Canal = "email" | "whatsapp";
@@ -42,14 +43,12 @@ export function EnvoyerBulletin({ eleveId, periodeId }: { eleveId: string; perio
 
   return (
     <>
-      <Button size="sm" variant="outline" className="gap-2" disabled={encours !== null} onClick={() => envoyer("email")}>
-        <Mail className="h-4 w-4" />
-        {encours === "email" ? "Envoi…" : "Envoyer par e-mail"}
-      </Button>
-      <Button size="sm" variant="outline" className="gap-2" disabled={encours !== null} onClick={() => envoyer("whatsapp")}>
-        <MessageCircle className="h-4 w-4" />
-        {encours === "whatsapp" ? "Envoi…" : "Envoyer par WhatsApp"}
-      </Button>
+      <BoutonIcone titre={encours === "whatsapp" ? "Envoi WhatsApp…" : "Envoyer par WhatsApp"} couleur="whatsapp" disabled={encours !== null} onClick={() => envoyer("whatsapp")}>
+        {encours === "whatsapp" ? <Loader2 size={20} className="animate-spin" /> : <WhatsAppIcon size={22} />}
+      </BoutonIcone>
+      <BoutonIcone titre={encours === "email" ? "Envoi e-mail…" : "Envoyer par e-mail"} disabled={encours !== null} onClick={() => envoyer("email")}>
+        {encours === "email" ? <Loader2 size={20} className="animate-spin" /> : <Mail size={20} />}
+      </BoutonIcone>
     </>
   );
 }

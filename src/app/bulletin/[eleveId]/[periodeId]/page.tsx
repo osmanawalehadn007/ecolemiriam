@@ -4,6 +4,8 @@ import { getBulletinData } from "@/lib/pdf/bulletin-generator";
 import { BulletinPreview } from "@/components/bulletins/BulletinPreview";
 import { PrintButton } from "@/components/bulletins/PrintButton";
 import { EnvoyerBulletin } from "@/components/bulletins/EnvoyerBulletin";
+import { TelechargerBulletin } from "@/components/bulletins/TelechargerBulletin";
+import { nomFichierBulletin } from "@/lib/bulletins/pdf-client";
 import { roleHasPermission } from "@/lib/rbac";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
@@ -61,7 +63,8 @@ export default async function BulletinPage({
             Retour
           </Button>
         </Link>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <TelechargerBulletin nomFichier={nomFichierBulletin(["Bulletin", data.eleveClasse, data.eleveNom, data.elevePrenom, data.periodeNom])} />
           {roleHasPermission(session.user.role, "bulletins:write") && (
             <EnvoyerBulletin eleveId={eleveId} periodeId={periodeId} />
           )}

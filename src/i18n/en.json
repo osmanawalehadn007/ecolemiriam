@@ -704,6 +704,7 @@
     "bornOn": "Born on",
     "carnet": "Booklet",
     "printPdf": "Print / PDF",
+    "periodLabel": "Period",
     "selectClass": "Select a class",
     "selectPeriod": "Select a period",
     "selectDecision": "Select a decision",

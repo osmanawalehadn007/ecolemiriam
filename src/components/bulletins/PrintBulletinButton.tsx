@@ -1,13 +1,12 @@
 "use client";
 
+import { Printer } from "lucide-react";
+import { BoutonIcone } from "@/components/bulletins/BoutonIcone";
+
 export function PrintBulletinButton() {
   return (
-    <button
-      type="button"
-      onClick={() => window.print()}
-      style={{ background: "#1e40af", color: "#fff", border: 0, borderRadius: 6, padding: "8px 16px", fontSize: 14, cursor: "pointer" }}
-    >
-      Imprimer / Enregistrer en PDF
-    </button>
+    <BoutonIcone titre="Imprimer / Enregistrer en PDF" couleur="principal" onClick={() => window.print()}>
+      <Printer size={20} />
+    </BoutonIcone>
   );
 }
