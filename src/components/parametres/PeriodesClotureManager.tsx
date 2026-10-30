@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Lock, Unlock, Calendar, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { creerPeriodesAnneeCourante } from "@/lib/actions/parametres";
 import { format } from "date-fns";
 import { fr, enUS } from "date-fns/locale";
 
@@ -28,6 +30,19 @@ export function PeriodesClotureManager({ periodes: initial }: { periodes: Period
   const dateLocale = locale === "en" ? enUS : fr;
   const [periodes, setPeriodes] = useState(initial);
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+
+  function creerPeriodes() {
+    startTransition(async () => {
+      try {
+        await creerPeriodesAnneeCourante();
+        toast.success("Trimestres créés pour l'année courante.");
+        router.refresh();
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : t("error"));
+      }
+    });
+  }
 
   async function toggleCloture(periode: Periode) {
     const newStatut = periode.statut === "CLOTUREE" ? "OUVERTE" : "CLOTUREE";
@@ -68,6 +83,15 @@ export function PeriodesClotureManager({ periodes: initial }: { periodes: Period
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        {periodes.length === 0 && (
+          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground space-y-3">
+            <p>Aucune période n&apos;existe pour l&apos;année courante : les bulletins ne peuvent pas être générés.</p>
+            <Button size="sm" onClick={creerPeriodes} disabled={isPending} className="gap-2">
+              {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Créer les 3 trimestres
+            </Button>
+          </div>
+        )}
         {periodes.map((p) => (
           <div key={p.id} className="flex items-center justify-between rounded-lg border p-3">
             <div className="space-y-1">
