@@ -103,6 +103,7 @@ export function BulletinPreview({ data }: Props) {
 
   return (
     <div
+      id="bulletin-document"
       style={{
         width: "200mm",
         margin: "0 auto",

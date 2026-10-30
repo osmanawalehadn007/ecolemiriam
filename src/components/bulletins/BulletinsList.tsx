@@ -10,6 +10,17 @@ import { useTranslations } from "next-intl";
 import { BulletinEditorModal } from "./BulletinEditorModal";
 import { Badge } from "@/components/ui/badge";
 
+/** Ouvre le bulletin dans une fenêtre à part ; sans fenêtre possible, le lien suit son cours (nouvel onglet). */
+function ouvrirFenetreBulletin(e: React.MouseEvent, url: string) {
+  const largeur = Math.min(1100, window.screen.availWidth - 80);
+  const hauteur = Math.min(900, window.screen.availHeight - 80);
+  const fenetre = window.open(url, "bulletin", `popup=yes,width=${largeur},height=${hauteur},left=40,top=40,resizable=yes,scrollbars=yes`);
+  if (fenetre) {
+    e.preventDefault();
+    fenetre.focus();
+  }
+}
+
 export function BulletinsList({ classes, periodes }: { classes: any[]; periodes: any[] }) {
   const t = useTranslations("bulletins");
   const [bulletins, setBulletins] = useState<any[]>([]);
@@ -60,10 +71,6 @@ export function BulletinsList({ classes, periodes }: { classes: any[]; periodes:
     }
   };
 
-  const handlePrint = (eleveId: string, periodeId: string) => {
-    window.open(`/bulletin/${eleveId}/${periodeId}`, "_blank");
-  };
-
   const handleExportExcel = async () => {
     if (!selectedClasse || !selectedPeriode) return;
     try {
@@ -107,7 +114,7 @@ export function BulletinsList({ classes, periodes }: { classes: any[]; periodes:
             </Select>
           </div>
           <div className="flex-1">
-            <label className="text-sm font-medium mb-1.5 block">{t("rank")}</label>
+            <label className="text-sm font-medium mb-1.5 block">{t("periodLabel")}</label>
             <Select value={selectedPeriode} onValueChange={setSelectedPeriode}>
               <SelectTrigger>
                 <SelectValue placeholder={t("selectPeriod")} />
@@ -169,8 +176,17 @@ export function BulletinsList({ classes, periodes }: { classes: any[]; periodes:
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => handlePrint(b.eleve.id, b.periodeId)} title={t("previewPrint")}>
-                            <Printer className="h-4 w-4" />
+                          {/* Fenêtre dédiée au bulletin ; si le navigateur la bloque, le lien s'ouvre dans un onglet. */}
+                          <Button asChild variant="ghost" size="icon" title={t("previewPrint")}>
+                            <a
+                              href={`/bulletin/${b.eleve.id}/${b.periodeId}`}
+                              target="_blank"
+                              rel="noopener"
+                              aria-label={t("previewPrint")}
+                              onClick={(e) => ouvrirFenetreBulletin(e, `/bulletin/${b.eleve.id}/${b.periodeId}`)}
+                            >
+                              <Printer className="h-4 w-4" />
+                            </a>
                           </Button>
                           <Button variant="ghost" size="icon" onClick={() => setEditingBulletin(b)} title={t("edit")}>
                             <Edit className="h-4 w-4" />

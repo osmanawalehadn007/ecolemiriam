@@ -2,6 +2,8 @@ import { runWithTenant } from "@/lib/prisma";
 import { getBulletinData } from "@/lib/pdf/bulletin-generator";
 import { BulletinPreview } from "@/components/bulletins/BulletinPreview";
 import { PrintBulletinButton } from "@/components/bulletins/PrintBulletinButton";
+import { TelechargerBulletin } from "@/components/bulletins/TelechargerBulletin";
+import { nomFichierBulletin } from "@/lib/bulletins/pdf-client";
 import { verifierLienBulletin } from "@/lib/bulletins/partage";
 
 export const metadata = { title: "Bulletin de notes", robots: { index: false, follow: false } };
@@ -28,7 +30,8 @@ export default async function BulletinPartagePage({ params }: { params: Promise<
   return (
     <div style={{ minHeight: "100vh", background: "#f3f4f6", padding: "16px 0" }} className="print:!bg-white print:!p-0">
       <style dangerouslySetInnerHTML={{ __html: "@page { size: A4; margin: 5mm; }" }} />
-      <div className="print:hidden" style={{ maxWidth: "200mm", margin: "0 auto 12px", display: "flex", justifyContent: "flex-end", padding: "0 12px" }}>
+      <div className="print:hidden" style={{ maxWidth: "200mm", margin: "0 auto 12px", display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", padding: "0 12px" }}>
+        <TelechargerBulletin nomFichier={nomFichierBulletin(["Bulletin", data.eleveClasse, data.eleveNom, data.elevePrenom, data.periodeNom])} />
         <PrintBulletinButton />
       </div>
       <div style={{ overflowX: "auto" }}>
