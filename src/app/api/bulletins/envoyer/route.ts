@@ -5,7 +5,7 @@ import prisma from "@/lib/prisma";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { sendEmail } from "@/lib/notifications/email";
-import { sendWhatsAppMessage } from "@/lib/notifications/whatsapp";
+import { sendWhatsAppMessage, sendWhatsAppTemplate } from "@/lib/notifications/whatsapp";
 import { signerLienBulletin, urlLienBulletin } from "@/lib/bulletins/partage";
 
 const Schema = z.object({
@@ -66,8 +66,10 @@ export async function POST(req: NextRequest) {
     const emails = [...new Set(liens.map((l) => l.parent.email).filter((e): e is string => !!e))];
     const telephones = [...new Set(liens.map((l) => l.parent.phone).filter(Boolean))];
 
-    const resultat = { email: { envoyes: 0, destinataires: emails.length, erreur: null as string | null },
-      whatsapp: { envoyes: 0, destinataires: telephones.length, erreur: null as string | null } };
+    const resultat = {
+      email: { envoyes: 0, destinataires: emails.length, erreur: null as string | null, simule: false },
+      whatsapp: { envoyes: 0, destinataires: telephones.length, erreur: null as string | null, simule: false },
+    };
 
     if (canaux.includes("email") && emails.length > 0) {
       const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#111">
@@ -79,15 +81,21 @@ export async function POST(req: NextRequest) {
       const r = await sendEmail(emails, `Bulletin de ${nomEleve} — ${periodeNom}`, html,
         `Le bulletin de ${nomEleve} (${periodeNom}) est disponible : ${lien}`, { type: "bulletin" });
       resultat.email.envoyes = r.sent;
+      resultat.email.simule = !!r.simulated;
       resultat.email.erreur = r.success ? null : (r.error ?? "Échec de l'envoi");
     }
 
     if (canaux.includes("whatsapp") && telephones.length > 0) {
       const message = `🎓 *${ecole}*\n\nBonjour,\n\nLe bulletin de *${nomEleve}* (${periodeNom}) est disponible :\n${lien}\n\nLe lien est personnel et valable 60 jours.`;
+      // Modèle approuvé par Meta si configuré (seul autorisé hors fenêtre de 24 h), sinon texte libre.
+      const modele = process.env.WHATSAPP_TEMPLATE_BULLETIN;
       for (const tel of telephones) {
-        const r = await sendWhatsAppMessage(tel, message);
+        const r = modele
+          ? await sendWhatsAppTemplate(tel, modele, [nomEleve, periodeNom, lien], process.env.WHATSAPP_TEMPLATE_LANG ?? "fr")
+          : await sendWhatsAppMessage(tel, message);
         if (r.success) resultat.whatsapp.envoyes++;
         else resultat.whatsapp.erreur = r.error ?? "Échec de l'envoi";
+        if (r.simulated) resultat.whatsapp.simule = true;
       }
     }
 

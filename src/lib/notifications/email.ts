@@ -16,6 +16,8 @@ export interface EmailResult {
   success: boolean;
   sent: number;
   error?: string;
+  /** Vrai quand aucune clé n'est configurée (développement) : rien n'a réellement été envoyé. */
+  simulated?: boolean;
   /** IDs Resend par destinataire : { email: resendId } — pour corrélation webhook */
   emailIds?: Record<string, string>;
 }
@@ -60,7 +62,7 @@ export async function sendEmail(
       return { success: false, sent: 0, error: "RESEND_API_KEY manquante en production" };
     }
     console.warn(`[Email] RESEND_API_KEY manquante — simulation (${recipients.length} destinataires)`);
-    return { success: true, sent: recipients.length };
+    return { success: true, sent: recipients.length, simulated: true };
   }
 
   const resend = new Resend(apiKey);

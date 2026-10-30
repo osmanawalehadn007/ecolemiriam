@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 type Canal = "email" | "whatsapp";
 
-type Resultat = Record<Canal, { envoyes: number; destinataires: number; erreur: string | null }>;
+type Resultat = Record<Canal, { envoyes: number; destinataires: number; erreur: string | null; simule: boolean }>;
 
 export function EnvoyerBulletin({ eleveId, periodeId }: { eleveId: string; periodeId: string }) {
   const [encours, setEncours] = useState<Canal | null>(null);
@@ -28,6 +28,8 @@ export function EnvoyerBulletin({ eleveId, periodeId }: { eleveId: string; perio
         toast.error(canal === "email" ? "Aucun parent n'a d'adresse e-mail." : "Aucun parent n'a de numéro de téléphone.");
       } else if (r.erreur) {
         toast.error(`${nom} : ${r.erreur}`);
+      } else if (r.simule) {
+        toast.warning(`${nom} : envoi SIMULÉ, les clés du service ne sont pas configurées (${r.envoyes}/${r.destinataires}).`);
       } else {
         toast.success(`Bulletin envoyé par ${nom} (${r.envoyes}/${r.destinataires}).`);
       }
