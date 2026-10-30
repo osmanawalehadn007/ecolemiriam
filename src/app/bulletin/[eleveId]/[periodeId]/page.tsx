@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { getBulletinData } from "@/lib/pdf/bulletin-generator";
 import { BulletinPreview } from "@/components/bulletins/BulletinPreview";
 import { PrintButton } from "@/components/bulletins/PrintButton";
+import { EnvoyerBulletin } from "@/components/bulletins/EnvoyerBulletin";
+import { roleHasPermission } from "@/lib/rbac";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -49,7 +51,7 @@ export default async function BulletinPage({
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 print:bg-white print:py-0">
-      <style dangerouslySetInnerHTML={{ __html: "@page { size: A4; margin: 0; }" }} />
+      <style dangerouslySetInnerHTML={{ __html: "@page { size: A4; margin: 5mm; }" }} />
       <div className="max-w-4xl mx-auto mb-4 flex justify-between items-center px-4 print:hidden">
         <Link href="/notes/bulletins">
           <Button variant="outline" size="sm" className="gap-2">
@@ -57,7 +59,12 @@ export default async function BulletinPage({
             Retour
           </Button>
         </Link>
-        <PrintButton />
+        <div className="flex gap-2">
+          {roleHasPermission(session.user.role, "bulletins:write") && (
+            <EnvoyerBulletin eleveId={eleveId} periodeId={periodeId} />
+          )}
+          <PrintButton />
+        </div>
       </div>
       <div className="flex justify-center">
         <BulletinPreview data={data} />

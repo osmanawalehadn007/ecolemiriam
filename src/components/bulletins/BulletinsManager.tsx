@@ -39,7 +39,7 @@ interface EleveConseil {
   matricule: string;
   moyenneGenerale: number | null;
   rang: number | null;
-  decision: "PASSAGE" | "REDOUBLEMENT" | "FELICITATIONS" | "ENCOURAGEMENTS" | "AVERTISSEMENT" | null;
+  decision: "PASSAGE" | "REDOUBLEMENT" | "FELICITATIONS" | "ENCOURAGEMENTS" | "AVERTISSEMENT" | "BLAME" | "INSUFFISANTS" | null;
   appreciation: string;
 }
 

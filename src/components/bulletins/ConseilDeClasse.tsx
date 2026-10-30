@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { formatDate } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 
-type Decision = "PASSAGE" | "REDOUBLEMENT" | "FELICITATIONS" | "ENCOURAGEMENTS" | "AVERTISSEMENT";
+type Decision = "PASSAGE" | "REDOUBLEMENT" | "FELICITATIONS" | "ENCOURAGEMENTS" | "AVERTISSEMENT" | "BLAME" | "INSUFFISANTS";
 
 interface EleveConseil {
   id: string;
@@ -34,6 +34,8 @@ const DECISIONS: { value: Decision; label: string; icon: React.ReactNode; color:
   { value: "ENCOURAGEMENTS", label: "Encouragements", icon: <TrendingUp className="w-3 h-3" />, color: "text-blue-700", bg: "bg-blue-50 border-blue-200" },
   { value: "PASSAGE", label: "Passage", icon: <CheckCircle2 className="w-3 h-3" />, color: "text-green-700", bg: "bg-green-50 border-green-200" },
   { value: "AVERTISSEMENT", label: "Avertissement", icon: <AlertTriangle className="w-3 h-3" />, color: "text-orange-700", bg: "bg-orange-50 border-orange-200" },
+  { value: "BLAME", label: "Blâme", icon: <AlertTriangle className="w-3 h-3" />, color: "text-red-700", bg: "bg-red-50 border-red-200" },
+  { value: "INSUFFISANTS", label: "Insuffisants", icon: <ThumbsDown className="w-3 h-3" />, color: "text-gray-700", bg: "bg-gray-50 border-gray-200" },
   { value: "REDOUBLEMENT", label: "Redoublement", icon: <ThumbsDown className="w-3 h-3" />, color: "text-red-700", bg: "bg-red-50 border-red-200" },
 ];
 
