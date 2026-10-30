@@ -304,6 +304,7 @@ export function FacturesTable({ factures }: FacturesTableProps) {
                 <tr>
                   <th className="text-left px-4 py-3 font-medium">{t("colNumber")}</th>
                   <th className="text-left px-4 py-3 font-medium">{t("colStudent")}</th>
+                  <th className="text-left px-4 py-3 font-medium">{t("colClass")}</th>
                   <th className="text-left px-4 py-3 font-medium">{t("colLabel")}</th>
                   <th className="text-right px-4 py-3 font-medium">{t("colAmount")}</th>
                   <th className="text-right px-4 py-3 font-medium">{t("colPaid")}</th>
@@ -316,7 +317,7 @@ export function FacturesTable({ factures }: FacturesTableProps) {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="text-center py-8 text-muted-foreground">
+                    <td colSpan={10} className="text-center py-8 text-muted-foreground">
                       {t("noInvoices")}
                     </td>
                   </tr>
@@ -331,7 +332,7 @@ export function FacturesTable({ factures }: FacturesTableProps) {
                           {f.eleve ? (
                             <>
                               <div className="font-medium">{f.eleve.prenom} {f.eleve.nom}</div>
-                              <div className="text-xs text-muted-foreground">{f.eleve.matricule} · {f.eleve.classe?.nom ?? t("notApplicable")}</div>
+                              <div className="text-xs text-muted-foreground">{f.eleve.matricule}</div>
                             </>
                           ) : f.candidature ? (
                             <>
@@ -350,6 +351,9 @@ export function FacturesTable({ factures }: FacturesTableProps) {
                             <div className="text-muted-foreground italic">—</div>
                           )}
                           <PaymentMethodsBadges paiements={f.paiements} t={t} />
+                        </td>
+                        <td className="px-4 py-3">
+                          {f.eleve?.classe?.nom ?? f.candidature?.classeVoulue ?? t("notApplicable")}
                         </td>
                         <td className="px-4 py-3">{f.libelle}</td>
                         <td className="px-4 py-3 text-right font-medium">{formatMoney(f.montant, f.devise)}</td>

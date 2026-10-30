@@ -285,6 +285,7 @@ export function FacturesMonthlyView({ factures, userRole }: FacturesMonthlyViewP
                           <tr>
                             <th className="text-left px-4 py-2 font-medium text-xs">{t("colNumber")}</th>
                             <th className="text-left px-4 py-2 font-medium text-xs">{t("colStudent")}</th>
+                            <th className="text-left px-4 py-2 font-medium text-xs">{t("colClass")}</th>
                             <th className="text-right px-4 py-2 font-medium text-xs">{t("colAmount")}</th>
                             <th className="text-right px-4 py-2 font-medium text-xs">{t("colPaid")}</th>
                             <th className="text-right px-4 py-2 font-medium text-xs">{t("colRemaining")}</th>
@@ -305,8 +306,8 @@ export function FacturesMonthlyView({ factures, userRole }: FacturesMonthlyViewP
                                 </td>
                                 <td className="px-4 py-2.5">
                                   <div className="font-medium text-xs">{f.eleve?.prenom ?? ""} {f.eleve?.nom ?? ""}</div>
-                                  <div className="text-xs text-muted-foreground">{f.eleve?.classe?.nom ?? "N/A"}</div>
                                 </td>
+                                <td className="px-4 py-2.5 text-xs">{f.eleve?.classe?.nom ?? "N/A"}</td>
                                 <td className="px-4 py-2.5 text-right font-medium text-xs">{formatMoney(f.montant, f.devise)}</td>
                                 <td className="px-4 py-2.5 text-right text-green-600 text-xs">{formatMoney(paye, f.devise)}</td>
                                 <td className={cn("px-4 py-2.5 text-right font-medium text-xs", restant > 0 ? "text-red-600" : "text-green-600")}>

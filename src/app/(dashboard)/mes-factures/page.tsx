@@ -47,6 +47,7 @@ export default async function MesFacturesPage() {
               <tr>
                 <th className="px-4 py-3">Numéro</th>
                 <th className="px-4 py-3">Élève</th>
+                <th className="px-4 py-3">Classe</th>
                 <th className="px-4 py-3">Libellé</th>
                 <th className="px-4 py-3">Montant</th>
                 <th className="px-4 py-3">Statut</th>
@@ -60,10 +61,8 @@ export default async function MesFacturesPage() {
                   <td className="px-4 py-3 font-mono text-xs">{f.numero}</td>
                   <td className="px-4 py-3">
                     {f.eleve ? `${f.eleve.prenom} ${f.eleve.nom}` : "—"}
-                    {f.eleve?.classe?.nom ? (
-                      <span className="ml-2 text-xs text-slate-400">{f.eleve.classe.nom}</span>
-                    ) : null}
                   </td>
+                  <td className="px-4 py-3">{f.eleve?.classe?.nom ?? "—"}</td>
                   <td className="px-4 py-3">{f.libelle}</td>
                   <td className="px-4 py-3 font-medium">{fmt(f.montant, f.devise)}</td>
                   <td className="px-4 py-3">{f.statut}</td>
