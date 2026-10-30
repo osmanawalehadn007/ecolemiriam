@@ -4,6 +4,7 @@
  */
 
 import { appreciationBareme, decisionPassage } from "@/lib/bulletins/bareme";
+import { nomsEnseignantsParMatiere, nomEnseignantMatiere } from "@/lib/bulletins/enseignants";
 
 export type NoteExamen = {
   intitule: string;
@@ -199,7 +200,16 @@ export async function getBulletinData(
     },
     select: { matiereId: true, moyenneEleve: true },
   });
+  // Enseignants actuels de la classe : un changement d'affectation se voit sans régénérer.
+  const affectations = await prisma.enseignantAffectation.findMany({
+    where: { tenantId, classeId: eleve.classeId! },
+    include: { enseignant: { include: { user: { select: { name: true } } } } },
+    orderBy: { createdAt: "asc" },
+  });
   /* eslint-enable ecolemiriam/require-site-filter */
+  const profs = nomsEnseignantsParMatiere(
+    affectations.map((a) => ({ matiereId: a.matiereId, nom: a.enseignant.user.name }))
+  );
 
   const moyenneClasseByMatiere: Record<string, number | null> = {};
   const matiereIds = [...new Set(allBulletinsMatieres.map(bm => bm.matiereId))];
@@ -222,7 +232,7 @@ export async function getBulletinData(
     rang: bm.rang,
     moyenneMax: bm.moyenneMax,
     moyenneMin: bm.moyenneMin,
-    nomProfesseur: bm.nomProfesseur,
+    nomProfesseur: nomEnseignantMatiere(profs, bm.matiereId) ?? (bm.nomProfesseur || null),
     appreciation: bm.appreciation,
     notesExamen: notesByMatiere[bm.matiereId] ?? [],
   }));

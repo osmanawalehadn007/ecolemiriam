@@ -6,6 +6,7 @@ import { z } from "zod";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel } from "@/lib/site-scope";
 import { appreciationBareme, rangsCompetition } from "@/lib/bulletins/bareme";
+import { nomsEnseignantsParMatiere, nomEnseignantMatiere } from "@/lib/bulletins/enseignants";
 
 const Schema = z.object({
   classeId: z.string().min(1),
@@ -131,18 +132,15 @@ export async function POST(req: NextRequest) {
     });
     console.log("[generer] step 11: absences fetched", absences.length);
 
-    // Enseignant de chaque matière dans cette classe (affiché sous la matière du bulletin)
+    // Enseignant(s) de chaque matière dans cette classe (affiché sous la matière du bulletin)
     const affectations = await prisma.enseignantAffectation.findMany({
-      where: { tenantId, classeId, matiereId: { not: null } },
+      where: { tenantId, classeId },
       include: { enseignant: { include: { user: { select: { name: true } } } } },
       orderBy: { createdAt: "asc" },
     }).catch(() => []);
-    const profParMatiere = new Map<string, string>();
-    for (const a of affectations) {
-      if (a.matiereId && !profParMatiere.has(a.matiereId) && a.enseignant.user.name) {
-        profParMatiere.set(a.matiereId, a.enseignant.user.name);
-      }
-    }
+    const profs = nomsEnseignantsParMatiere(
+      affectations.map((a) => ({ matiereId: a.matiereId, nom: a.enseignant.user.name }))
+    );
 
     // 1. Averages per subject per student
     const matieresMap = new Map<string, any>();
@@ -210,7 +208,7 @@ export async function POST(req: NextRequest) {
         if (isDispense) {
           matieresToSave.push({
             matiereId,
-            nomProfesseur: profParMatiere.get(matiereId) ?? "",
+            nomProfesseur: nomEnseignantMatiere(profs, matiereId) ?? "",
             coefficient: matiere.coefficient,
             moyenneEleve: null,
             rang: null,
@@ -234,7 +232,7 @@ export async function POST(req: NextRequest) {
 
         matieresToSave.push({
           matiereId,
-          nomProfesseur: profParMatiere.get(matiereId) ?? "",
+          nomProfesseur: nomEnseignantMatiere(profs, matiereId) ?? "",
           coefficient: matiere.coefficient,
           moyenneEleve: moy,
           rang: rangMatiere,
