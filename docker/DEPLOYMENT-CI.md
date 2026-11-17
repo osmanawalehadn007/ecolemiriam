@@ -208,7 +208,7 @@ bash docker/scripts/blue-green-deploy.sh --build
 | Fichier | Rôle |
 |---|---|
 | `.github/workflows/deploy.yml` | Pipeline CI/CD complet (6 jobs) |
-| `.github/workflows/ci.yml` | Tests sur PRs (lint + typecheck + E2E) |
+| `.github/workflows/ci.yml` | Tests sur PRs (lint + typecheck + build) ; l'E2E ne tourne que sur lancement manuel (`gh workflow run ci.yml --ref <branche>`) pour économiser les minutes du dépôt privé |
 | `docker/scripts/blue-green-deploy.sh` | Script blue-green (staging, promote, rollback) |
 | `docker/scripts/smoke-test.sh` | Smoke tests post-déploiement |
 | `docker/scripts/ci-deploy.sh` | Wrapper appelé par GitHub Actions via SSH |

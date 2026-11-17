@@ -14,6 +14,12 @@ on:
   # Relance manuelle : `gh workflow run ci.yml --ref <branche>`.
   workflow_dispatch:
 
+# Un nouvel envoi sur la même PR annule le run précédent, devenu obsolète :
+# sur un dépôt privé, chaque minute de runner entame le quota mensuel.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ============================================================
   # JOB 0 — Contrôles statiques, sans secrets ni base de données
@@ -126,7 +132,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     timeout-minutes: 30
-    # ACTIF depuis le 27/09/2026. Trois blocages ont été levés pour que ces tests
+    # À LA DEMANDE depuis le 17/11/2026 : cette suite dure ~11 minutes et le
+    # quota de minutes du dépôt privé s'est épuisé en cours de mois (les
+    # déploiements ont alors été refusés par GitHub). Elle ne tourne plus à
+    # chaque envoi sur une PR, mais sur lancement manuel avant un changement à
+    # risque : `gh workflow run ci.yml -R wilsan007/EcolPro --ref <branche>`.
+    # Le contrôle bloquant « Porte de promotion intacte » n'en dépend pas.
+    if: github.event_name == 'workflow_dispatch'
+    # Actif depuis le 27/09/2026. Trois blocages ont été levés pour que ces tests
     # puissent réellement s'exécuter :
     #   1. les fixtures visaient `admin@lycee-djibouti.ecolemiriam.app`, un compte
     #      que `prisma/seed.ts` ne crée pas (`admin@lycee-demo.ecolemiriam.app`) ;
