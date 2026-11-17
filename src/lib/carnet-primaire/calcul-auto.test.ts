@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CARNETS } from "./referentiel";
+import { CARNETS } from "./modeles.fixture";
 import { domaineDeMatiere } from "./correspondance";
 import { calculerSaisieAuto, fusionnerSaisie, type NoteCarnet } from "./calcul-auto";
 import { moyenneAnnuelle, noteModule } from "./notation";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formaterDateNaissance, genererCarnetHtml, suffixeClasse } from "./html";
-import { CARNETS } from "./referentiel";
+import { CARNETS } from "./modeles.fixture";
 
 describe("genererCarnetHtml", () => {
   it("rend les colonnes A / EVA / NA des niveaux 1ère et 2ème", () => {

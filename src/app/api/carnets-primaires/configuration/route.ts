@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { checkPermission } from "@/lib/rbac";
-import { CARNETS, NIVEAUX_CARNET, estNiveauCarnet } from "@/lib/carnet-primaire/referentiel";
-import { definitionEffective, validerDomaines } from "@/lib/carnet-primaire/configuration";
+import { NIVEAUX_CARNET, estNiveauCarnet } from "@/lib/carnet-primaire/referentiel";
+import { definitionEffective, domainesStockes, validerDomaines } from "@/lib/carnet-primaire/configuration";
+import { ecrireModele, initialiserCarnets } from "@/lib/carnet-primaire/initialiser";
+import { modeleNiveau } from "@/lib/carnet-primaire/modeles";
 import { siteFilterForModel } from "@/lib/site-scope";
 
 /** Les cinq niveaux avec leur définition effective et le modèle par défaut. */
@@ -16,22 +18,26 @@ export async function GET() {
     const denied = checkPermission(session.user.role, "parametres:read");
     if (denied) return denied;
 
+    await initialiserCarnets(session.user.tenantId);
     const configurations = await prisma.carnetConfiguration.findMany({
       where: { tenantId: session.user.tenantId },
       select: { niveau: true, domaines: true },
     });
     const parNiveau = new Map(configurations.map((c) => [c.niveau, c.domaines]));
+    const competences = await prisma.competence.findMany({
+      where: { tenantId: session.user.tenantId },
+      select: { niveau: true, domaine: true, ordre: true, libelle: true },
+    });
 
     const niveaux = NIVEAUX_CARNET.map((niveau) => {
       const personnalisee = parNiveau.get(niveau);
-      const definition = definitionEffective(niveau, personnalisee);
+      const definition = definitionEffective(niveau, personnalisee, competences.filter((c) => c.niveau === niveau));
       return {
         niveau,
         format: definition.format,
         domaines: definition.domaines,
-        defaut: CARNETS[niveau].domaines,
-        // Une personnalisation invalide est ignorée : le modèle par défaut s'applique.
-        personnalise: personnalisee != null && validerDomaines(niveau, personnalisee).ok,
+        // Différent du modèle de l'école (amorçage) ?
+        personnalise: JSON.stringify(definition.domaines) !== JSON.stringify(modeleNiveau(niveau)),
       };
     });
 
@@ -67,11 +73,21 @@ export async function PUT(req: NextRequest) {
     }
 
     const tenantId = session.user.tenantId;
-    await prisma.carnetConfiguration.upsert({
-      where: { tenantId_niveau: { tenantId, niveau: corps.niveau } },
-      create: { tenantId, niveau: corps.niveau, domaines: validation.domaines },
-      update: { domaines: validation.domaines },
-    });
+    const niveau = corps.niveau;
+    // La table `competences` fait foi pour les lignes : on la resynchronise avec la configuration.
+    await prisma.$transaction([
+      prisma.carnetConfiguration.upsert({
+        where: { tenantId_niveau: { tenantId, niveau } },
+        create: { tenantId, niveau, domaines: JSON.parse(JSON.stringify(domainesStockes(validation.domaines))) },
+        update: { domaines: JSON.parse(JSON.stringify(domainesStockes(validation.domaines))) },
+      }),
+      prisma.competence.deleteMany({ where: { tenantId, niveau } }),
+      prisma.competence.createMany({
+        data: validation.domaines.flatMap((d) =>
+          d.lignes.map((libelle, ordre) => ({ tenantId, niveau, domaine: d.code, ordre, libelle }))
+        ),
+      }),
+    ]);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[carnets-primaires/configuration PUT]", err);
@@ -79,7 +95,7 @@ export async function PUT(req: NextRequest) {
   }
 }
 
-/** Réinitialise un niveau : supprime la personnalisation et rétablit le modèle par défaut. */
+/** Réinitialise un niveau : réécrit en base le modèle de l'école. */
 export async function DELETE(req: NextRequest) {
   try {
     const session = await auth();
@@ -93,9 +109,7 @@ export async function DELETE(req: NextRequest) {
     if (!estNiveauCarnet(niveau)) {
       return NextResponse.json({ error: "Niveau invalide (1ère à 5ème)" }, { status: 400 });
     }
-    await prisma.carnetConfiguration.deleteMany({
-      where: { tenantId: session.user.tenantId, niveau },
-    });
+    await ecrireModele(session.user.tenantId, niveau);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[carnets-primaires/configuration DELETE]", err);

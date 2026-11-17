@@ -43,6 +43,7 @@ model Tenant {
   id          String       @id @default(cuid())
   carnetsPrimaires CarnetPrimaire[]
   carnetConfigurations CarnetConfiguration[]
+  competences Competence[]
   name        String // "Lycée Omar Bongo"
   slug        String       @unique // "lycee-omar-bongo" → sous-domaine
   domain      String?      @unique // domaine personnalisé optionnel
@@ -1297,6 +1298,25 @@ model CarnetConfiguration {
 
   @@unique([tenantId, niveau])
   @@map("carnet_configurations")
+}
+
+// Compétence d'un domaine du carnet (niveau + code de domaine + position).
+// Éditée dans Paramètres > Matières ; remplace les lignes du modèle par défaut.
+model Competence {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  niveau  String // "1ère" … "5ème"
+  domaine String // code du domaine (ARABE, MATHS, …)
+  ordre   Int // position dans le domaine : clé de la saisie (CODE.ordre)
+  libelle String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, niveau, domaine, ordre])
+  @@map("competences")
 }
 
 // ============================================================

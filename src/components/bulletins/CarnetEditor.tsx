@@ -10,7 +10,7 @@ import { fusionnerSaisie } from "@/lib/carnet-primaire/calcul-auto";
 import { CarnetFeuille } from "./CarnetFeuille";
 import { ajusterCarnetUnePage } from "@/lib/carnet-primaire/ajuster-page";
 import {
-  CARNETS,
+  FORMAT_CARNET,
   MODULES,
   baremeTotal,
   type CarnetDef,
@@ -41,8 +41,8 @@ interface Props {
 const DECISIONS = ["Passe en classe supérieure", "Redouble", "Passe sous réserve"];
 
 export function CarnetEditor({ classeNom, niveau, annee, eleves }: Props) {
-  // Modèle par défaut le temps du chargement ; remplacé par la définition du tenant (personnalisée ou non).
-  const [definition, setDefinition] = useState<CarnetDef>(CARNETS[niveau]);
+  // Vide le temps du chargement ; remplacé par la définition du tenant lue en base.
+  const [definition, setDefinition] = useState<CarnetDef>({ niveau, format: FORMAT_CARNET[niveau], domaines: [] });
   const [eleveId, setEleveId] = useState(eleves[0]?.id ?? "");
   // `saisie` : ce que l'enseignant a saisi à la main. `auto` : valeurs déduites des
   // évaluations et devoirs du module Notes ; la saisie manuelle les remplace.

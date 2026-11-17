@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CARNETS, type CarnetDef, type Domaine, type NiveauCarnet } from "./referentiel";
+import { FORMAT_CARNET, type CarnetDef, type Domaine, type NiveauCarnet } from "./referentiel";
 
 /**
  * Configuration d'un niveau par la direction : la liste des domaines (avec
@@ -21,6 +21,7 @@ const CODE_RE = /^[A-Z0-9_]{1,30}$/;
 export const DomaineSchema = z.object({
   code: z.string().regex(CODE_RE, "Code de domaine invalide"),
   libelle: z.string().trim().min(1, "Le libellé d'un domaine est requis").max(200),
+  titre: z.string().trim().min(1).max(200).optional(),
   lignes: z
     .array(z.string().trim().min(1, "Une ligne de compétence ne peut pas être vide").max(400))
     .min(1, "Chaque domaine doit comporter au moins une ligne de compétence")
@@ -52,21 +53,49 @@ export function validerDomaines(niveau: NiveauCarnet, brut: unknown): ResultatVa
     codes.add(d.code);
   }
 
-  if (CARNETS[niveau].format === "points") {
+  if (FORMAT_CARNET[niveau] === "points") {
     const sansBareme = domaines.find((d) => d.bareme === undefined);
     if (sansBareme) return { ok: false, erreur: `Le domaine « ${sansBareme.libelle} » doit avoir un barème` };
     return { ok: true, domaines };
   }
   return {
     ok: true,
-    domaines: domaines.map((d) => ({ code: d.code, libelle: d.libelle, lignes: d.lignes, matieres: d.matieres })),
+    domaines: domaines.map((d) => ({ code: d.code, libelle: d.libelle, titre: d.titre, lignes: d.lignes, matieres: d.matieres })),
   };
 }
 
-/** Définition effective d'un niveau : la personnalisation valide, sinon le modèle par défaut. */
-export function definitionEffective(niveau: NiveauCarnet, personnalisee: unknown): CarnetDef {
-  const defaut = CARNETS[niveau];
-  if (personnalisee == null) return defaut;
-  const resultat = validerDomaines(niveau, personnalisee);
-  return resultat.ok ? { ...defaut, domaines: resultat.domaines } : defaut;
+export interface LigneCompetence {
+  domaine: string;
+  ordre: number;
+  libelle: string;
+}
+
+/** Domaine tel que stocké dans `carnet_configurations` : sans les lignes, qui sont dans `competences`. */
+export function domainesStockes(domaines: Domaine[]): Omit<Domaine, "lignes">[] {
+  return domaines.map(({ lignes: _lignes, ...reste }) => reste);
+}
+
+const DomaineStockeSchema = DomaineSchema.extend({ lignes: z.array(z.string()).max(MAX_LIGNES).default([]) });
+
+/**
+ * Définition effective d'un niveau, lue en base : domaines de `carnet_configurations`
+ * (ordre, libellé, barème, matières), lignes de compétence de `competences`.
+ * Une configuration absente ou invalide donne un carnet sans domaine (amorçage : initialiser.ts).
+ * Les lignes d'un ancien enregistrement JSON servent tant que la table n'a rien pour ce domaine.
+ */
+export function definitionEffective(
+  niveau: NiveauCarnet,
+  stockee: unknown,
+  competences: LigneCompetence[] = []
+): CarnetDef {
+  const analyse = z.array(DomaineStockeSchema).safeParse(stockee);
+  const base = analyse.success ? analyse.data : [];
+  const domaines: Domaine[] = base.map((d) => {
+    const lignes = competences
+      .filter((c) => c.domaine === d.code)
+      .sort((a, b) => a.ordre - b.ordre)
+      .map((c) => c.libelle);
+    return { ...d, lignes: lignes.length > 0 ? lignes : d.lignes };
+  });
+  return { niveau, format: FORMAT_CARNET[niveau], domaines };
 }

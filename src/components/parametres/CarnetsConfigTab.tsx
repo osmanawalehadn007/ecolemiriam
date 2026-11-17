@@ -20,7 +20,6 @@ interface NiveauConfig {
   niveau: NiveauCarnet;
   format: FormatCarnet;
   domaines: Domaine[];
-  defaut: Domaine[];
   personnalise: boolean;
 }
 
@@ -227,7 +226,7 @@ export function CarnetsConfigTab({ canManage }: { canManage: boolean }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <input
                       value={domaine.libelle}
-                      onChange={(e) => majDomaine(index, { libelle: e.target.value })}
+                      onChange={(e) => majDomaine(index, { libelle: e.target.value, titre: undefined })}
                       disabled={!canManage}
                       maxLength={200}
                       className={cn(champ, "flex-1 min-w-48 font-medium")}

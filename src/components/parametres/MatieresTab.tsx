@@ -10,6 +10,7 @@ import { Download, Loader2, Plus, Trash2 } from "lucide-react";
 import { appliquerModeleMatieres, createMatiere, deleteMatiere, type MatiereFormData } from "@/lib/actions/parametres";
 import { MODELES_MATIERES } from "@/lib/matieres-defaut";
 import { useTranslations } from "next-intl";
+import { CompetencesPanel } from "./CompetencesPanel";
 
 interface MatiereItem {
   id: string;
@@ -211,6 +212,8 @@ export function MatieresTab({ matieres, canManage }: { matieres: MatiereItem[]; 
           </div>
         </CardContent>
       </Card>
+
+      <CompetencesPanel canManage={canManage} />
     </div>
   );
 }

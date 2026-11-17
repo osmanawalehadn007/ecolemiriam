@@ -1,24 +1,25 @@
 import prisma from "@/lib/prisma";
 import { definitionEffective } from "./configuration";
+import { initialiserCarnets } from "./initialiser";
 import { NIVEAUX_CARNET, type CarnetDef, type NiveauCarnet } from "./referentiel";
 
-/** Définition du carnet d'un niveau pour un tenant : personnalisation de la direction ou modèle par défaut. */
+/** Définition du carnet d'un niveau pour un tenant, lue en base (amorcée au premier accès). */
 export async function chargerDefinition(tenantId: string, niveau: NiveauCarnet): Promise<CarnetDef> {
-  const configuration = await prisma.carnetConfiguration.findFirst({
-    where: { tenantId, niveau },
-    select: { domaines: true },
-  });
-  return definitionEffective(niveau, configuration?.domaines);
+  return (await chargerDefinitions(tenantId))[niveau];
 }
 
-/** Définitions effectives des cinq niveaux pour un tenant, en une seule requête. */
+/** Définitions des cinq niveaux pour un tenant : domaines (carnet_configurations) et compétences (competences). */
 export async function chargerDefinitions(tenantId: string): Promise<Record<NiveauCarnet, CarnetDef>> {
-  const configurations = await prisma.carnetConfiguration.findMany({
-    where: { tenantId },
-    select: { niveau: true, domaines: true },
-  });
+  await initialiserCarnets(tenantId);
+  const [configurations, competences] = await Promise.all([
+    prisma.carnetConfiguration.findMany({ where: { tenantId }, select: { niveau: true, domaines: true } }),
+    prisma.competence.findMany({ where: { tenantId }, select: { niveau: true, domaine: true, ordre: true, libelle: true } }),
+  ]);
   const parNiveau = new Map(configurations.map((c) => [c.niveau, c.domaines]));
   return Object.fromEntries(
-    NIVEAUX_CARNET.map((niveau) => [niveau, definitionEffective(niveau, parNiveau.get(niveau))])
+    NIVEAUX_CARNET.map((niveau) => [
+      niveau,
+      definitionEffective(niveau, parNiveau.get(niveau), competences.filter((c) => c.niveau === niveau)),
+    ])
   ) as Record<NiveauCarnet, CarnetDef>;
 }

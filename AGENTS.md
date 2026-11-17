@@ -389,3 +389,11 @@ Référence complète : **[docs/DECISIONS-FACTURATION.md](docs/DECISIONS-FACTURA
     se fait côté application (`ajuster-page.ts`, rappel de `openPrintWindow`) :
     la CSP interdit tout script dans le HTML imprimé.
 
+28. **Carnets en base, plus dans le code** — `prisma/migrations/competences.sql`
+    est à appliquer AVANT le déploiement. Les domaines (libellé, titre imprimé,
+    barème, matières) sont dans `carnet_configurations`, les lignes de compétence
+    dans `competences` (clé de saisie `CODE.ordre`). `modeles-carnets.json`
+    (transcrit des documents Word de l'école) ne sert qu'à l'amorçage :
+    `initialiserCarnets` écrit en base les niveaux d'un tenant qui n'en ont pas
+    (premier accès, ou `scripts/amorcer-competences.ts`) et le bouton « modèle »
+    de l'interface y revient. Éditeur : Paramètres > Matières et onglet Carnets.

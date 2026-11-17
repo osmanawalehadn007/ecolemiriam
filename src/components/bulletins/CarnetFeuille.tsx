@@ -7,9 +7,6 @@ import {
   COULEUR_MOYENNE,
   TEINTES,
   TEINTES_REPLI,
-  TITRES_COMPETENCES,
-  TITRES_POINTS,
-  estLibelleParDefaut,
 } from "@/lib/carnet-primaire/html";
 import {
   MODULES,
@@ -54,14 +51,12 @@ function teinte(niveau: NiveauCarnet, domaine: Domaine, index: number) {
 }
 
 function titreCompetences(niveau: NiveauCarnet, domaine: Domaine): string {
-  const modele = TITRES_COMPETENCES[domaine.code];
-  return modele && estLibelleParDefaut(niveau, domaine) ? modele : domaine.libelle.toUpperCase();
+  return domaine.titre ?? domaine.libelle.toUpperCase();
 }
 
 function titrePoints(niveau: NiveauCarnet, domaine: Domaine, index: number): string {
   const numero = CHIFFRES_ROMAINS[index] ?? String(index + 1);
-  const nom = TITRES_POINTS[domaine.code];
-  const corps = nom && estLibelleParDefaut(niveau, domaine) ? `COMPÉTENCES DE BASE : ${nom}` : domaine.libelle.toUpperCase();
+  const corps = domaine.titre ?? domaine.libelle.toUpperCase();
   return `${numero}–${corps}${domaine.bareme ? ` / ${domaine.bareme}` : ""}`;
 }
 

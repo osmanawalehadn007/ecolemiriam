@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CARNETS, baremeTotal, estNiveauCarnet, normaliserAnnee } from "./referentiel";
+import { CARNETS } from "./modeles.fixture";
+import { baremeTotal, estNiveauCarnet, normaliserAnnee } from "./referentiel";
 import {
   cleCompetence,
   degreMaitrise,

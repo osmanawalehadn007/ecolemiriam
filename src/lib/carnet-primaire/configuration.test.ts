@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { definitionEffective, validerDomaines } from "./configuration";
-import { CARNETS, baremeTotal } from "./referentiel";
+import { CARNETS } from "./modeles.fixture";
+import { baremeTotal } from "./referentiel";
 import { noteModulePoints } from "./notation";
 
 const domaine = (code: string, bareme?: number) => ({
@@ -36,15 +37,22 @@ describe("validerDomaines", () => {
 });
 
 describe("definitionEffective", () => {
-  it("retombe sur le modèle par défaut sans personnalisation ou si elle est invalide", () => {
-    expect(definitionEffective("4ème", null)).toBe(CARNETS["4ème"]);
-    expect(definitionEffective("4ème", [{ code: "x" }])).toBe(CARNETS["4ème"]);
+  it("donne un carnet sans domaine quand la base n'a rien ou une configuration invalide", () => {
+    expect(definitionEffective("4ème", null).domaines).toEqual([]);
+    expect(definitionEffective("4ème", [{ code: "x" }]).domaines).toEqual([]);
+    expect(definitionEffective("4ème", null).format).toBe("points");
   });
 
-  it("applique une personnalisation valide et recalcule la note sur le nouveau barème", () => {
-    const definition = definitionEffective("3ème", [domaine("FRANCAIS", 30), domaine("MATHS", 20)]);
-    expect(baremeTotal(definition)).toBe(50);
-    // 25 points sur 50 → 5/10 ; un domaine retiré (ARABE) est ignoré
-    expect(noteModulePoints(definition, { FRANCAIS: 15, MATHS: 10, ARABE: 20 })).toBe(5);
+  it("lit les lignes dans la table competences, dans l'ordre, sinon dans le JSON stocké", () => {
+    const stocke = [
+      { code: "ARABE", libelle: "Arabe", lignes: ["ancienne"] },
+      { code: "MATHS", libelle: "Maths", lignes: ["m"] },
+    ];
+    const def = definitionEffective("1ère", stocke, [
+      { domaine: "ARABE", ordre: 1, libelle: "B" },
+      { domaine: "ARABE", ordre: 0, libelle: "A" },
+    ]);
+    expect(def.domaines.find((d) => d.code === "ARABE")?.lignes).toEqual(["A", "B"]);
+    expect(def.domaines.find((d) => d.code === "MATHS")?.lignes).toEqual(["m"]);
   });
 });

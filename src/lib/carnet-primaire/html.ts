@@ -1,4 +1,4 @@
-import { CARNETS, MODULES, baremeTotal, type CarnetDef, type Domaine, type NiveauCarnet } from "./referentiel";
+import { MODULES, baremeTotal, type CarnetDef, type Domaine, type NiveauCarnet } from "./referentiel";
 import {
   cleCompetence,
   degreMaitrise,
@@ -147,30 +147,6 @@ export const TEINTES_REPLI: Teinte[] = [
   { entete: "#FABF8F", lignes: "#D6E3BC" },
 ];
 
-/** Intitulés imprimés dans les modèles (format A / EVA / NA, 1ère et 2ème). */
-export const TITRES_COMPETENCES: Record<string, string> = {
-  ARABE: "COMPETENCE DE LANGUE EN ARABE",
-  EMCI: "COMPETENCE D’EDUCATION MORALE CIVIQUE ET ISLAMIQUE",
-  MATHS: "COMPÉTENCES DE MATHÉMATIQUES",
-  FRANCAIS: "COMPÉTENCES DE LANGUE : FRANÇAIS",
-  EMT_TICE: "COMPÉTENCES EMT/TICE",
-  SCIENCES: "SCIENCES EXPERIMENTALES",
-};
-
-/** Intitulés imprimés dans les modèles (format points, 3ème à 5ème). */
-export const TITRES_POINTS: Record<string, string> = {
-  FRANCAIS: "FRANÇAIS",
-  ARABE: "ARABE",
-  ANGLAIS: "ANGLAIS",
-  MATHS: "MATHEMATIQUES",
-  HISTOIRE: "HISTOIRE",
-  GEOGRAPHIE: "GEOGRAPHIE",
-  SCIENCES: "SCIENCES EXPERIMENTALES",
-  EMCI: "EDUCATION MORALE CIVIQUE ET ISLAMIQUE",
-  EMT: "EDUCATION MANUELLE ET TECHNIQUE",
-  TICE: "TICE",
-};
-
 export const CHIFFRES_ROMAINS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV"];
 
 function echapper(valeur: string): string {
@@ -220,21 +196,13 @@ function teinteDomaine(niveau: NiveauCarnet, domaine: Domaine, index: number): T
   return TEINTES[niveau][domaine.code] ?? TEINTES_REPLI[index % TEINTES_REPLI.length];
 }
 
-/** Intitulé du modèle tant que le libellé n'a pas été modifié par la direction. */
-export function estLibelleParDefaut(niveau: NiveauCarnet, domaine: Domaine): boolean {
-  return CARNETS[niveau].domaines.some((d) => d.code === domaine.code && d.libelle === domaine.libelle);
-}
-
 function titreCompetences(niveau: NiveauCarnet, domaine: Domaine): string {
-  const modele = TITRES_COMPETENCES[domaine.code];
-  return echapper(modele && estLibelleParDefaut(niveau, domaine) ? modele : domaine.libelle.toUpperCase());
+  return echapper(domaine.titre ?? domaine.libelle.toUpperCase());
 }
 
 function titrePoints(niveau: NiveauCarnet, domaine: Domaine, index: number): string {
   const numero = CHIFFRES_ROMAINS[index] ?? String(index + 1);
-  const nom = TITRES_POINTS[domaine.code];
-  const corps =
-    nom && estLibelleParDefaut(niveau, domaine) ? `COMPÉTENCES DE BASE : ${nom}` : domaine.libelle.toUpperCase();
+  const corps = domaine.titre ?? domaine.libelle.toUpperCase();
   return echapper(`${numero}–${corps} / ${domaine.bareme ?? ""}`.replace(/ \/ $/, ""));
 }
 
