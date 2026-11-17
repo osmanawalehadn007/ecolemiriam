@@ -22,7 +22,7 @@ import type { Prisma } from "@prisma/client";
 import { niveauToLabel } from "@/lib/niveau";
 import { chargerDefinitions } from "@/lib/carnet-primaire/charger-definition";
 import { estNiveauCarnet } from "@/lib/carnet-primaire/referentiel";
-import { hasPermission } from "@/lib/client-permissions";
+import { roleHasPermission } from "@/lib/rbac";
 import { ModuleCarnetSelect } from "@/components/evaluations/ModuleCarnetSelect";
 
 export const metadata = {
@@ -127,7 +127,7 @@ export default async function EvaluationsPage(
   // Modèle du carnet de chaque niveau (personnalisé par la direction ou par défaut) :
   // le formulaire en tire le domaine et les compétences de la matière choisie.
   const carnets = await chargerDefinitions(tenantId);
-  const peutRattacher = hasPermission(session.user.role, "evaluations:write");
+  const peutRattacher = roleHasPermission(session.user.role as Role, "evaluations:write");
 
   function getTypeColor(type: string) {
     switch (type) {

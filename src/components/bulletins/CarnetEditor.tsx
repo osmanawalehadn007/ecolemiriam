@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, Printer, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -54,34 +54,41 @@ export function CarnetEditor({ classeNom, niveau, annee, eleves }: Props) {
   const [enregistrement, setEnregistrement] = useState(false);
   const [modifie, setModifie] = useState(false);
 
-  // Un changement de classe remplace la liste d'élèves : on se repositionne sur le premier.
+  // Un changement de classe remplace la liste d'élèves : on se repositionne sur le premier,
+  // mais seulement si l'élève choisi n'en fait plus partie (un simple nouveau rendu du
+  // parent ne doit pas annuler le choix de l'utilisateur).
   useEffect(() => {
-    setEleveId(eleves[0]?.id ?? "");
+    setEleveId((courant) => (eleves.some((e) => e.id === courant) ? courant : (eleves[0]?.id ?? "")));
   }, [eleves]);
 
-  const charger = useCallback(async () => {
-    if (!eleveId || !annee) return;
-    setChargement(true);
-    try {
-      const res = await fetch(`/api/carnets-primaires?eleveId=${eleveId}&annee=${annee}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Erreur de chargement");
-      if (data.definition) setDefinition(data.definition);
-      setSaisie(data.saisie ?? {});
-      setAuto(data.auto ?? {});
-      setAppreciations(data.appreciations ?? "");
-      setDecision(data.decision ?? "");
-      setModifie(false);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur de chargement");
-    } finally {
-      setChargement(false);
-    }
-  }, [eleveId, annee]);
-
+  // Une réponse arrivée après un changement d'élève (ou d'année) est ignorée : sans cela,
+  // la requête de l'élève précédent, plus lente, écraserait les données de l'élève affiché.
   useEffect(() => {
-    void charger();
-  }, [charger]);
+    if (!eleveId || !annee) return;
+    let obsolete = false;
+    setChargement(true);
+    (async () => {
+      try {
+        const res = await fetch(`/api/carnets-primaires?eleveId=${eleveId}&annee=${annee}`);
+        const data = await res.json();
+        if (obsolete) return;
+        if (!res.ok) throw new Error(data.error ?? "Erreur de chargement");
+        if (data.definition) setDefinition(data.definition);
+        setSaisie(data.saisie ?? {});
+        setAuto(data.auto ?? {});
+        setAppreciations(data.appreciations ?? "");
+        setDecision(data.decision ?? "");
+        setModifie(false);
+      } catch (e) {
+        if (!obsolete) toast.error(e instanceof Error ? e.message : "Erreur de chargement");
+      } finally {
+        if (!obsolete) setChargement(false);
+      }
+    })();
+    return () => {
+      obsolete = true;
+    };
+  }, [eleveId, annee]);
 
   const effectif = useMemo(() => fusionnerSaisie(auto, saisie), [auto, saisie]);
   const aSaisieManuelle = (m: Module) => {

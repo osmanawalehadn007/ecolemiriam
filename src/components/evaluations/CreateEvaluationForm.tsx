@@ -94,7 +94,7 @@ export function CreateEvaluationForm({ classes, matieres, periodes, carnets, use
         </Button>
       </DialogTrigger>
       <DialogContent
-        className="max-w-2xl bg-background border-none shadow-2xl rounded-xl"
+        className="max-w-2xl max-h-[90vh] overflow-y-auto bg-background border-none shadow-2xl rounded-xl"
         onEscapeKeyDown={(e) => e.preventDefault()}
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
