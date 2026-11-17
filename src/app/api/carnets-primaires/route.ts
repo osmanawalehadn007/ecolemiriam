@@ -8,6 +8,8 @@ import { estNiveauCarnet } from "@/lib/carnet-primaire/referentiel";
 import { chargerDefinition } from "@/lib/carnet-primaire/charger-definition";
 import { erreursDomaines, type SaisieCarnet } from "@/lib/carnet-primaire/notation";
 import { genererCarnetHtml } from "@/lib/carnet-primaire/html";
+import { calculerSaisieAuto, fusionnerSaisie } from "@/lib/carnet-primaire/calcul-auto";
+import { chargerNotesCarnet } from "@/lib/carnet-primaire/charger-notes";
 
 const ANNEE_RE = /^\d{4}-\d{4}$/;
 
@@ -43,7 +45,17 @@ async function chargerEleve(eleveId: string, user: SessionSiteClaims & { tenantI
       nom: true,
       prenom: true,
       matricule: true,
-      classe: { select: { niveau: true } },
+      dateNaissance: true,
+      lieuNaissance: true,
+      site: { select: { nom: true } },
+      classe: {
+        select: {
+          nom: true,
+          niveau: true,
+          site: { select: { nom: true } },
+          profPrincipal: { select: { user: { select: { name: true } } } },
+        },
+      },
     },
   });
   if (!eleve) return { erreur: NextResponse.json({ error: "Élève introuvable" }, { status: 404 }) };
@@ -85,18 +97,35 @@ export async function GET(req: NextRequest) {
       select: { saisie: true, appreciations: true, decision: true, updatedAt: true },
     });
 
+    // Valeurs déduites des notes (évaluations et devoirs du module Notes) ; la
+    // saisie manuelle du carnet les remplace champ par champ.
+    const manuel = (carnet?.saisie ?? {}) as SaisieCarnet;
+    const auto = calculerSaisieAuto(definition, await chargerNotesCarnet(session.user.tenantId, eleveId, annee));
+
     if (searchParams.get("format") === "html") {
       const tenant = await prisma.tenant.findUnique({
         where: { id: session.user.tenantId },
-        select: { name: true },
+        select: { name: true, chefEtablissement: true, cachetUrl: true },
       });
+      const { eleve } = charge;
       const html = genererCarnetHtml({
         ecole: tenant?.name ?? "",
+        site: eleve.classe?.site?.nom ?? eleve.site?.nom ?? null,
         annee,
-        niveau: charge.eleve.niveau,
+        niveau: eleve.niveau,
         definition,
-        eleve: { nom: charge.eleve.nom, prenom: charge.eleve.prenom, matricule: charge.eleve.matricule ?? "" },
-        saisie: (carnet?.saisie ?? {}) as SaisieCarnet,
+        eleve: {
+          nom: eleve.nom,
+          prenom: eleve.prenom,
+          matricule: eleve.matricule ?? "",
+          dateNaissance: eleve.dateNaissance,
+          lieuNaissance: eleve.lieuNaissance,
+        },
+        classe: eleve.classe?.nom ?? null,
+        enseignant: eleve.classe?.profPrincipal?.user?.name ?? null,
+        directrice: tenant?.chefEtablissement ?? null,
+        cachetUrl: tenant?.cachetUrl ?? null,
+        saisie: fusionnerSaisie(auto, manuel),
         appreciations: carnet?.appreciations,
         decision: carnet?.decision,
       });
@@ -107,7 +136,8 @@ export async function GET(req: NextRequest) {
       eleve: charge.eleve,
       niveau: charge.eleve.niveau,
       definition,
-      saisie: (carnet?.saisie ?? {}) as SaisieCarnet,
+      auto,
+      saisie: manuel,
       appreciations: carnet?.appreciations ?? "",
       decision: carnet?.decision ?? "",
       updatedAt: carnet?.updatedAt ?? null,

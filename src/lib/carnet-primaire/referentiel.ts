@@ -25,6 +25,11 @@ export interface Domaine {
   lignes: string[];
   /** Barème du domaine — présent uniquement dans le format `points`. */
   bareme?: number;
+  /**
+   * Matières dont les notes alimentent ce domaine (identifiants). Sans liste,
+   * la correspondance se fait par le nom de la matière (voir correspondance.ts).
+   */
+  matieres?: string[];
 }
 
 export type FormatCarnet = "competences" | "points";
@@ -40,9 +45,9 @@ const DOMAINES_1ERE: Domaine[] = [
     code: "ARABE",
     libelle: "Compétence de langue en arabe",
     lignes: [
-      "Mémorisation du saint CORAN et l'alphabet.",
+      "Mémorisation du saint CORAN et l'Alphabet.",
       "Produire un message oral et se faire comprendre.",
-      "Écrire correctement les lettres alphabétiques.",
+      "Écrire correctement les lettres Alphabétiques.",
     ],
   },
   {
@@ -50,8 +55,8 @@ const DOMAINES_1ERE: Domaine[] = [
     libelle: "Éducation morale, civique et islamique",
     lignes: [
       "Maîtriser les règles de base de la politesse et de la conduite.",
-      "Refuser les abus, identifier les émotions.",
-      "Connaître ses droits, accomplir ses devoirs.",
+      "Refuser les abus / identifier les émotions.",
+      "Connaître ses droits / accomplir ses devoirs.",
     ],
   },
   {
@@ -59,18 +64,18 @@ const DOMAINES_1ERE: Domaine[] = [
     libelle: "Compétences de mathématiques",
     lignes: [
       "Pré-mathématiques : résoudre une situation nécessitant le tri, la comparaison et le rangement d'objets.",
-      "Nombre et calcul : résoudre des situations-problèmes d'écriture et de rangement des nombres de 1 à 20.",
-      "Géométrie : résoudre une situation-problème pour se situer, situer des objets ou s'orienter dans l'espace.",
-      "Grandeur et mesure : reproduire selon le même modèle ou en codant un élément répétitif visuel.",
+      "Nombre et calcul : résoudre des situations-problèmes qui font appel à l'écriture et le rangement des nombres de 1 à 20.",
+      "Géométrie : résoudre une situation-problème pour se situer, situer les objets ou s'orienter dans l'espace.",
+      "Grandeur et Mesure : reproduire selon le même modèle ou en codant un élément répétitif visuel.",
     ],
   },
   {
     code: "FRANCAIS",
     libelle: "Compétences de langue : français",
     lignes: [
-      "Lecture : lire des lettres, combiner des syllabes pour former des mots, lire un texte simple d'une à trois phrases.",
+      "Lecture : lire des lettres, combiner des syllabes pour former des mots. Déchiffrer des mots nouveaux. Lire des phrases simples. Lire un texte simple d'une à trois phrases.",
       "Écriture : copier, reproduire, compléter et produire un écrit signifiant d'une à trois phrases.",
-      "Langage : produire un message oral, comprendre et se faire comprendre oralement.",
+      "Langage : produire un message oral. Comprendre et se faire comprendre oralement. Poser et répondre à une question simple.",
     ],
   },
   {
@@ -91,7 +96,7 @@ const DOMAINES_2EME: Domaine[] = [
     lignes: [
       "Identifier les parties de son corps et l'hygiène corporelle.",
       "Identifier, reconnaître et nommer les animaux et les végétaux de son milieu.",
-      "Identifier des objets matériels familiers et en effectuer des collections selon des critères simples.",
+      "Capable d'identifier des objets matériels familiers, d'en effectuer des collections suivant des critères simples.",
     ],
   },
   {
@@ -100,43 +105,43 @@ const DOMAINES_2EME: Domaine[] = [
     lignes: [
       "Être élève en classe et à l'école : maîtriser les règles de vie.",
       "Prendre soin de soi.",
-      "Connaître ses droits, accomplir ses devoirs, être citoyen.",
+      "Connaître ses droits / accomplir ses devoirs / être citoyen.",
     ],
   },
   {
     code: "ARABE",
     libelle: "Compétence de langue en arabe",
     lignes: [
-      "Assiduité et ponctualité.",
-      "Participer en classe.",
-      "Écouter et écrire l'alphabet, comprendre, travailler en groupe.",
+      "Assiduité / Ponctualité.",
+      "Participe en classe.",
+      "Écouter et écrire l'alphabet / Comprendre / Travailler en groupe.",
     ],
   },
   {
     code: "FRANCAIS",
     libelle: "Compétences de langue : français",
     lignes: [
-      "Lecture : combiner des syllabes, déchiffrer des mots nouveaux, lire à haute voix un texte d'une à six phrases, comprendre le sens du texte.",
+      "Lecture : combiner des syllabes. Déchiffrer des mots nouveaux. Lire à haute voix un texte d'une à six phrases. Comprendre le sens du texte.",
       "Écriture : copier, reproduire, compléter et produire un écrit signifiant d'une à cinq phrases.",
-      "Langage : produire un message oral cohérent, se faire comprendre oralement, poser et répondre à une question complexe.",
+      "Langage : produire un message oral cohérent. Comprendre et se faire comprendre oralement. Poser et répondre à une question complexe.",
     ],
   },
   {
     code: "MATHS",
     libelle: "Compétences de mathématiques",
     lignes: [
-      "Nombre et calcul : résoudre des situations-problèmes de lecture, d'écriture et de rangement des nombres de 1 à 99 ; construire une table d'addition.",
-      "Géométrie : se situer, situer des objets ou s'orienter dans l'espace ; reconnaître et reproduire une ligne droite, courbe ou brisée.",
-      "Grandeur et mesures : reproduire selon le même modèle ou en codant un élément répétitif visuel.",
+      "Nombre et calcul : résoudre des situations-problèmes qui font appel à la lecture, l'écriture et le rangement des nombres de 1 à 99 ; construire une table d'addition et interpréter une situation-problème par un dessin.",
+      "Géométrie : résoudre une situation-problème pour se situer, situer les objets ou s'orienter dans l'espace ; repérer les différents positionnements par rapport à des personnes / des objets ; reconnaître et reproduire une ligne droite, une ligne courbe ou une ligne brisée.",
+      "Grandeur et mesures : résoudre une situation-problème qui permet de reproduire selon le même modèle ou en codant un élément répétitif visuel.",
     ],
   },
   {
     code: "EMT_TICE",
     libelle: "Compétences EMT / TICE",
     lignes: [
-      "Introduire la technique du modelage ; coder et décoder la tablette.",
-      "Visionner et observer une image (support) ; manipuler les applications de jeux.",
-      "Assembler des dessins, construction 3D ; utiliser un outil de transfert de documents.",
+      "Introduire la technique du modelage. Coder et décoder la tablette.",
+      "Visionner et observer une image (support). Manipuler les APK de jeux.",
+      "Assembler des dessins, construction 3D. Utiliser SHAREIT pour transférer un document.",
     ],
   },
 ];
@@ -147,9 +152,11 @@ const DOMAINES_POINTS_3EME: Domaine[] = [
     libelle: "Compétences de base : français",
     bareme: 40,
     lignes: [
-      "Lecture : comprendre un texte en mobilisant des stratégies de compréhension littérale et différentielle ; lire à haute voix un texte simple.",
-      "Écriture : copier correctement un texte de deux à trois phrases en écriture cursive ; produire un texte de deux à quatre phrases.",
-      "Production orale : manifester la compréhension des récits entendus ; participer à des échanges interactifs. Outils de langue : notions lexicales, orthographiques et grammaticales.",
+      "CB1/Lecture: Comprendre un texte en mobilisant des stratégies qui visent une compréhension littérale et différentielle.",
+      "CB1/Lire à haute voix un texte simple de niveaux à 9, de manière fluide et expressive.",
+      "CB2/ Écriture/Production écrite : Copier correctement un texte de deux à trois phrases en écriture cursive. Produire un texte de 2 à 4 phrases.",
+      "CB3/Production orale : Manifester la compréhension des récits entendus, exprimer et justifier ses appréciations. Participer à des échanges interactifs dans des situations de communication variées.",
+      "Outils de langue: Utiliser les notions lexicales, orthographiques et grammaticales étudiées.",
     ],
   },
   {
@@ -157,9 +164,9 @@ const DOMAINES_POINTS_3EME: Domaine[] = [
     libelle: "Compétences de base : arabe",
     bareme: 20,
     lignes: [
-      "Écouter les conversations et répondre aux questions sur un sujet familier.",
-      "Lire les lettres, les syllabes, les mots et les phrases et comprendre leur signification.",
-      "Écrire des lettres, des mots et des phrases familiers.",
+      "CB1/Écouter les conversations pour communiquer avec son entourage et répondre aux questions sur un sujet familier.",
+      "CB2/Lire les lettres de l'alphabet, les syllabes, les mots et les phrases et comprendre leur signification.",
+      "CB3/Écrire des lettres, des mots et des phrases familiers en utilisant des techniques d'écriture bien acquises.",
     ],
   },
   {
@@ -167,9 +174,9 @@ const DOMAINES_POINTS_3EME: Domaine[] = [
     libelle: "Compétences de base : anglais",
     bareme: 20,
     lignes: [
-      "Saluer, compter de un à douze, lire les jours et les mois.",
-      "Poser des questions sur les objets de la classe, exprimer des instructions, nommer les membres de la famille.",
-      "Reconnaître les parties du corps, les formes et les couleurs ; prononcer les lettres de l'alphabet.",
+      "CB1/Saluer quelqu'un, compter les nombres d'un à douze, et lire les jours et les mois.",
+      "CB2/Poser des questions sur les objets de la classe et y répondre, exprimer des instructions en classe, et nommer les membres des familles.",
+      "CB3/Reconnaître les différentes parties du corps. Apprendre les formes et couleurs. Prononciation des lettres alphabétiques.",
     ],
   },
   {
@@ -177,9 +184,9 @@ const DOMAINES_POINTS_3EME: Domaine[] = [
     libelle: "Compétences de base : mathématiques",
     bareme: 40,
     lignes: [
-      "Numération : résoudre une situation mobilisant les trois opérations (+ ; − ; ×) avec des entiers de 0 à 999.",
-      "Géométrie : résoudre une situation-problème faisant appel à la représentation et à la construction d'une figure.",
-      "Mesure : résoudre une situation-problème de rangement et de classement d'événements dans le temps ou d'objets.",
+      "CB1/Numération: Résoudre une situation faisant intervenir les 3 opérations (+ ; – ; x) avec des nombres entiers de 0 à 999.",
+      "CB2/Géométrie: Résoudre une situation-problème faisant appel à la représentation et la construction d'une figure.",
+      "CB3/Mesure: Résoudre une situation-problème nécessitant le rangement et le classement d'événements dans le temps ou des objets.",
     ],
   },
   {
@@ -187,8 +194,8 @@ const DOMAINES_POINTS_3EME: Domaine[] = [
     libelle: "Compétences de base : histoire",
     bareme: 10,
     lignes: [
-      "Se repérer dans l'espace et utiliser un lexique historique pour lire une photo ou une frise chronologique.",
-      "Décrire une photo et répondre à des questions sur le fait, le lieu et la date ; comparer deux documents.",
+      "CB1 et 2/Se repérer dans l'espace et utiliser un lexique historique pour lire une photo ou frise chronologique…",
+      "CB3 et 4/Décrire une photo et répondre à des questions relatives au fait, lieu et date et comparer deux documents.",
     ],
   },
   {
@@ -196,8 +203,8 @@ const DOMAINES_POINTS_3EME: Domaine[] = [
     libelle: "Compétences de base : géographie",
     bareme: 10,
     lignes: [
-      "Se situer dans le temps et utiliser un lexique géographique pour lire un plan ou une carte.",
-      "Décrire un paysage, comprendre et analyser un document simple.",
+      "CB1 et 2/Se situer dans le temps et utiliser un lexique géographique pour lire un plan, une carte…",
+      "CB3 et 4/Décrire un paysage, comprendre et analyser un document simple.",
     ],
   },
   {
@@ -205,9 +212,9 @@ const DOMAINES_POINTS_3EME: Domaine[] = [
     libelle: "Compétences de base : sciences expérimentales",
     bareme: 20,
     lignes: [
-      "Identifier les os du squelette, les articulations et le rôle des muscles dans le mouvement.",
-      "Identifier les besoins alimentaires des animaux et des plantes et distinguer les étapes de leur développement.",
-      "Identifier les objets d'une collection type.",
+      "CB1/Identifier des os du squelette, les articulations et le rôle des muscles dans le mouvement.",
+      "CB2/Identifier les besoins alimentaires des animaux et des plantes dans leur milieu naturel et distinguer les étapes de leur développement.",
+      "CB3/Identifier les objets d'une collection type.",
     ],
   },
   {
@@ -215,8 +222,8 @@ const DOMAINES_POINTS_3EME: Domaine[] = [
     libelle: "Compétences de base : éducation morale, civique et islamique",
     bareme: 20,
     lignes: [
-      "Prendre soin de soi-même et obéir aux préceptes de l'islam.",
-      "Manifester un comportement libre et responsable.",
+      "CB1/Prendre soin de soi-même et obéir aux préceptes de l'Islam.",
+      "CB2/Manifester un comportement libre et responsable.",
     ],
   },
   {
@@ -224,8 +231,8 @@ const DOMAINES_POINTS_3EME: Domaine[] = [
     libelle: "Compétences de base : éducation manuelle et technique",
     bareme: 10,
     lignes: [
-      "Réaliser à partir de matériaux utiles une composition graphique décorative ou une représentation picturale simple.",
-      "Réaliser des objets, des personnages de son quotidien, de son environnement ou de son imagination.",
+      "CB1/Réaliser à partir de matériaux utiles ou de récupération une composition graphique décorative ou une représentation picturale simple.",
+      "CB2/Réaliser des objets, des personnages de son quotidien, de son environnement naturel ou culturel, ou de son imagination.",
     ],
   },
   {
@@ -233,8 +240,8 @@ const DOMAINES_POINTS_3EME: Domaine[] = [
     libelle: "Compétences de base : TICE",
     bareme: 10,
     lignes: [
-      "Identifier, décrire et distinguer les éléments d'une tablette.",
-      "Exploiter l'interface d'un logiciel éducatif.",
+      "CB1/Identifier, décrire et distinguer les éléments d'une tablette.",
+      "CB2/Exploiter l'interface de logiciel éducatif.",
     ],
   },
 ];
@@ -245,9 +252,10 @@ const DOMAINES_POINTS_4EME: Domaine[] = [
     libelle: "Compétences de base : français",
     bareme: 40,
     lignes: [
-      "Lecture : lire à haute voix un texte simple, niveaux 9 à 11, de manière fluide et expressive.",
-      "Production écrite : produire un texte de différents genres de 5 à 10 phrases.",
-      "Production orale : utiliser les moyens linguistiques pour produire un discours oral ou un dialogue. Outils de langue : notions lexicales, orthographiques et grammaticales.",
+      "CB1/Lecture: Lire à haute voix un texte simple, niveaux 9 à 11, de manière fluide et expressive.",
+      "CB2/Production écrite: Produire un texte de différents genres des types de 5 à 10 phrases.",
+      "CB3/Production orale: Utiliser les moyens linguistiques en vue de produire un discours oral ou un dialogue.",
+      "Outils de langue: Utiliser les notions lexicales, orthographiques et grammaticales étudiées.",
     ],
   },
   {
@@ -255,9 +263,9 @@ const DOMAINES_POINTS_4EME: Domaine[] = [
     libelle: "Compétences de base : arabe",
     bareme: 20,
     lignes: [
-      "Production orale : communiquer avec son entourage, participer à des dialogues et décrire des scènes familières.",
-      "Lecture : lire des mots, des phrases et des textes familiers, et répondre aux questions.",
-      "Production écrite : écrire des phrases complètes et cohérentes sur un sujet précis.",
+      "CB1/Production orale: Communiquer avec son entourage en participant à des dialogues et des conversations, et en décrivant des scènes familières.",
+      "CB2/Lecture: Lire des mots, des phrases et des textes familiers tout en comprenant le vocabulaire et en répondant aux questions à ce sujet.",
+      "CB3/Production écrite: Écrire des phrases complètes et cohérentes sur un sujet précis.",
     ],
   },
   {
@@ -265,9 +273,9 @@ const DOMAINES_POINTS_4EME: Domaine[] = [
     libelle: "Compétences de base : anglais",
     bareme: 20,
     lignes: [
-      "Nommer les parties de la maison, le vocabulaire de l'école et de la météo.",
-      "Nommer des animaux domestiques et sauvages ; compter jusqu'à 100.",
-      "Nommer différents emplois, distinguer les habitudes saines des malsaines, écrire une phrase.",
+      "CB1/Nommer les différentes parties de la maison, comprendre le vocabulaire de l'école et le vocabulaire de la météo.",
+      "CB2/Nommer des animaux domestiques et sauvages. Compter jusqu'à 100.",
+      "CB3/Nommer différents emplois, distinguer les habitudes saines des habitudes malsaines, et comprendre comment écrire une phrase.",
     ],
   },
   {
@@ -275,9 +283,9 @@ const DOMAINES_POINTS_4EME: Domaine[] = [
     libelle: "Compétences de base : mathématiques",
     bareme: 40,
     lignes: [
-      "Numération : résoudre des situations mobilisant les trois opérations et la division sur des entiers jusqu'à 999 999.",
-      "Géométrie : décrire ou reproduire des figures simples avec les instruments adéquats (règle, équerre, compas).",
-      "Mesure : évaluer et comparer des longueurs, des masses et des durées.",
+      "CB1/Numération: Résoudre des situations significatives mobilisant les 3 opérations (+ ; – ; x) et la division sur des nombres entiers à 999999.",
+      "CB2/Géométrie: Décrire ou reproduire des figures simples avec les instruments adéquats (règle, équerre et compas).",
+      "CB3/Mesure: Évaluer, comparer des mesures : longueurs, masses et durées.",
     ],
   },
   {
@@ -285,7 +293,7 @@ const DOMAINES_POINTS_4EME: Domaine[] = [
     libelle: "Compétences de base : histoire",
     bareme: 10,
     lignes: [
-      "Évoquer les repères chronologiques, de la préhistoire à la création de la ville de Djibouti.",
+      "CB/Évoquer les repères chronologiques de la préhistoire à la création de la ville de Djibouti.",
     ],
   },
   {
@@ -293,7 +301,7 @@ const DOMAINES_POINTS_4EME: Domaine[] = [
     libelle: "Compétences de base : géographie",
     bareme: 10,
     lignes: [
-      "Reconnaître les différents types de paysages (reliefs), leurs localisations et leurs descriptions.",
+      "CB/Reconnaître les différents types de paysages (reliefs), leurs localisations et leurs descriptions.",
     ],
   },
   {
@@ -301,9 +309,9 @@ const DOMAINES_POINTS_4EME: Domaine[] = [
     libelle: "Compétences de base : sciences expérimentales",
     bareme: 20,
     lignes: [
-      "Identifier les besoins alimentaires nécessaires à son organisme.",
-      "Identifier les caractéristiques physiques nécessaires à la croissance et au développement des plantes et des animaux.",
-      "Identifier les applications pratiques de quelques phénomènes physiques (électricité, magnétisme).",
+      "CB1/Identifier les besoins alimentaires nécessaires à son organisme.",
+      "CB2/Identifier les caractéristiques physiques nécessaires à la croissance et au développement des plantes et des animaux.",
+      "CB3/Identifier les applications pratiques de quelques phénomènes physiques (électricité, magnétisme).",
     ],
   },
   {
@@ -311,7 +319,7 @@ const DOMAINES_POINTS_4EME: Domaine[] = [
     libelle: "Compétences de base : éducation morale, civique et islamique",
     bareme: 20,
     lignes: [
-      "Connaître son histoire (école, famille, quartier), les valeurs de la République et les préceptes de l'islam.",
+      "CB/Connaître son histoire (école, famille, quartier…), les valeurs de la République et les préceptes de l'Islam.",
     ],
   },
   {
@@ -319,8 +327,8 @@ const DOMAINES_POINTS_4EME: Domaine[] = [
     libelle: "Compétences de base : éducation manuelle et technique",
     bareme: 10,
     lignes: [
-      "À partir d'une observation, représenter le réel par une reproduction bi ou tridimensionnelle.",
-      "Raconter par l'image un événement simple de son environnement.",
+      "CB1/À partir d'une observation représenter le réel par la réalisation d'une reproduction bi ou tridimensionnelle.",
+      "CB2/Raconter par l'image un événement simple de son environnement.",
     ],
   },
   {
@@ -328,7 +336,7 @@ const DOMAINES_POINTS_4EME: Domaine[] = [
     libelle: "Compétences de base : TICE",
     bareme: 10,
     lignes: [
-      "Utiliser un conjugueur et d'autres applications (interdisciplinarité) ; utiliser la robotique codée (basic).",
+      "CB/Utiliser le conjugueur et autres applications (interdisciplinarité). Utiliser la robotique codée (basic).",
     ],
   },
 ];
@@ -339,9 +347,11 @@ const DOMAINES_POINTS_5EME: Domaine[] = [
     libelle: "Compétences de base : français",
     bareme: 40,
     lignes: [
-      "Lecture : comprendre des textes de différents types en mobilisant des stratégies de compréhension littérale et différentielle ; lire à haute voix un texte de niveau adapté.",
-      "Production écrite : rédiger un écrit d'une dizaine de phrases en respectant la ponctuation et la structure.",
-      "Production orale : participer à des échanges interactifs dans des situations de communication variées. Outils de langue : notions lexicales, orthographiques et grammaticales.",
+      "CB1/Lecture: Comprendre des textes de différents types en mobilisant les stratégies qui visent une compréhension littérale et différentielle.",
+      "CB1/Lire à haute voix un texte de niveau 4, de manière fluide et expressive.",
+      "CB2/Production écrite: Rédiger un écrit d'une dizaine de phrases en respectant les règles de ponctuation et la structure.",
+      "CB3/Production orale: Participer à des échanges interactifs dans des structures de communication variées.",
+      "Outils de langue: Utiliser les notions lexicales, orthographiques et grammaticales étudiées.",
     ],
   },
   {
@@ -349,9 +359,9 @@ const DOMAINES_POINTS_5EME: Domaine[] = [
     libelle: "Compétences de base : arabe",
     bareme: 20,
     lignes: [
-      "Communiquer oralement et répondre sur un sujet étudié.",
-      "Lire un texte familier et répondre aux questions en repérant les informations clés.",
-      "Produire des phrases cohérentes sur un sujet familier et précis.",
+      "CB1/Communiquer oralement et fournir oralement sur un sujet étudié.",
+      "CB2/Lire un texte familier et répondre aux questions en comprenant les informations clés qu'ils contiennent.",
+      "CB3/Produire des phrases cohérentes sur un sujet familier et spécifique.",
     ],
   },
   {
@@ -359,9 +369,9 @@ const DOMAINES_POINTS_5EME: Domaine[] = [
     libelle: "Compétences de base : anglais",
     bareme: 20,
     lignes: [
-      "Parler des objets, dire ce que sont les choses et ce que font les gens.",
-      "Parler d'habitudes saines, des transports publics et donner des indications.",
-      "Décrire la routine quotidienne, parler des saisons et du temps.",
+      "CB1/Parler des objets et dire ce que sont les choses, et dire ce que font les gens.",
+      "CB2/Parler d'habitudes saines, parler des transports publics et donner des indications.",
+      "CB3/Décrire la routine quotidienne, parler des saisons et du temps.",
     ],
   },
   {
@@ -369,9 +379,9 @@ const DOMAINES_POINTS_5EME: Domaine[] = [
     libelle: "Compétences de base : mathématiques",
     bareme: 40,
     lignes: [
-      "Numération : traiter des situations numériques s'appuyant sur les opérations et leurs techniques de calcul.",
-      "Géométrie : traiter des situations de construction et de transformation de formes géométriques dans le plan et l'espace.",
-      "Mesure : traiter des situations de grandeurs, de gestion de données et de représentations (masses, angles, durées).",
+      "CB1/Numération: Traiter des situations nécessitant un travail numérique s'appuyant sur des opérations et leurs techniques de calcul sous différentes formes.",
+      "CB2/Géométrie: Traiter des situations nécessitant un travail sur la construction et la transformation de formes géométriques dans les plans de l'espace, tout en développant des raisonnements.",
+      "CB3/Mesure: Traiter des situations nécessitant un travail sur la grandeur, la gestion des données et leurs représentations de masses, des angles et des durées.",
     ],
   },
   {
@@ -379,8 +389,8 @@ const DOMAINES_POINTS_5EME: Domaine[] = [
     libelle: "Compétences de base : histoire",
     bareme: 10,
     lignes: [
-      "Réinvestir les repères historiques et utiliser le lexique adéquat pour lire une photographie ou une frise chronologique.",
-      "Lire, comparer et analyser des documents historiques.",
+      "CB1&2/ Réinvestir les repères historiques dans différents contextes et utiliser le lexique adéquat pour lire une photographie, frise chronologique…",
+      "CB3&2/ Lire, comparer et analyser des documents historiques.",
     ],
   },
   {
@@ -388,8 +398,8 @@ const DOMAINES_POINTS_5EME: Domaine[] = [
     libelle: "Compétences de base : géographie",
     bareme: 10,
     lignes: [
-      "Situer des lieux et des espaces les uns par rapport aux autres en utilisant la notion d'échelle géographique.",
-      "Lire, décrire, comparer et analyser des documents géographiques.",
+      "CB1&2/ Situer des lieux et des espaces les uns par rapport aux autres en appréhendant la notion d'échelle géographique tout en utilisant le lexique adéquat.",
+      "CB3&4/ Lire, décrire, comparer et analyser des documents géographiques.",
     ],
   },
   {
@@ -397,9 +407,9 @@ const DOMAINES_POINTS_5EME: Domaine[] = [
     libelle: "Compétences de base : sciences expérimentales",
     bareme: 20,
     lignes: [
-      "Comprendre le fonctionnement des appareils digestif, respiratoire et circulatoire.",
-      "Déterminer les effets des déséquilibres induits par l'homme sur le mode de vie des animaux et des végétaux.",
-      "Identifier les phénomènes physiques (l'air, les combustions, l'énergie) en veillant à la sécurité.",
+      "CB1/Comprendre le fonctionnement des appareils : digestif, respiratoire et circulatoire.",
+      "CB2/Déterminer les effets des déséquilibres produits par l'homme sur le mode de vie des animaux et des végétaux.",
+      "CB3/Identifier les phénomènes physiques (l'air, les combustions et l'énergie) en veillant à la sécurité et aux dangers de leur utilisation.",
     ],
   },
   {
@@ -407,7 +417,7 @@ const DOMAINES_POINTS_5EME: Domaine[] = [
     libelle: "Compétences de base : éducation morale, civique et islamique",
     bareme: 20,
     lignes: [
-      "Développer des valeurs de respect, de tolérance et de gestion des émotions.",
+      "CB/Développer des valeurs relatives au respect, à la tolérance et à la gestion des émotions.",
     ],
   },
   {
@@ -415,8 +425,8 @@ const DOMAINES_POINTS_5EME: Domaine[] = [
     libelle: "Compétences de base : éducation manuelle et technique",
     bareme: 10,
     lignes: [
-      "Interpréter une image, un événement ou une histoire simple de son environnement quotidien.",
-      "Réaliser une production reflétant sa propre interprétation à partir d'un support donné.",
+      "CB1/Interpréter une image (fixe ou mobile), un événement, ou une simple histoire de son environnement quotidien.",
+      "CB2/Réaliser une production reflétant sa propre interprétation à partir d'un support donné.",
     ],
   },
   {
@@ -424,8 +434,8 @@ const DOMAINES_POINTS_5EME: Domaine[] = [
     libelle: "Compétences de base : TICE",
     bareme: 10,
     lignes: [
-      "Utiliser des applications diverses.",
-      "Initier les élèves à la robotique codée (basic).",
+      "CB1/Utiliser des applications diverses.",
+      "CB2/Initier les élèves à la robotique codée (basic).",
     ],
   },
 ];

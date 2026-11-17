@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { checkPermission } from "@/lib/rbac";
 import { CARNETS, NIVEAUX_CARNET, estNiveauCarnet } from "@/lib/carnet-primaire/referentiel";
 import { definitionEffective, validerDomaines } from "@/lib/carnet-primaire/configuration";
+import { siteFilterForModel } from "@/lib/site-scope";
 
 /** Les cinq niveaux avec leur définition effective et le modèle par défaut. */
 export async function GET() {
@@ -33,7 +34,14 @@ export async function GET() {
         personnalise: personnalisee != null && validerDomaines(niveau, personnalisee).ok,
       };
     });
-    return NextResponse.json({ niveaux });
+
+    // Matières proposables pour relier un domaine à ses notes (le carnet les filtre par niveau).
+    const matieres = await prisma.matiere.findMany({
+      where: { tenantId: session.user.tenantId, ...siteFilterForModel("matiere", session.user) },
+      select: { id: true, nom: true, niveau: true },
+      orderBy: { nom: "asc" },
+    });
+    return NextResponse.json({ niveaux, matieres });
   } catch (err) {
     console.error("[carnets-primaires/configuration GET]", err);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });

@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, Printer, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
 import { openPrintWindow } from "@/lib/print-window";
+import { fusionnerSaisie } from "@/lib/carnet-primaire/calcul-auto";
+import { CarnetFeuille } from "./CarnetFeuille";
+import { ajusterCarnetUnePage } from "@/lib/carnet-primaire/ajuster-page";
 import {
   CARNETS,
   MODULES,
@@ -16,10 +18,6 @@ import {
   type NiveauCarnet,
 } from "@/lib/carnet-primaire/referentiel";
 import {
-  cleCompetence,
-  degreMaitrise,
-  moyenneAnnuelle,
-  noteModule,
   type Evaluation,
   type SaisieCarnet,
   type SaisieModule,
@@ -40,61 +38,85 @@ interface Props {
   eleves: EleveClasse[];
 }
 
-const EVALUATIONS: Evaluation[] = ["A", "EVA", "NA"];
-
 const DECISIONS = ["Passe en classe supérieure", "Redouble", "Passe sous réserve"];
 
 export function CarnetEditor({ classeNom, niveau, annee, eleves }: Props) {
   // Modèle par défaut le temps du chargement ; remplacé par la définition du tenant (personnalisée ou non).
   const [definition, setDefinition] = useState<CarnetDef>(CARNETS[niveau]);
   const [eleveId, setEleveId] = useState(eleves[0]?.id ?? "");
-  const [module, setModule] = useState<Module>(1);
+  // `saisie` : ce que l'enseignant a saisi à la main. `auto` : valeurs déduites des
+  // évaluations et devoirs du module Notes ; la saisie manuelle les remplace.
   const [saisie, setSaisie] = useState<SaisieCarnet>({});
+  const [auto, setAuto] = useState<SaisieCarnet>({});
   const [appreciations, setAppreciations] = useState("");
   const [decision, setDecision] = useState("");
   const [chargement, setChargement] = useState(false);
   const [enregistrement, setEnregistrement] = useState(false);
   const [modifie, setModifie] = useState(false);
 
-  // Un changement de classe remplace la liste d'élèves : on se repositionne sur le premier.
+  // Un changement de classe remplace la liste d'élèves : on se repositionne sur le premier,
+  // mais seulement si l'élève choisi n'en fait plus partie (un simple nouveau rendu du
+  // parent ne doit pas annuler le choix de l'utilisateur).
   useEffect(() => {
-    setEleveId(eleves[0]?.id ?? "");
+    setEleveId((courant) => (eleves.some((e) => e.id === courant) ? courant : (eleves[0]?.id ?? "")));
   }, [eleves]);
 
-  const charger = useCallback(async () => {
+  // Une réponse arrivée après un changement d'élève (ou d'année) est ignorée : sans cela,
+  // la requête de l'élève précédent, plus lente, écraserait les données de l'élève affiché.
+  useEffect(() => {
     if (!eleveId || !annee) return;
+    let obsolete = false;
     setChargement(true);
-    try {
-      const res = await fetch(`/api/carnets-primaires?eleveId=${eleveId}&annee=${annee}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Erreur de chargement");
-      if (data.definition) setDefinition(data.definition);
-      setSaisie(data.saisie ?? {});
-      setAppreciations(data.appreciations ?? "");
-      setDecision(data.decision ?? "");
-      setModifie(false);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur de chargement");
-    } finally {
-      setChargement(false);
-    }
+    (async () => {
+      try {
+        const res = await fetch(`/api/carnets-primaires?eleveId=${eleveId}&annee=${annee}`);
+        const data = await res.json();
+        if (obsolete) return;
+        if (!res.ok) throw new Error(data.error ?? "Erreur de chargement");
+        if (data.definition) setDefinition(data.definition);
+        setSaisie(data.saisie ?? {});
+        setAuto(data.auto ?? {});
+        setAppreciations(data.appreciations ?? "");
+        setDecision(data.decision ?? "");
+        setModifie(false);
+      } catch (e) {
+        if (!obsolete) toast.error(e instanceof Error ? e.message : "Erreur de chargement");
+      } finally {
+        if (!obsolete) setChargement(false);
+      }
+    })();
+    return () => {
+      obsolete = true;
+    };
   }, [eleveId, annee]);
 
-  useEffect(() => {
-    void charger();
-  }, [charger]);
+  const effectif = useMemo(() => fusionnerSaisie(auto, saisie), [auto, saisie]);
+  const aSaisieManuelle = (m: Module) => {
+    const s: SaisieModule = saisie[`${m}`] ?? {};
+    return (
+      Object.keys(s.competences ?? {}).length > 0 ||
+      Object.keys(s.domaines ?? {}).length > 0 ||
+      typeof s.note === "number"
+    );
+  };
+  const aValeursAuto = (m: Module) => {
+    const a: SaisieModule = auto[`${m}`] ?? {};
+    return (
+      Object.keys(a.competences ?? {}).length > 0 ||
+      Object.keys(a.domaines ?? {}).length > 0 ||
+      typeof a.note === "number"
+    );
+  };
+  const modulesAuto = MODULES.filter(aValeursAuto);
+  const modulesARecalculer = MODULES.filter((m) => aSaisieManuelle(m) && aValeursAuto(m));
 
-  const saisieModule: SaisieModule = saisie[`${module}`] ?? {};
-  const noteCourante = noteModule(definition, saisieModule);
-  const moyenne = useMemo(() => moyenneAnnuelle(definition, saisie), [definition, saisie]);
-
-  function majModule(maj: (courant: SaisieModule) => SaisieModule) {
-    setSaisie((prev) => ({ ...prev, [`${module}`]: maj(prev[`${module}`] ?? {}) }));
+  function majModule(m: Module, maj: (courant: SaisieModule) => SaisieModule) {
+    setSaisie((prev) => ({ ...prev, [`${m}`]: maj(prev[`${m}`] ?? {}) }));
     setModifie(true);
   }
 
-  function choisirEvaluation(cle: string, valeur: Evaluation) {
-    majModule((courant) => {
+  function choisirEvaluation(m: Module, cle: string, valeur: Evaluation) {
+    majModule(m, (courant) => {
       const competences = { ...(courant.competences ?? {}) };
       if (competences[cle] === valeur) delete competences[cle];
       else competences[cle] = valeur;
@@ -102,8 +124,8 @@ export function CarnetEditor({ classeNom, niveau, annee, eleves }: Props) {
     });
   }
 
-  function saisirPoints(code: string, texte: string) {
-    majModule((courant) => {
+  function saisirPoints(m: Module, code: string, texte: string) {
+    majModule(m, (courant) => {
       const domaines = { ...(courant.domaines ?? {}) };
       if (texte === "") delete domaines[code];
       else domaines[code] = Number(texte.replace(",", "."));
@@ -111,8 +133,17 @@ export function CarnetEditor({ classeNom, niveau, annee, eleves }: Props) {
     });
   }
 
-  function saisirNote(texte: string) {
-    majModule((courant) => ({ ...courant, note: texte === "" ? null : Number(texte.replace(",", ".")) }));
+  function saisirNote(m: Module, texte: string) {
+    majModule(m, (courant) => ({ ...courant, note: texte === "" ? null : Number(texte.replace(",", ".")) }));
+  }
+
+  function revenirAuCalcul(m: Module) {
+    setSaisie((prev) => {
+      const suivant = { ...prev };
+      delete suivant[`${m}`];
+      return suivant;
+    });
+    setModifie(true);
   }
 
   async function enregistrer(): Promise<boolean> {
@@ -144,7 +175,7 @@ export function CarnetEditor({ classeNom, niveau, annee, eleves }: Props) {
       const res = await fetch(`/api/carnets-primaires?eleveId=${eleveId}&annee=${annee}&format=html`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erreur d'impression");
-      if (!openPrintWindow(data.html)) toast.error("La fenêtre d'impression a été bloquée par le navigateur");
+      if (!openPrintWindow(data.html, ajusterCarnetUnePage)) toast.error("La fenêtre d'impression a été bloquée par le navigateur");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erreur d'impression");
     }
@@ -204,107 +235,32 @@ export function CarnetEditor({ classeNom, niveau, annee, eleves }: Props) {
                   </option>
                 ))}
               </select>
-              <div className="flex gap-1">
-                {MODULES.map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setModule(m)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                      module === m ? "bg-primary text-white" : "bg-muted hover:bg-muted/70"
-                    )}
-                  >
-                    Module {m}
-                  </button>
-                ))}
-              </div>
               {chargement && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
             </div>
 
-            <div className="space-y-4">
-              {definition.domaines.map((domaine) => (
-                <div key={domaine.code} className="rounded-lg border">
-                  <div className="flex items-center justify-between bg-muted/50 px-3 py-2">
-                    <p className="text-sm font-semibold">{domaine.libelle}</p>
-                    {definition.format === "points" && (
-                      <div className="flex items-center gap-1 text-sm">
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          min={0}
-                          max={domaine.bareme}
-                          step="0.25"
-                          value={saisieModule.domaines?.[domaine.code] ?? ""}
-                          onChange={(e) => saisirPoints(domaine.code, e.target.value)}
-                          className="h-8 w-20 rounded-md border border-input bg-background px-2 text-right"
-                          aria-label={`Note ${domaine.libelle}`}
-                        />
-                        <span className="text-muted-foreground">/ {domaine.bareme}</span>
-                      </div>
-                    )}
-                  </div>
-                  <ul className="divide-y">
-                    {domaine.lignes.map((ligne, index) => {
-                      const cle = cleCompetence(domaine, index);
-                      const valeur = saisieModule.competences?.[cle];
-                      return (
-                        <li key={cle} className="flex items-center justify-between gap-3 px-3 py-2">
-                          <span className="text-xs text-muted-foreground">{ligne}</span>
-                          {definition.format === "competences" && (
-                            <div className="flex gap-1 shrink-0">
-                              {EVALUATIONS.map((ev) => (
-                                <button
-                                  key={ev}
-                                  onClick={() => choisirEvaluation(cle, ev)}
-                                  aria-pressed={valeur === ev}
-                                  className={cn(
-                                    "w-11 rounded-md border px-2 py-1 text-xs font-medium",
-                                    valeur === ev
-                                      ? ev === "A"
-                                        ? "bg-green-600 text-white border-green-600"
-                                        : ev === "EVA"
-                                          ? "bg-amber-500 text-white border-amber-500"
-                                          : "bg-red-600 text-white border-red-600"
-                                      : "hover:bg-muted"
-                                  )}
-                                >
-                                  {ev}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ))}
-            </div>
+            <CarnetFeuille
+              niveau={niveau}
+              definition={definition}
+              saisie={saisie}
+              auto={auto}
+              effectif={effectif}
+              onEvaluation={choisirEvaluation}
+              onPoints={saisirPoints}
+              onNote={saisirNote}
+            />
 
-            <div className="flex flex-wrap items-center gap-6 rounded-lg bg-muted/40 px-4 py-3 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">Note du module {module} sur 10</span>
-                {definition.format === "competences" ? (
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    max={10}
-                    step="0.25"
-                    value={saisieModule.note ?? ""}
-                    onChange={(e) => saisirNote(e.target.value)}
-                    className="h-8 w-20 rounded-md border border-input bg-background px-2 text-right"
-                    aria-label="Note du module sur 10"
-                  />
-                ) : (
-                  <strong>{noteCourante === null ? "—" : noteCourante}</strong>
-                )}
-              </div>
-              <div>
-                Degré de maîtrise : <strong>{noteCourante === null ? "—" : degreMaitrise(noteCourante)}</strong>
-              </div>
-              <div>
-                Moyenne annuelle : <strong>{moyenne === null ? "—" : moyenne}</strong>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+              <p>
+                {modulesAuto.length > 0
+                  ? "Valeurs proposées d'après les évaluations et devoirs saisis dans Notes (traits pointillés) ; modifiez-les pour les remplacer."
+                  : "Aucune évaluation n'alimente ce carnet : saisissez les valeurs, ou rattachez des évaluations aux modules dans Évaluations."}
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {modulesARecalculer.map((m) => (
+                  <Button key={m} variant="ghost" size="sm" onClick={() => revenirAuCalcul(m)}>
+                    Module {m} : revenir au calcul automatique
+                  </Button>
+                ))}
               </div>
             </div>
 

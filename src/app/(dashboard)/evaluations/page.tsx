@@ -20,6 +20,10 @@ import { getSiteColorMap } from "@/lib/site-colors";
 import type { Role } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { niveauToLabel } from "@/lib/niveau";
+import { chargerDefinitions } from "@/lib/carnet-primaire/charger-definition";
+import { estNiveauCarnet } from "@/lib/carnet-primaire/referentiel";
+import { roleHasPermission } from "@/lib/rbac";
+import { ModuleCarnetSelect } from "@/components/evaluations/ModuleCarnetSelect";
 
 export const metadata = {
   title: "Liste des examens | École Miriam",
@@ -107,7 +111,7 @@ export default async function EvaluationsPage(
          
         tx.classe.findMany({
           where: classeWhere,
-          select: { id: true, nom: true },
+          select: { id: true, nom: true, niveau: true },
         }),
          
         tx.matiere.findMany({
@@ -119,6 +123,11 @@ export default async function EvaluationsPage(
       ]);
     }
   );
+
+  // Modèle du carnet de chaque niveau (personnalisé par la direction ou par défaut) :
+  // le formulaire en tire le domaine et les compétences de la matière choisie.
+  const carnets = await chargerDefinitions(tenantId);
+  const peutRattacher = roleHasPermission(session.user.role as Role, "evaluations:write");
 
   function getTypeColor(type: string) {
     switch (type) {
@@ -151,7 +160,7 @@ export default async function EvaluationsPage(
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">{t("title")}</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">{t("subtitle")}</p>
         </div>
-        <CreateEvaluationForm classes={classes} matieres={matieres} periodes={periodes} userRole={session.user.role} />
+        <CreateEvaluationForm classes={classes} matieres={matieres} periodes={periodes} carnets={carnets} userRole={session.user.role} />
       </div>
 
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border overflow-hidden">
@@ -176,7 +185,18 @@ export default async function EvaluationsPage(
             <tbody className="divide-y">
               {evaluations.map((ev, idx) => (
                 <tr key={ev.id} className={idx % 2 === 0 ? "bg-white dark:bg-gray-900" : "bg-gray-50/50 dark:bg-gray-800/50"}>
-                  <td className="px-4 py-3 font-bold text-gray-800 dark:text-gray-100">{ev.titre}</td>
+                  <td className="px-4 py-3 font-bold text-gray-800 dark:text-gray-100">
+                    {ev.titre}
+                    {estNiveauCarnet(ev.classe.niveau) && (
+                      <div>
+                        {peutRattacher ? (
+                          <ModuleCarnetSelect evaluationId={ev.id} moduleCarnet={ev.moduleCarnet} />
+                        ) : (
+                          ev.moduleCarnet !== null && <span className="text-xs font-normal text-gray-500">Carnet · module {ev.moduleCarnet}</span>
+                        )}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{ev.classe.nom}</td>
                   <td className="px-4 py-3">
                     <Badge className="bg-orange-500 hover:bg-orange-600">{ev.classe.niveau ? niveauToLabel(ev.classe.niveau) : "Collège"}</Badge>

@@ -1132,6 +1132,12 @@ model Evaluation {
   description String?
   statut      String   @default("PLANIFIE") // PLANIFIE, TERMINE
 
+  // Carnet du primaire (1ère à 5ème année) : module visé (1 à 4) et, au format
+  // compétences, ligne visée dans le domaine de la matière (null = tout le domaine).
+  // Une évaluation sans moduleCarnet n'alimente pas le carnet.
+  moduleCarnet Int?
+  ligneCarnet  Int?
+
   notes Note[]
   devoirs Devoir[]
 

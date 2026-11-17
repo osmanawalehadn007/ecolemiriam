@@ -19,15 +19,20 @@
  * chargées (ou en erreur), puis appelle `print()`.
  *
  * @param html Le HTML complet du document à imprimer.
+ * @param ajuster Mise en page à refaire une fois le document affiché, puis juste
+ *   avant l'impression (images chargées) : sert à faire tenir un document sur une
+ *   page. Elle s'exécute avec le code de l'application, pas dans le HTML écrit :
+ *   la CSP de la fenêtre n'autorise pas un script en ligne sans nonce.
  * @returns `true` si la fenêtre a pu être ouverte, `false` sinon (popup bloquée).
  */
-export function openPrintWindow(html: string): boolean {
+export function openPrintWindow(html: string, ajuster?: (doc: Document) => void): boolean {
   const w = window.open("", "_blank");
   if (!w) return false;
 
   w.document.write(html);
   w.document.close();
   w.focus();
+  ajuster?.(w.document);
 
   // Attend le chargement de toutes les images avant d'imprimer.
   // `document.close()` déclenche le parsing ; les <img> commencent à se
@@ -40,6 +45,10 @@ export function openPrintWindow(html: string): boolean {
     w.print();
     return true;
   }
+  const imprimer = () => {
+    ajuster?.(w.document);
+    w.print();
+  };
 
   const settled = images.map(
     (img) =>
@@ -58,7 +67,7 @@ export function openPrintWindow(html: string): boolean {
   // on imprime quand même après 3 s plutôt que de bloquer l'utilisateur.
   const fallback = new Promise<void>((resolve) => setTimeout(resolve, 3000));
 
-  Promise.race([Promise.all(settled), fallback]).then(() => w.print());
+  Promise.race([Promise.all(settled), fallback]).then(imprimer);
 
   return true;
 }

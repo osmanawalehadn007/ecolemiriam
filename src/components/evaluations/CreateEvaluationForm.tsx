@@ -12,21 +12,37 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { hasPermission } from "@/lib/client-permissions";
+import { MODULES, estNiveauCarnet, type CarnetDef, type NiveauCarnet } from "@/lib/carnet-primaire/referentiel";
+import { domaineDeMatiere } from "@/lib/carnet-primaire/correspondance";
 
 interface Props {
-  classes: { id: string; nom: string }[];
+  classes: { id: string; nom: string; niveau?: string }[];
   matieres: { id: string; nom: string }[];
   periodes: { id: string; nom: string }[];
+  /** Modèle du carnet de chaque niveau du primaire, pour proposer module et compétence. */
+  carnets?: Record<NiveauCarnet, CarnetDef>;
   userRole?: string;
 }
 
-export function CreateEvaluationForm({ classes, matieres, periodes, userRole }: Props) {
+export function CreateEvaluationForm({ classes, matieres, periodes, carnets, userRole }: Props) {
   const t = useTranslations("evaluations");
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [classeId, setClasseId] = useState("");
+  const [matiereId, setMatiereId] = useState("");
+  const [moduleCarnet, setModuleCarnet] = useState("");
+  const [ligneCarnet, setLigneCarnet] = useState("all");
   const router = useRouter();
   const canWrite = hasPermission(userRole, "evaluations:write");
   if (!canWrite) return null;
+
+  // Classe du primaire : l'évaluation peut alimenter le carnet (module + compétence visée).
+  const niveauClasse = classes.find((c) => c.id === classeId)?.niveau ?? "";
+  const definition = carnets && estNiveauCarnet(niveauClasse) ? carnets[niveauClasse] : null;
+  const matiere = matieres.find((m) => m.id === matiereId);
+  const codeDomaine = definition && matiere ? domaineDeMatiere(definition, matiere) : null;
+  const domaine = definition?.domaines.find((d) => d.code === codeDomaine);
+  const surLigne = definition?.format === "competences" && !!domaine && moduleCarnet !== "" && moduleCarnet !== "none";
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -48,6 +64,8 @@ export function CreateEvaluationForm({ classes, matieres, periodes, userRole }: 
             duree: Number(data.duree),
             coefficient: Number(data.coefficient),
             description: data.description,
+            moduleCarnet: definition && moduleCarnet !== "" && moduleCarnet !== "none" ? Number(moduleCarnet) : null,
+            ligneCarnet: surLigne && ligneCarnet !== "all" ? Number(ligneCarnet) : null,
           }),
         });
 
@@ -58,6 +76,8 @@ export function CreateEvaluationForm({ classes, matieres, periodes, userRole }: 
 
         toast.success(t("createSuccess"));
         setOpen(false);
+        setModuleCarnet("");
+        setLigneCarnet("all");
         router.refresh();
       } catch (error: any) {
         toast.error(error.message);
@@ -74,7 +94,7 @@ export function CreateEvaluationForm({ classes, matieres, periodes, userRole }: 
         </Button>
       </DialogTrigger>
       <DialogContent
-        className="max-w-2xl bg-background border-none shadow-2xl rounded-xl"
+        className="max-w-2xl max-h-[90vh] overflow-y-auto bg-background border-none shadow-2xl rounded-xl"
         onEscapeKeyDown={(e) => e.preventDefault()}
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
@@ -111,7 +131,7 @@ export function CreateEvaluationForm({ classes, matieres, periodes, userRole }: 
 
               <div className="space-y-2">
                 <Label htmlFor="classeId" className="text-red-500 font-medium">{t("class")}</Label>
-                <Select name="classeId" required>
+                <Select name="classeId" required onValueChange={(v) => { setClasseId(v); setModuleCarnet(""); setLigneCarnet("all"); }}>
                   <SelectTrigger className="bg-background"><SelectValue placeholder={t("selectClass")} /></SelectTrigger>
                   <SelectContent>
                     {classes.map(c => <SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>)}
@@ -120,7 +140,7 @@ export function CreateEvaluationForm({ classes, matieres, periodes, userRole }: 
               </div>
               <div className="space-y-2">
                 <Label htmlFor="matiereId" className="text-red-500 font-medium">{t("subject")}</Label>
-                <Select name="matiereId" required>
+                <Select name="matiereId" required onValueChange={(v) => { setMatiereId(v); setLigneCarnet("all"); }}>
                   <SelectTrigger className="bg-background"><SelectValue placeholder={t("selectSubject")} /></SelectTrigger>
                   <SelectContent>
                     {matieres.map(m => <SelectItem key={m.id} value={m.id}>{m.nom}</SelectItem>)}
@@ -154,6 +174,55 @@ export function CreateEvaluationForm({ classes, matieres, periodes, userRole }: 
               </div>
             </div>
           </div>
+
+          {definition && (
+            <div className="bg-emerald-50/60 dark:bg-emerald-950/20 p-4 rounded-lg border border-emerald-200 dark:border-emerald-900 space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-emerald-800 dark:text-emerald-400">Carnet du primaire</h3>
+                <p className="text-xs text-muted-foreground">
+                  Les notes de cette évaluation (contrôle, devoir, examen…) alimentent automatiquement le carnet de l&apos;élève.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="moduleCarnet" className="text-red-500 font-medium">Module du carnet</Label>
+                  <select
+                    id="moduleCarnet"
+                    required
+                    value={moduleCarnet}
+                    onChange={(e) => setModuleCarnet(e.target.value)}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="" disabled>Choisir…</option>
+                    {MODULES.map((m) => <option key={m} value={m}>Module {m}</option>)}
+                    <option value="none">Ne pas utiliser dans le carnet</option>
+                  </select>
+                </div>
+                {surLigne && domaine && (
+                  <div className="space-y-2">
+                    <Label htmlFor="ligneCarnet">Compétence visée</Label>
+                    <select
+                      id="ligneCarnet"
+                      value={ligneCarnet}
+                      onChange={(e) => setLigneCarnet(e.target.value)}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="all">Tout le domaine « {domaine.libelle} »</option>
+                      {domaine.lignes.map((ligne, i) => (
+                        <option key={i} value={i}>C{i + 1} — {ligne.length > 60 ? `${ligne.slice(0, 60)}…` : ligne}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              {matiere && !domaine && moduleCarnet !== "none" && (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  La matière « {matiere.nom} » n&apos;est reliée à aucun domaine du carnet : ses notes n&apos;y apparaîtront pas.
+                  Reliez-la dans Paramètres › Pédagogie › Carnets du primaire.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="description">{t("description")}</Label>

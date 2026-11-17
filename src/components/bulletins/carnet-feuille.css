@@ -1,0 +1,72 @@
+/*
+ * Écran de saisie du carnet du primaire : mêmes tableaux, couleurs et intitulés
+ * que le carnet imprimé (src/lib/carnet-primaire/html.ts), à l'échelle de l'écran.
+ */
+.carnet-ecran { font-family: Tahoma, "Trebuchet MS", Verdana, sans-serif; color: #111; --cf-ev: 30px; }
+.carnet-ecran * { box-sizing: border-box; }
+
+.carnet-ecran .cf-colonnes { display: grid; grid-template-columns: repeat(auto-fit, minmax(580px, 1fr)); gap: 24px; align-items: start; }
+.carnet-ecran .cf-colonne-unique { max-width: 760px; margin: 0 auto; }
+.carnet-ecran .cf-defilement { overflow-x: auto; padding-bottom: 4px; }
+
+.carnet-ecran table.cf-domaine { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 14px; border: 1px solid #333; background: #fff; }
+.carnet-ecran table.cf-domaine th,
+.carnet-ecran table.cf-domaine td { border: 1px solid #333; }
+.carnet-ecran .cf-titre { text-align: left; font: bold 14px Tahoma, sans-serif; padding: 5px 6px; color: #1f1f1f; }
+.carnet-ecran .cf-pastille { display: inline-block; width: 13px; height: 13px; border-radius: 50%; background: #fff; margin-right: 5px; vertical-align: -2px; }
+
+/* Format A / EVA / NA */
+.carnet-ecran col.cf-c-lib { width: 220px; }
+.carnet-ecran col.cf-c-ev { width: var(--cf-ev); }
+.carnet-ecran tr.cf-modules .cf-vide { background: #fff; border: 0; border-bottom: 1px solid #333; }
+.carnet-ecran tr.cf-modules th { background: #00937d; color: #fff; font: bold 12px Tahoma, sans-serif; padding: 5px 4px; border-left: 3px solid #c0c0c0; text-align: left; }
+.carnet-ecran tr.cf-evals th { background: #ffff00; font: bold 10px Tahoma, sans-serif; padding: 3px 0; text-align: center; }
+.carnet-ecran tr.cf-evals .cf-fond-lignes { height: 22px; }
+.carnet-ecran td.cf-lib { font: 12px Tahoma, sans-serif; padding: 5px 7px; vertical-align: middle; line-height: 1.35; }
+.carnet-ecran td.cf-lib.cf-gras { font-weight: 700; }
+.carnet-ecran .cf-puce { font-size: 8px; vertical-align: 1px; }
+.carnet-ecran td.cf-ev { height: 44px; text-align: center; padding: 0; }
+.carnet-ecran td.cf-ev.cf-debut { border-left: 3px solid #c0c0c0; }
+.carnet-ecran button.cf-case { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; min-height: 44px; border: 0; background: transparent; cursor: pointer;
+  font-size: 18px; color: #000; padding: 0; }
+.carnet-ecran button.cf-case:hover { background: rgba(0, 0, 0, .07); }
+.carnet-ecran button.cf-case:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
+.carnet-ecran button.cf-case[data-valeur="A"] { background: #e3f4e1; }
+.carnet-ecran button.cf-case[data-valeur="EVA"] { background: #fff1c2; }
+.carnet-ecran button.cf-case[data-valeur="NA"] { background: #fbdcdc; }
+.carnet-ecran button.cf-case[data-auto="true"] { box-shadow: inset 0 0 0 2px rgba(0, 0, 0, .35); border-style: dashed; }
+
+/* Format points */
+.carnet-ecran table.cf-points col.cf-p-pts { width: 74px; }
+.carnet-ecran table.cf-points .cf-modules-points .cf-vide { border: 0; background: #fff; }
+.carnet-ecran table.cf-points .cf-modules-points th { background: #ffff00; font: bold 11px Tahoma, sans-serif; padding: 5px 0; }
+.carnet-ecran table.cf-points td.cf-lib { font-size: 12px; padding: 6px 8px; line-height: 1.4; font-weight: 400; }
+.carnet-ecran table.cf-points td.cf-lib b { font-weight: 700; }
+.carnet-ecran td.cf-pts { text-align: center; padding: 3px; vertical-align: middle; background: #fff; }
+.carnet-ecran td.cf-pts input { width: 100%; height: 34px; border: 1px solid #999; border-radius: 4px; text-align: center; font: bold 14px Tahoma, sans-serif; background: #fff; color: #000; }
+.carnet-ecran td.cf-pts input::placeholder { color: #000; opacity: .55; }
+.carnet-ecran td.cf-pts input[data-auto="true"] { border-style: dashed; }
+.carnet-ecran td.cf-pts small { display: block; margin-top: 2px; font: 10px Tahoma, sans-serif; color: #444; }
+
+/* Synthèse */
+.carnet-ecran .cf-synthese { margin-top: 6px; max-width: 760px; }
+.carnet-ecran table.cf-moyennes, .carnet-ecran table.cf-maitrise { width: 100%; border-collapse: collapse; table-layout: fixed; border: 1px solid #333; background: #fff; }
+.carnet-ecran table.cf-moyennes th, .carnet-ecran table.cf-moyennes td,
+.carnet-ecran table.cf-maitrise th, .carnet-ecran table.cf-maitrise td { border: 1px solid #333; }
+.carnet-ecran table.cf-moyennes th.cf-titre-moyenne { background: var(--fond); font: bold 12px Tahoma, sans-serif; width: 34%; padding: 7px; text-align: left; }
+.carnet-ecran table.cf-moyennes th { background: #ffff00; font: bold 12px Tahoma, sans-serif; padding: 7px 0; }
+.carnet-ecran td.cf-note-sur { font: bold 14px Tahoma, sans-serif; text-align: center; height: 62px; }
+.carnet-ecran td.cf-note { text-align: center; font: bold 15px Tahoma, sans-serif; padding: 4px; }
+.carnet-ecran td.cf-note input { width: 100%; height: 34px; border: 1px solid #999; border-radius: 4px; text-align: center; font: bold 14px Tahoma, sans-serif; }
+.carnet-ecran td.cf-note input::placeholder { color: #000; opacity: .55; }
+.carnet-ecran td.cf-note small { display: block; margin-top: 2px; font: 10px Tahoma, sans-serif; font-weight: 400; color: #444; }
+.carnet-ecran .cf-total-bareme { margin: 4px 0 0; font-size: 11px; }
+.carnet-ecran table.cf-maitrise { margin-top: 12px; }
+.carnet-ecran th.cf-bandeau-maitrise { background: var(--fond); color: #ff0000; font: bold 14px Tahoma, sans-serif; padding: 7px; }
+.carnet-ecran td.cf-correspondantes { width: 34%; font: bold 14px Tahoma, sans-serif; text-align: center; padding: 0 4px; }
+.carnet-ecran td.cf-jaune { background: #ffff00; font: bold 12px Tahoma, sans-serif; text-align: center; padding: 6px; }
+.carnet-ecran td.cf-bar { text-align: center; font: bold 14px Tahoma, sans-serif; padding: 6px; }
+.carnet-ecran td.cf-espace { height: 18px; }
+.carnet-ecran td.cf-annuelle { text-align: center; padding: 8px; }
+.carnet-ecran td.cf-annuelle span { display: inline-block; background: #fbd4b4; font: bold 12px Tahoma, sans-serif; padding: 6px 14px; }
+.carnet-ecran td.cf-valeur { text-align: center; font: bold 17px Tahoma, sans-serif; }
