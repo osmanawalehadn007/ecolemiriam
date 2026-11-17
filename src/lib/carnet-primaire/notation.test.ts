@@ -100,3 +100,13 @@ describe("normaliserAnnee", () => {
     expect(normaliserAnnee(undefined)).toBeNull();
   });
 });
+
+describe("niveaux du carnet = niveaux de la plateforme", () => {
+  it("reprennent exactement le cycle Primaire, sans « Première » (lycée)", async () => {
+    const { NIVEAUX_PAR_CYCLE } = await import("@/lib/niveau");
+    const { NIVEAUX_CARNET } = await import("./referentiel");
+    expect([...NIVEAUX_CARNET]).toEqual(NIVEAUX_PAR_CYCLE.find((c) => c.cycle === "Primaire")!.niveaux);
+    expect(estNiveauCarnet("Première")).toBe(false);
+    expect(estNiveauCarnet("1ère")).toBe(true);
+  });
+});

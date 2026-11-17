@@ -12,7 +12,12 @@
  * générale annuelle est la moyenne des modules renseignés.
  */
 
-export const NIVEAUX_CARNET = ["1ère", "2ème", "3ème", "4ème", "5ème"] as const;
+import type { NiveauCanonique } from "@/lib/niveau";
+
+// Niveaux = ceux de la plateforme (NIVEAUX_CANONIQUES, cycle Primaire de src/lib/niveau.ts) :
+// « 1ère » est la 1ère année du primaire, distincte de « Première » (lycée), absente d'ici.
+// `satisfies` fait échouer la compilation si un libellé sort du référentiel.
+export const NIVEAUX_CARNET = ["1ère", "2ème", "3ème", "4ème", "5ème"] as const satisfies readonly NiveauCanonique[];
 export type NiveauCarnet = (typeof NIVEAUX_CARNET)[number];
 
 export const MODULES = [1, 2, 3, 4] as const;

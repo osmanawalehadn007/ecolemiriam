@@ -397,3 +397,6 @@ Référence complète : **[docs/DECISIONS-FACTURATION.md](docs/DECISIONS-FACTURA
     `initialiserCarnets` écrit en base les niveaux d'un tenant qui n'en ont pas
     (premier accès, ou `scripts/amorcer-competences.ts`) et le bouton « modèle »
     de l'interface y revient. Éditeur : Paramètres > Matières et onglet Carnets.
+    Niveaux : `NIVEAUX_CARNET` = cycle Primaire de `NIVEAUX_CANONIQUES` (« 1ère » ≠
+    « Première » du lycée), verrouillé en base par `competences_niveau.sql`
+    (appliqué via `scripts/appliquer-niveaux-carnets.ts --apply`).
