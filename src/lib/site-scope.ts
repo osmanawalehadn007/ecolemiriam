@@ -368,6 +368,7 @@ export const SITE_PATHS: Record<string, SitePath> = {
   // --- rattachement via l'élève ---
   absence: { one: "eleve" },
   bulletin: { one: "eleve" },
+  carnetPrimaire: { one: "eleve" },
   note: { one: "eleve" },
   incident: { one: "eleve" },
   dispenseMatiere: { one: "eleve" },
@@ -431,6 +432,8 @@ export const SITE_PATHS: Record<string, SitePath> = {
   // Le journal des emails est transverse : il trace les envois
   // indépendamment du périmètre de site.
   emailLog: "tenant",
+  // Modèle de carnet par niveau : paramétré par la direction pour tout le tenant.
+  carnetConfiguration: "tenant",
 };
 
 /**

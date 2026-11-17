@@ -41,6 +41,8 @@ enum TenantStatus {
 
 model Tenant {
   id          String       @id @default(cuid())
+  carnetsPrimaires CarnetPrimaire[]
+  carnetConfigurations CarnetConfiguration[]
   name        String // "Lycée Omar Bongo"
   slug        String       @unique // "lycee-omar-bongo" → sous-domaine
   domain      String?      @unique // domaine personnalisé optionnel
@@ -779,6 +781,7 @@ model Eleve {
   absences  Absence[]
   notes     Note[]
   bulletins Bulletin[]
+  carnetsPrimaires CarnetPrimaire[]
   factures  Facture[]
   documents Document[]
   incidents Incident[]
@@ -1245,6 +1248,49 @@ model BulletinMatiere {
   @@index([bulletinId])
   @@index([matiereId])
   @@map("bulletin_matieres")
+}
+
+// Carnet de l'enseignement fondamental (1ère à 5ème année). Les saisies par
+// module (compétences A / EVA / NA ou points par domaine) sont stockées en JSON,
+// dont la forme est décrite par src/lib/carnet-primaire/notation.ts.
+model CarnetPrimaire {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  eleveId String
+  eleve   Eleve @relation(fields: [eleveId], references: [id], onDelete: Cascade)
+
+  annee  String // "2026-2027"
+  niveau String // "1ère" … "5ème"
+  saisie Json   @default("{}") // SaisieCarnet
+
+  appreciations String?
+  decision      String? // décision de fin d'année
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eleveId, annee])
+  @@index([tenantId])
+  @@map("carnets_primaires")
+}
+
+// Personnalisation, par la direction, des domaines / compétences / barèmes d'un
+// niveau du carnet. Absente = modèle par défaut de src/lib/carnet-primaire.
+model CarnetConfiguration {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  niveau   String // "1ère" … "5ème"
+  domaines Json // Domaine[], validé par configuration.ts
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, niveau])
+  @@map("carnet_configurations")
 }
 
 // ============================================================

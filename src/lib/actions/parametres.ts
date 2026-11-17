@@ -19,6 +19,7 @@ import { getAnneeCouranteLibelle } from "@/lib/annee-scolaire";
 import { decouperEnTrimestres } from "@/lib/annee-periodes";
 import { anneeFilterForModel, requireAnneeForCreate } from "@/lib/annee-scope";
 import { isNiveauPrimaire } from "@/lib/utils-classe";
+import { matieresACreer, trouverModele } from "@/lib/matieres-defaut";
 import { NIVEAUX_CANONIQUES, normaliserNiveau } from "@/lib/niveau";
 import { ELEVE_NON_ARCHIVE } from "@/lib/eleve-filters";
 import { checkPermission, roleHasPermission } from "@/lib/rbac";
@@ -768,6 +769,47 @@ export async function deleteMatiere(matiereId: string) {
 
   revalidatePath("/parametres");
   return { success: true };
+}
+
+/**
+ * Crée les matières d'un modèle par défaut (8ème, Seconde, 1ère GFM) qui
+ * n'existent pas encore. Rien n'est modifié ni supprimé : une matière déjà
+ * présente (même nom, même niveau ou sans niveau) est conservée telle quelle.
+ */
+export async function appliquerModeleMatieres(modeleId: string) {
+  const session = await auth();
+  if (!session?.user?.tenantId) throw new Error("Non autorisé");
+
+  const denied = checkPermission(session.user.role, "matieres:write");
+  if (denied) throw new Error("Accès refusé");
+
+  const modele = trouverModele(modeleId);
+  if (!modele) throw new Error("Modèle inconnu");
+
+  const existantes = await prisma.matiere.findMany({
+    where: {
+      tenantId: session.user.tenantId,
+      ...siteFilterForModel("matiere", session.user),
+    },
+    select: { nom: true, niveau: true },
+  });
+
+  const aCreer = matieresACreer(modele, existantes);
+  if (aCreer.length > 0) {
+    await prisma.matiere.createMany({
+      data: aCreer.map((m) => ({
+        tenantId: session.user.tenantId!,
+        nom: m.nom,
+        code: m.code,
+        coefficient: m.coefficient,
+        couleur: m.couleur,
+        niveau: modele.niveau,
+      })),
+    });
+  }
+
+  revalidatePath("/parametres");
+  return { cree: aCreer.length, dejaPresentes: modele.matieres.length - aCreer.length };
 }
 
 // ============================================================
