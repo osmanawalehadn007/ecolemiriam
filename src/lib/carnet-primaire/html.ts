@@ -38,7 +38,7 @@ export interface DonneesCarnetImpression {
 /**
  * Carnet de l'enseignement fondamental — reproduction des modèles Word
  * « CARNET DE LA … ANNEE » de l'établissement : livret A4 paysage de feuilles
- * à deux volets (dos | couverture, puis carte d'identité, puis pages de
+ * à deux volets (dos | couverture avec la carte d'identité, puis pages de
  * compétences). Mise en page, couleurs par domaine et textes fixes suivent
  * les modèles ; les images de couverture sont celles des modèles (public/carnet).
  */
@@ -255,21 +255,13 @@ function volantDos(donnees: DonneesCarnetImpression): string {
 </section>`;
 }
 
-function volantCouverture(niveau: NiveauCarnet): string {
+function volantCouverture(niveau: NiveauCarnet, identite = ""): string {
   const slug = SLUG_NIVEAU[niveau];
-  const cadre = niveau === "1ère" || niveau === "2ème" ? "" : " cadre";
-  const entete =
-    niveau === "1ère" || niveau === "2ème"
-      ? `<div class="republique">
-    <img class="embleme" src="/carnet/emblem-ministere.png" alt="">
-    <p class="rep-1">RÉPUBLIQUE DE DJIBOUTI</p>
-    <p class="rep-2">UNITÉ-ÉGALITÉ-PAIX</p>
-    <p class="rep-3">MINISTÈRE DE L’ÉDUCATION NATIONALE<br>ET DE LA FORMATION PROFESSIONNELLE</p>
-  </div>`
-      : "";
+  // Page 1 identique pour tous les niveaux, sur le modèle de la 4ème année :
+  // couverture encadrée, puis carte d'identité et bandeau.
   return `<section class="volet couverture">
-  ${entete}
-  <div class="vignette${cadre}"><img src="/carnet/couverture-${slug}.jpg" alt="Carnet d'évaluation — ${echapper(niveau)} année"></div>
+  <div class="vignette cadre"><img src="/carnet/couverture-${slug}.jpg" alt="Carnet d'évaluation — ${echapper(niveau)} année"></div>
+  ${identite}
 </section>`;
 }
 
@@ -443,12 +435,6 @@ const STYLES = `
 
   /* Couverture */
   .couverture { padding: 6mm 12mm 0 9mm; }
-  .republique { position: relative; text-align: center; padding: 6mm 0 0; height: 30mm; }
-  .republique p { margin: 0; }
-  .rep-1 { font: 10pt "Times New Roman", Times, serif; letter-spacing: .3px; }
-  .rep-2 { font: 7pt "Times New Roman", Times, serif; margin-top: 1mm !important; }
-  .rep-3 { font: bold 7.5pt Arial, Helvetica, sans-serif; margin-top: 4mm !important; line-height: 1.6; }
-  .embleme { position: absolute; right: -2mm; top: 0; width: 23mm; height: 23mm; }
   .vignette { margin: 6mm auto 0; width: 128mm; }
   .vignette img { width: 100%; display: block; }
   .vignette.cadre { margin-top: 4mm; border: 1.4mm solid #F79646; border-radius: 12mm; padding: 5mm 4mm 4mm; width: 132mm; }
@@ -466,26 +452,32 @@ const STYLES = `
   .bandeau-enseignement { position: absolute; left: 12mm; right: 12mm; top: 132mm; height: 15mm; border: .8mm solid #385D8A; border-radius: 3.5mm; background: transparent;
     display: flex; align-items: center; justify-content: center; font: italic bold 13pt "Times New Roman", Times, serif; color: #262626; }
   .bandeau-enseignement span { color: #7030A0; margin-left: 1.5mm; }
+  /* Carte d'identité et bandeau sous la couverture (page 1 du livret) : dans le flux, compacts. */
+  .identite { margin-top: 5mm; }
+  .identite .carte { position: static; width: 100%; padding: 3.5mm 6mm 1.5mm; border-radius: 10mm; font-size: 10pt; }
+  .identite .carte p { margin-bottom: 2.6mm; }
+  .identite .carte-titre { font-size: 11.5pt; }
+  .identite .bandeau-enseignement { position: static; margin-top: 4mm; height: auto; min-height: 10mm; padding: 1.5mm 3mm; text-align: center; font-size: 10pt; flex-wrap: wrap; }
 
   /* Pages de compétences */
   /* Feuille 3 : exactement une page A4 paysage. Le contenu est réduit par ajusterCarnetUnePage()
      (ajuster-page.ts) quand il dépasse ; le débordement est masqué plutôt que reporté sur une 2e page. */
-  .interieur { width: 297mm; height: 210mm; padding: 8mm 12mm; background: #fff; overflow: hidden; break-inside: avoid; page-break-inside: avoid; }
+  .interieur { width: 297mm; height: 210mm; padding: 6mm 12mm; background: #fff; overflow: hidden; break-inside: avoid; page-break-inside: avoid; }
   .interieur-contenu { transform-origin: 0 0; }
   .competences-page { column-count: 2; column-gap: 12mm; }
-  table.domaine { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 3mm; break-inside: avoid; page-break-inside: avoid; border: 1px solid #333; }
+  table.domaine { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 1.5mm; break-inside: avoid; page-break-inside: avoid; border: 1px solid #333; }
   table.domaine th, table.domaine td { border: 1px solid #333; }
-  table.domaine .titre { text-align: left; font: bold 10.5pt Tahoma, sans-serif; padding: 1.2mm 1mm; color: #1F1F1F; border: 1px solid #333; }
+  table.domaine .titre { text-align: left; font: bold 10.5pt Tahoma, sans-serif; padding: .8mm 1mm; color: #1F1F1F; border: 1px solid #333; }
   .pastille { display: inline-block; width: 3.4mm; height: 3.4mm; border-radius: 50%; background: #fff; margin-right: 1mm; vertical-align: -.5mm; }
   col.c-lib { width: 50mm; } col.c-ev { width: 6.2mm; }
   tr.modules .vide { background: #fff; border: 0; border-bottom: 1px solid #333; }
-  tr.modules th { background: #00937D; color: #fff; font: bold 8pt Tahoma, sans-serif; padding: 1.4mm .5mm; border-left: 2px solid #C0C0C0; text-align: left; }
+  tr.modules th { background: #00937D; color: #fff; font: bold 8pt Tahoma, sans-serif; padding: .8mm .5mm; border-left: 2px solid #C0C0C0; text-align: left; }
   tr.evals th { background: #FFFF00; font: bold 6pt Tahoma, sans-serif; padding: .6mm 0; text-align: center; line-height: 1.15; word-break: break-all; }
-  tr.evals .fond-lignes { height: 6mm; }
-  td.lib { font: 7.5pt Tahoma, sans-serif; padding: 1mm 1.5mm; vertical-align: middle; line-height: 1.3; height: 12mm; }
+  tr.evals .fond-lignes { height: 4.5mm; }
+  td.lib { font: 7.5pt Tahoma, sans-serif; padding: .6mm 1.5mm; vertical-align: middle; line-height: 1.2; height: 8mm; }
   td.lib.gras { font-weight: 700; }
   .puce { font-size: 5pt; vertical-align: 1pt; }
-  td.ev { height: 12mm; text-align: center; font-size: 11pt; color: #000; padding: 0; }
+  td.ev { height: 8mm; text-align: center; font-size: 11pt; color: #000; padding: 0; }
   td.ev.debut { border-left: 2px solid #C0C0C0; }
 
   table.points col.p-lib { width: auto; } table.points col.p-pts { width: 13mm; }
@@ -499,40 +491,40 @@ const STYLES = `
   table.points tr { break-inside: avoid; page-break-inside: avoid; }
   td.pts { text-align: center; font: bold 9.5pt Tahoma, sans-serif; padding: 0; vertical-align: middle; background: #fff; }
 
-  .synthese { break-inside: avoid; page-break-inside: avoid; margin-top: 3mm; }
+  .synthese { break-inside: avoid; page-break-inside: avoid; margin-top: 2mm; }
   table.moyennes { width: 100%; border-collapse: collapse; table-layout: fixed; border: 1px solid #333; }
   table.moyennes th, table.moyennes td { border: 1px solid #333; }
-  table.moyennes th.titre-moyenne { background: var(--fond); font: bold 8pt Tahoma, sans-serif; width: 40%; padding: 1.6mm; text-align: left; }
-  table.moyennes th { background: #FFFF00; font: bold 7.5pt Tahoma, sans-serif; padding: 1.6mm 0; }
-  td.note-sur { font: bold 10pt Tahoma, sans-serif; text-align: center; height: 15mm; }
+  table.moyennes th.titre-moyenne { background: var(--fond); font: bold 8pt Tahoma, sans-serif; width: 40%; padding: 1mm 1.6mm; text-align: left; }
+  table.moyennes th { background: #FFFF00; font: bold 7.5pt Tahoma, sans-serif; padding: 1mm 0; }
+  td.note-sur { font: bold 10pt Tahoma, sans-serif; text-align: center; height: 10mm; }
   td.note { text-align: center; font: bold 10pt Tahoma, sans-serif; } td.note small { display: block; font: 5.5pt Tahoma, sans-serif; font-weight: 400; }
   .total-bareme { margin: 1mm 0 0; font-size: 7pt; }
-  table.maitrise { width: 100%; margin-top: 3mm; border-collapse: collapse; table-layout: fixed; border: 1px solid #333; }
+  table.maitrise { width: 100%; margin-top: 2mm; border-collapse: collapse; table-layout: fixed; border: 1px solid #333; }
   table.maitrise td, table.maitrise th { border: 1px solid #333; }
-  th.bandeau-maitrise { background: var(--fond); color: #FF0000; font: bold 10pt Tahoma, sans-serif; padding: 1.8mm; }
+  th.bandeau-maitrise { background: var(--fond); color: #FF0000; font: bold 10pt Tahoma, sans-serif; padding: 1mm; }
   td.correspondantes { width: 40%; font: bold 10pt Tahoma, sans-serif; text-align: center; padding: 0 1mm; }
-  td.jaune { background: #FFFF00; font: bold 8.5pt Tahoma, sans-serif; text-align: center; padding: 1.4mm; }
-  td.bar { text-align: center; font: bold 10.5pt Tahoma, sans-serif; padding: 1.6mm; }
-  td.espace { height: 6mm; }
-  td.annuelle { text-align: center; padding: 2mm; } td.annuelle span { display: inline-block; background: #FBD4B4; font: bold 9pt Tahoma, sans-serif; padding: 1.5mm 4mm; }
+  td.jaune { background: #FFFF00; font: bold 8.5pt Tahoma, sans-serif; text-align: center; padding: .8mm; }
+  td.bar { text-align: center; font: bold 10.5pt Tahoma, sans-serif; padding: .8mm; }
+  td.espace { height: 2.5mm; }
+  td.annuelle { text-align: center; padding: 1mm; } td.annuelle span { display: inline-block; background: #FBD4B4; font: bold 9pt Tahoma, sans-serif; padding: 1mm 4mm; }
   td.valeur { text-align: center; font: bold 12pt Tahoma, sans-serif; }
 
   /* Format points : dix domaines et la synthèse tiennent sur une page ; on resserre les
      espacements verticaux (la mise en page des modèles suppose plusieurs pages) pour que
      la réduction à l'impression reste lisible. */
   .points-page { padding-left: 0; padding-right: 0; }
-  .points-page table.domaine { margin-bottom: 1.2mm; }
-  .points-page table.domaine .titre { font-size: 9pt; padding: .5mm 1mm; }
-  .points-page table.points td.lib { padding: .6mm 1.5mm; line-height: 1.25; }
-  .points-page .synthese { margin-top: 1.5mm; }
-  .points-page td.note-sur { height: 9mm; }
+  .points-page table.domaine { margin-bottom: .8mm; }
+  .points-page table.domaine .titre { font-size: 8.5pt; padding: .3mm 1mm; }
+  .points-page table.points td.lib { font-size: 6.6pt; padding: .3mm 1.5mm; line-height: 1.2; }
+  .points-page .synthese { margin-top: 1mm; }
+  .points-page td.note-sur { height: 7mm; }
   .points-page table.moyennes th { padding: .8mm 0; }
   .points-page table.moyennes th.titre-moyenne { padding: .8mm 1.6mm; }
-  .points-page table.maitrise { margin-top: 1.5mm; }
+  .points-page table.maitrise { margin-top: 1mm; }
   .points-page th.bandeau-maitrise { padding: .8mm; }
   .points-page td.jaune, .points-page td.bar { padding: .6mm; }
-  .points-page td.espace { height: 2mm; }
-  .points-page td.annuelle { padding: 1mm; }
+  .points-page td.espace { height: 1mm; }
+  .points-page td.annuelle { padding: .5mm; }
 `;
 
 /** HTML imprimable d'un carnet de 1ère à 5ème année, prêt pour openPrintWindow. */
@@ -547,8 +539,7 @@ export function genererCarnetHtml(donnees: DonneesCarnetImpression): string {
 <style>${STYLES}</style>
 </head>
 <body>
-  <div class="feuille" aria-label="Dos et couverture">${volantDos(donnees)}${volantCouverture(niveau)}</div>
-  <div class="feuille" aria-label="Carte d'identité"><section class="volet"></section><section class="volet">${carteIdentite(donnees)}</section>${bandeauEnseignement(annee)}</div>
+  <div class="feuille" aria-label="Dos, couverture et carte d'identité">${volantDos(donnees)}${volantCouverture(niveau, `<div class="identite">${carteIdentite(donnees)}${bandeauEnseignement(annee)}</div>`)}</div>
   ${pagesInterieures(donnees)}
 </body>
 </html>`;

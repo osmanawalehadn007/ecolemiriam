@@ -66,6 +66,25 @@ describe("genererCarnetHtml", () => {
   });
 });
 
+describe("mise en page sur 2 pages", () => {
+  it("place la carte d'identité sur la page 1, sous la couverture, et ne crée qu'une feuille avant les compétences", () => {
+    const html = genererCarnetHtml({
+      ecole: "École MIRIAM",
+      annee: "2026-2027",
+      niveau: "3ème",
+      definition: CARNETS["3ème"],
+      eleve: { nom: "Ali", prenom: "Osman", matricule: "X" },
+      saisie: {},
+    });
+    // Page 1 : dos + couverture (avec la carte) ; page 2 : compétences. Plus de feuille « carte » seule.
+    expect(html.match(/class="feuille"/g)).toHaveLength(1);
+    expect(html.match(/class="interieur"/g)).toHaveLength(1);
+    const couverture = html.slice(html.indexOf('class="volet couverture'));
+    expect(couverture.indexOf('class="carte')).toBeGreaterThan(couverture.indexOf('class="vignette'));
+    expect(couverture).toContain("ENSEIGNEMENT FONDAMENTAL (ECOLE DE BASE)");
+  });
+});
+
 describe("carte d'identité dynamique", () => {
   const base = {
     ecole: "Ecole privée MIRIAM",
