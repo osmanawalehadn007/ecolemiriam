@@ -81,7 +81,7 @@ services:
   # ============================================================
 
   x-app-base: &app-base
-    image: ghcr.io/wilsan007/ecolemiriam-app:latest
+    image: ${GHCR_IMAGE:-ghcr.io/wilsan007/ecolemiriam-app:latest}
     restart: unless-stopped
 
     read_only: true

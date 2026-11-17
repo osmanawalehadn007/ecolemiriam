@@ -54,7 +54,10 @@ UPSTREAM_FILE="${DOCKER_DIR}/caddy/upstream.conf"
 STATE_FILE="${DOCKER_DIR}/.active-color"
 SMOKE_TEST="${SCRIPT_DIR}/smoke-test.sh"
 
-GHCR_IMAGE="ghcr.io/wilsan007/ecolemiriam-app:latest"
+# Surchargeable : le workflow passe l'image publiée par le dépôt qui déploie
+# (ghcr.io/<propriétaire>/ecolemiriam-app). Par défaut, celle de wilsan007.
+# Exportée : docker-compose.gcp.yml la lit (${GHCR_IMAGE}).
+export GHCR_IMAGE="${GHCR_IMAGE:-ghcr.io/wilsan007/ecolemiriam-app:latest}"
 
 cd "$DOCKER_DIR"
 

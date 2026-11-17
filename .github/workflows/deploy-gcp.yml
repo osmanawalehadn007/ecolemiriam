@@ -240,7 +240,7 @@ jobs:
         env:
           GHCR_ACTOR: ${{ github.actor }}
           GHCR_EPHEMERAL_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: printf '%s %s\n' "$GHCR_ACTOR" "$GHCR_EPHEMERAL_TOKEN" | .github/scripts/ssh-retry.sh 'GHCR_LOGIN_STDIN=1 CI_SKIP_GIT_SYNC=1 /opt/ecolemiriam/docker/scripts/ci-deploy-gcp.sh staging'
+        run: printf '%s %s\n' "$GHCR_ACTOR" "$GHCR_EPHEMERAL_TOKEN" | .github/scripts/ssh-retry.sh 'GHCR_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest GHCR_LOGIN_STDIN=1 CI_SKIP_GIT_SYNC=1 /opt/ecolemiriam/docker/scripts/ci-deploy-gcp.sh staging'
 
   # ============================================================
   # JOB 4 : Approbation manuelle — promotion en production
@@ -298,7 +298,7 @@ jobs:
         env:
           GHCR_ACTOR: ${{ github.actor }}
           GHCR_EPHEMERAL_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: printf '%s %s\n' "$GHCR_ACTOR" "$GHCR_EPHEMERAL_TOKEN" | .github/scripts/ssh-retry.sh 'GHCR_LOGIN_STDIN=1 CI_SKIP_GIT_SYNC=1 /opt/ecolemiriam/docker/scripts/ci-deploy-gcp.sh promote'
+        run: printf '%s %s\n' "$GHCR_ACTOR" "$GHCR_EPHEMERAL_TOKEN" | .github/scripts/ssh-retry.sh 'GHCR_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest GHCR_LOGIN_STDIN=1 CI_SKIP_GIT_SYNC=1 /opt/ecolemiriam/docker/scripts/ci-deploy-gcp.sh promote'
 
       - name: Verify production health
         run: .github/scripts/ssh-retry.sh '/opt/ecolemiriam/docker/scripts/blue-green-deploy-gcp.sh --status'
