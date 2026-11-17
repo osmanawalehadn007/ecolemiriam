@@ -145,6 +145,21 @@ CREATE POLICY tenant_isolation ON bulletins
   )
 ;
 
+-- CarnetPrimaire → carnets_primaires
+ALTER TABLE carnets_primaires ENABLE ROW LEVEL SECURITY;
+ALTER TABLE carnets_primaires FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON carnets_primaires;
+CREATE POLICY tenant_isolation ON carnets_primaires
+  FOR ALL
+  USING (
+    current_setting('app.is_super_admin', true) = 'true'
+    OR "tenantId" = current_tenant_id()
+  )
+  WITH CHECK (
+    current_setting('app.is_super_admin', true) = 'true'
+    OR "tenantId" = current_tenant_id()
+  );
+
 -- CahierTexteCommentaire → cahier_texte_commentaires
 ALTER TABLE cahier_texte_commentaires ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cahier_texte_commentaires FORCE ROW LEVEL SECURITY;

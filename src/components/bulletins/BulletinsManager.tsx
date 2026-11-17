@@ -16,6 +16,8 @@ import { ConseilDeClasse } from "./ConseilDeClasse";
 import type { BulletinData } from "@/lib/pdf/bulletin-generator";
 import { BulletinPreview } from "./BulletinPreview";
 import { BulletinMatrix } from "./BulletinMatrix";
+import { CarnetEditor } from "./CarnetEditor";
+import { estNiveauCarnet, normaliserAnnee } from "@/lib/carnet-primaire/referentiel";
 
 interface Classe {
   id: string;
@@ -30,6 +32,7 @@ interface Periode {
   nom: string;
   numero: number;
   isCurrent: boolean;
+  annee?: { libelle: string };
 }
 
 interface EleveConseil {
@@ -66,6 +69,10 @@ export function BulletinsManager({
   const [previewData, setPreviewData] = useState<BulletinData | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [checkingExisting, setCheckingExisting] = useState(false);
+
+  // Les classes de 1ère à 5ème année suivent le carnet de l'enseignement
+  // fondamental (compétences par module) plutôt que le bulletin par matières.
+  const niveauCarnet = selectedClasse && estNiveauCarnet(selectedClasse.niveau) ? selectedClasse.niveau : null;
 
   const key = `${selectedClasse?.id}-${selectedPeriode?.id}`;
   const isGenerated = generated.has(key);
@@ -243,7 +250,10 @@ export function BulletinsManager({
             value={selectedClasse?.id ?? ""}
             onChange={(e) => {
               const c = classes.find((c) => c.id === e.target.value);
-              if (c) setSelectedClasse(c);
+              if (c) {
+                setSelectedClasse(c);
+                if (estNiveauCarnet(c.niveau)) setView("workflow");
+              }
             }}
             className="h-8 rounded-md border border-input bg-background px-2 text-sm"
           >
@@ -299,7 +309,8 @@ export function BulletinsManager({
       {/* Colonne gauche : sélecteurs — cachée en vue matricielle */}
       {view !== "matrix" && (
       <div className="space-y-4">
-        {/* Période */}
+        {/* Période — sans objet pour le carnet, dont les 4 modules couvrent l'année */}
+        {!niveauCarnet && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
@@ -332,6 +343,7 @@ export function BulletinsManager({
             ))}
           </CardContent>
         </Card>
+        )}
 
         {/* Classes */}
         <Card>
@@ -391,8 +403,18 @@ export function BulletinsManager({
           </div>
         )}
 
+        {/* VUE : Carnet (1ère à 5ème année) */}
+        {view === "workflow" && selectedClasse && niveauCarnet && (
+          <CarnetEditor
+            classeNom={selectedClasse.nom}
+            niveau={niveauCarnet}
+            annee={normaliserAnnee(selectedPeriode?.annee?.libelle)}
+            eleves={selectedClasse.eleves}
+          />
+        )}
+
         {/* VUE : Workflow */}
-        {view === "workflow" && selectedClasse && selectedPeriode && (
+        {view === "workflow" && selectedClasse && selectedPeriode && !niveauCarnet && (
           <>
             <Card>
               <CardContent className="p-6">
