@@ -377,4 +377,15 @@ Référence complète : **[docs/DECISIONS-FACTURATION.md](docs/DECISIONS-FACTURA
     (`runWithRlsBatch`) : plus de compte TEACHER orphelin, plus d'échec avalé
     par un `.catch(() => {})`, et l'année de la classe créée vient de
     `getAnneeCouranteLibelle` (jamais d'une constante).
+27. **Carnet du primaire (1ère à 5ème année) — migrations à appliquer AVANT le
+    déploiement du code** (la CI ne les joue pas), dans cet ordre :
+    `prisma/migrations/carnet_primaire.sql`, `carnet_configuration.sql`, puis
+    `carnet_evaluations.sql`. Cette dernière ajoute `moduleCarnet` et
+    `ligneCarnet` à `evaluations` : Prisma sélectionne toutes les colonnes du
+    modèle, donc déployer le code sans elle fait échouer **toutes** les requêtes
+    sur les évaluations. Les notes du carnet viennent des évaluations (et
+    devoirs) rattachées à un module ; la saisie manuelle du carnet remplace le
+    calcul (`src/lib/carnet-primaire/calcul-auto.ts`). L'ajustement à une page
+    se fait côté application (`ajuster-page.ts`, rappel de `openPrintWindow`) :
+    la CSP interdit tout script dans le HTML imprimé.
 

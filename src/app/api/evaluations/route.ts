@@ -60,6 +60,9 @@ const CreateSchema = z.object({
   duree: z.number().min(1),
   coefficient: z.number().min(0),
   description: z.string().optional(),
+  // Carnet du primaire : module (1 à 4) et ligne de compétence visée (null = tout le domaine).
+  moduleCarnet: z.number().int().min(1).max(4).nullable().optional(),
+  ligneCarnet: z.number().int().min(0).max(11).nullable().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -82,6 +85,9 @@ export async function POST(req: NextRequest) {
     }
 
     const data = parsed.data;
+    if (data.ligneCarnet != null && data.moduleCarnet == null) {
+      return NextResponse.json({ error: "Une compétence visée suppose un module du carnet" }, { status: 400 });
+    }
 
     const evaluation = await prisma.evaluation.create({
       data: {
@@ -95,6 +101,8 @@ export async function POST(req: NextRequest) {
         duree: data.duree,
         coefficient: data.coefficient,
         description: data.description,
+        moduleCarnet: data.moduleCarnet ?? null,
+        ligneCarnet: data.moduleCarnet == null ? null : (data.ligneCarnet ?? null),
         statut: "PLANIFIE",
       },
       include: {

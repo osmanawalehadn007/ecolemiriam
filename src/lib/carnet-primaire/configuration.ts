@@ -26,6 +26,7 @@ export const DomaineSchema = z.object({
     .min(1, "Chaque domaine doit comporter au moins une ligne de compétence")
     .max(MAX_LIGNES),
   bareme: z.number().positive("Le barème doit être supérieur à 0").max(BAREME_MAX).optional(),
+  matieres: z.array(z.string().min(1)).max(40).optional(),
 });
 
 export const DomainesSchema = z.array(DomaineSchema).min(1, "Au moins un domaine est requis").max(MAX_DOMAINES);
@@ -58,7 +59,7 @@ export function validerDomaines(niveau: NiveauCarnet, brut: unknown): ResultatVa
   }
   return {
     ok: true,
-    domaines: domaines.map((d) => ({ code: d.code, libelle: d.libelle, lignes: d.lignes })),
+    domaines: domaines.map((d) => ({ code: d.code, libelle: d.libelle, lignes: d.lignes, matieres: d.matieres })),
   };
 }
 
