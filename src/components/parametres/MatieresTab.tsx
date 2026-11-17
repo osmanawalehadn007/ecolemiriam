@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Loader2, Plus, Trash2 } from "lucide-react";
-import { createMatiere, deleteMatiere, type MatiereFormData } from "@/lib/actions/parametres";
+import { Download, Loader2, Plus, Trash2 } from "lucide-react";
+import { appliquerModeleMatieres, createMatiere, deleteMatiere, type MatiereFormData } from "@/lib/actions/parametres";
+import { MODELES_MATIERES } from "@/lib/matieres-defaut";
 import { useTranslations } from "next-intl";
 
 interface MatiereItem {
@@ -23,6 +24,7 @@ export function MatieresTab({ matieres, canManage }: { matieres: MatiereItem[]; 
   const t = useTranslations("parametres");
   const [showForm, setShowForm] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  const [modeleEnCours, setModeleEnCours] = useState<string | null>(null);
   const [form, setForm] = useState<MatiereFormData>({
     nom: "",
     code: "",
@@ -43,6 +45,22 @@ export function MatieresTab({ matieres, canManage }: { matieres: MatiereItem[]; 
       toast.error(err instanceof Error ? err.message : t("genericError"));
     } finally {
       setIsPending(false);
+    }
+  }
+
+  async function handleAppliquerModele(id: string, libelle: string) {
+    setModeleEnCours(id);
+    try {
+      const { cree, dejaPresentes } = await appliquerModeleMatieres(id);
+      toast.success(
+        cree === 0
+          ? `${libelle} : toutes les matières existent déjà`
+          : `${libelle} : ${cree} matière(s) créée(s)${dejaPresentes > 0 ? `, ${dejaPresentes} déjà présente(s)` : ""}`
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("genericError"));
+    } finally {
+      setModeleEnCours(null);
     }
   }
 
@@ -110,6 +128,38 @@ export function MatieresTab({ matieres, canManage }: { matieres: MatiereItem[]; 
                 <Button type="button" variant="outline" size="sm" onClick={() => setShowForm(false)}>{t("cancel")}</Button>
               </div>
             </form>
+          </CardContent>
+        </Card>
+      )}
+
+      {canManage && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Modèles de matières par défaut</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Matières des bulletins de l&apos;école (coefficient 1, moyenne simple). Seules les matières manquantes sont
+              créées : celles qui existent déjà ne sont pas modifiées.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {MODELES_MATIERES.map((modele) => (
+              <div key={modele.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium">{modele.libelle}</p>
+                  <p className="text-xs text-muted-foreground">{modele.matieres.map((m) => m.nom).join(", ")}</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  disabled={modeleEnCours !== null}
+                  onClick={() => handleAppliquerModele(modele.id, modele.libelle)}
+                >
+                  {modeleEnCours === modele.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  Appliquer
+                </Button>
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}
