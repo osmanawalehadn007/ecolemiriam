@@ -114,3 +114,6 @@ docker/postgres/tls/
 docker/caddy/upstream-test.conf
 .env.production.bak*
 .npm-cache/
+
+# Secrets GitHub à envoyer avec scripts/github/configurer-depot.sh (ne jamais versionner)
+.github-secrets.env
