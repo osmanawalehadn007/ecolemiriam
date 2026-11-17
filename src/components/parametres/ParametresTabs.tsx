@@ -26,6 +26,7 @@ import { AnneesScolairesTab } from "./AnneesScolairesTab";
 import { EnseignantsAffectationTab } from "./EnseignantsAffectationTab";
 import { EdtPersonnelsTab } from "./EdtPersonnelsTab";
 import { SallesTab } from "./SallesTab";
+import { CarnetsConfigTab } from "./CarnetsConfigTab";
 
 import type { AvailableTenant } from "@/auth.config";
 
@@ -40,6 +41,7 @@ type Tab =
   | "edtPersonnels"
   | "salles"
   | "appreciations"
+  | "carnets"
   | "periodes"
   | "signature"
   | "sites"
@@ -88,6 +90,7 @@ const tabGroups: TabGroup[] = [
       { id: "edtPersonnels", labelKey: "edtPersonnels", icon: CalendarX },
       { id: "salles", labelKey: "salles", icon: DoorOpen },
       { id: "appreciations", labelKey: "appreciations", icon: Settings2 },
+      { id: "carnets", labelKey: "carnets", icon: BookOpenCheck },
       { id: "periodes", labelKey: "periodes", icon: Calendar },
     ],
   },
@@ -241,6 +244,7 @@ export function ParametresTabs({
         {activeTab === "edtPersonnels" && <EdtPersonnelsTab canManage={canManage} />}
         {activeTab === "salles" && <SallesTab canManage={canManage} sites={sites} />}
         {activeTab === "appreciations" && <ReglesAppreciationManager regles={regles} />}
+        {activeTab === "carnets" && <CarnetsConfigTab canManage={canManage} />}
         {activeTab === "periodes" && (
           <PeriodesClotureManager
             periodes={periodes.map((p) => ({

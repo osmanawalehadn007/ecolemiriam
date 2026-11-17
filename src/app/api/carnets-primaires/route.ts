@@ -4,7 +4,8 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { checkPermission } from "@/lib/rbac";
 import { siteFilterForModel, type SessionSiteClaims } from "@/lib/site-scope";
-import { estNiveauCarnet, CARNETS } from "@/lib/carnet-primaire/referentiel";
+import { estNiveauCarnet } from "@/lib/carnet-primaire/referentiel";
+import { chargerDefinition } from "@/lib/carnet-primaire/charger-definition";
 import { erreursDomaines, type SaisieCarnet } from "@/lib/carnet-primaire/notation";
 import { genererCarnetHtml } from "@/lib/carnet-primaire/html";
 
@@ -78,6 +79,7 @@ export async function GET(req: NextRequest) {
     const charge = await chargerEleve(eleveId, session.user);
     if ("erreur" in charge) return charge.erreur;
 
+    const definition = await chargerDefinition(session.user.tenantId, charge.eleve.niveau);
     const carnet = await prisma.carnetPrimaire.findFirst({
       where: { eleveId, annee, tenantId: session.user.tenantId },
       select: { saisie: true, appreciations: true, decision: true, updatedAt: true },
@@ -92,6 +94,7 @@ export async function GET(req: NextRequest) {
         ecole: tenant?.name ?? "",
         annee,
         niveau: charge.eleve.niveau,
+        definition,
         eleve: { nom: charge.eleve.nom, prenom: charge.eleve.prenom, matricule: charge.eleve.matricule ?? "" },
         saisie: (carnet?.saisie ?? {}) as SaisieCarnet,
         appreciations: carnet?.appreciations,
@@ -103,7 +106,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       eleve: charge.eleve,
       niveau: charge.eleve.niveau,
-      format: CARNETS[charge.eleve.niveau].format,
+      definition,
       saisie: (carnet?.saisie ?? {}) as SaisieCarnet,
       appreciations: carnet?.appreciations ?? "",
       decision: carnet?.decision ?? "",
@@ -135,9 +138,10 @@ export async function PUT(req: NextRequest) {
     const niveau = charge.eleve.niveau;
 
     // Vérifie les barèmes de chaque module (format points) avant d'enregistrer.
+    const definition = await chargerDefinition(session.user.tenantId, niveau);
     for (const [module, contenu] of Object.entries(saisie)) {
       if (!contenu.domaines) continue;
-      const erreurs = erreursDomaines(niveau, contenu.domaines);
+      const erreurs = erreursDomaines(definition, contenu.domaines);
       if (erreurs.length > 0) {
         return NextResponse.json({ error: `Module ${module} : ${erreurs.join(" ")}` }, { status: 400 });
       }

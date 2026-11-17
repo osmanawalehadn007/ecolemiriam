@@ -11,6 +11,7 @@ import {
   CARNETS,
   MODULES,
   baremeTotal,
+  type CarnetDef,
   type Module,
   type NiveauCarnet,
 } from "@/lib/carnet-primaire/referentiel";
@@ -44,7 +45,8 @@ const EVALUATIONS: Evaluation[] = ["A", "EVA", "NA"];
 const DECISIONS = ["Passe en classe supérieure", "Redouble", "Passe sous réserve"];
 
 export function CarnetEditor({ classeNom, niveau, annee, eleves }: Props) {
-  const definition = CARNETS[niveau];
+  // Modèle par défaut le temps du chargement ; remplacé par la définition du tenant (personnalisée ou non).
+  const [definition, setDefinition] = useState<CarnetDef>(CARNETS[niveau]);
   const [eleveId, setEleveId] = useState(eleves[0]?.id ?? "");
   const [module, setModule] = useState<Module>(1);
   const [saisie, setSaisie] = useState<SaisieCarnet>({});
@@ -66,6 +68,7 @@ export function CarnetEditor({ classeNom, niveau, annee, eleves }: Props) {
       const res = await fetch(`/api/carnets-primaires?eleveId=${eleveId}&annee=${annee}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erreur de chargement");
+      if (data.definition) setDefinition(data.definition);
       setSaisie(data.saisie ?? {});
       setAppreciations(data.appreciations ?? "");
       setDecision(data.decision ?? "");
@@ -82,8 +85,8 @@ export function CarnetEditor({ classeNom, niveau, annee, eleves }: Props) {
   }, [charger]);
 
   const saisieModule: SaisieModule = saisie[`${module}`] ?? {};
-  const noteCourante = noteModule(niveau, saisieModule);
-  const moyenne = useMemo(() => moyenneAnnuelle(niveau, saisie), [niveau, saisie]);
+  const noteCourante = noteModule(definition, saisieModule);
+  const moyenne = useMemo(() => moyenneAnnuelle(definition, saisie), [definition, saisie]);
 
   function majModule(maj: (courant: SaisieModule) => SaisieModule) {
     setSaisie((prev) => ({ ...prev, [`${module}`]: maj(prev[`${module}`] ?? {}) }));
@@ -169,7 +172,7 @@ export function CarnetEditor({ classeNom, niveau, annee, eleves }: Props) {
               Année scolaire {annee} ·{" "}
               {definition.format === "competences"
                 ? "Évaluation A / EVA / NA par compétence"
-                : `Notes par domaine, total des barèmes /${baremeTotal(niveau)}`}
+                : `Notes par domaine, total des barèmes /${baremeTotal(definition)}`}
             </p>
           </div>
           <div className="flex gap-2">

@@ -439,8 +439,8 @@ export const CARNETS: Record<NiveauCarnet, CarnetDef> = {
 };
 
 /** Total des barèmes du format `points` : la note de module est ramenée sur 10. */
-export function baremeTotal(niveau: NiveauCarnet): number {
-  return CARNETS[niveau].domaines.reduce((somme, d) => somme + (d.bareme ?? 0), 0);
+export function baremeTotal(definition: CarnetDef): number {
+  return definition.domaines.reduce((somme, d) => somme + (d.bareme ?? 0), 0);
 }
 
 export function estNiveauCarnet(valeur: string): valeur is NiveauCarnet {

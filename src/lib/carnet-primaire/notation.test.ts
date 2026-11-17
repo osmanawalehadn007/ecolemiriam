@@ -25,9 +25,9 @@ describe("degreMaitrise", () => {
 
 describe("référentiel", () => {
   it("3ème à 5ème : le total des barèmes vaut 200", () => {
-    expect(baremeTotal("3ème")).toBe(200);
-    expect(baremeTotal("4ème")).toBe(200);
-    expect(baremeTotal("5ème")).toBe(200);
+    expect(baremeTotal(CARNETS["3ème"])).toBe(200);
+    expect(baremeTotal(CARNETS["4ème"])).toBe(200);
+    expect(baremeTotal(CARNETS["5ème"])).toBe(200);
   });
 
   it("1ère et 2ème sont au format compétences, sans barème", () => {
@@ -49,39 +49,39 @@ describe("référentiel", () => {
 describe("noteModulePoints", () => {
   it("ramène le total des points sur 10 selon le barème de 200", () => {
     // 100 points sur 200 → 5/10
-    expect(noteModulePoints("3ème", { FRANCAIS: 20, MATHS: 20, ARABE: 10, ANGLAIS: 10, HISTOIRE: 5, GEOGRAPHIE: 5, SCIENCES: 10, EMCI: 10, EMT: 5, TICE: 5 })).toBe(5);
+    expect(noteModulePoints(CARNETS["3ème"], { FRANCAIS: 20, MATHS: 20, ARABE: 10, ANGLAIS: 10, HISTOIRE: 5, GEOGRAPHIE: 5, SCIENCES: 10, EMCI: 10, EMT: 5, TICE: 5 })).toBe(5);
   });
 
   it("renvoie null sans aucune saisie", () => {
-    expect(noteModulePoints("4ème", {})).toBeNull();
+    expect(noteModulePoints(CARNETS["4ème"], {})).toBeNull();
   });
 });
 
 describe("erreursDomaines", () => {
   it("signale un domaine qui dépasse son barème", () => {
-    const erreurs = erreursDomaines("5ème", { HISTOIRE: 11, MATHS: 40 });
+    const erreurs = erreursDomaines(CARNETS["5ème"], { HISTOIRE: 11, MATHS: 40 });
     expect(erreurs).toHaveLength(1);
     expect(erreurs[0]).toContain("Compétences de base : histoire");
   });
 
   it("accepte une saisie dans les bornes", () => {
-    expect(erreursDomaines("5ème", { HISTOIRE: 0, MATHS: 40 })).toEqual([]);
+    expect(erreursDomaines(CARNETS["5ème"], { HISTOIRE: 0, MATHS: 40 })).toEqual([]);
   });
 });
 
 describe("moyenneAnnuelle", () => {
   it("moyenne des modules renseignés, les vides sont ignorés", () => {
     const saisie = { "1": { note: 8 }, "2": { note: 6 }, "3": { note: null } };
-    expect(moyenneAnnuelle("1ère", saisie)).toBe(7);
+    expect(moyenneAnnuelle(CARNETS["1ère"], saisie)).toBe(7);
   });
 
   it("null quand aucun module n'est noté", () => {
-    expect(moyenneAnnuelle("1ère", {})).toBeNull();
+    expect(moyenneAnnuelle(CARNETS["1ère"], {})).toBeNull();
   });
 
   it("au format points, la note de module vient des domaines", () => {
     const saisie = { domaines: { FRANCAIS: 40, MATHS: 40, ARABE: 20, ANGLAIS: 20, HISTOIRE: 10, GEOGRAPHIE: 10, SCIENCES: 20, EMCI: 20, EMT: 10, TICE: 10 } };
-    expect(noteModule("3ème", saisie)).toBe(10);
+    expect(noteModule(CARNETS["3ème"], saisie)).toBe(10);
   });
 });
 

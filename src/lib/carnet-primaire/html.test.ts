@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { genererCarnetHtml } from "./html";
+import { CARNETS } from "./referentiel";
 
 describe("genererCarnetHtml", () => {
   it("rend les colonnes A / EVA / NA des niveaux 1ère et 2ème", () => {
@@ -7,6 +8,7 @@ describe("genererCarnetHtml", () => {
       ecole: "École MIRIAM",
       annee: "2026-2027",
       niveau: "1ère",
+      definition: CARNETS["1ère"],
       eleve: { nom: "Ali", prenom: "Osman", matricule: "CEM029" },
       saisie: { "1": { competences: { "ARABE.0": "A" }, note: 8 } },
     });
@@ -20,6 +22,7 @@ describe("genererCarnetHtml", () => {
       ecole: "École MIRIAM",
       annee: "2026-2027",
       niveau: "3ème",
+      definition: CARNETS["3ème"],
       eleve: { nom: "Ali", prenom: "Osman", matricule: "X" },
       saisie: { "1": { domaines: { FRANCAIS: 30 } } },
     });
@@ -32,6 +35,7 @@ describe("genererCarnetHtml", () => {
       ecole: "<script>",
       annee: "2026-2027",
       niveau: "5ème",
+      definition: CARNETS["5ème"],
       eleve: { nom: "<b>x</b>", prenom: "", matricule: "" },
       saisie: {},
       appreciations: "<img onerror=alert(1)>",

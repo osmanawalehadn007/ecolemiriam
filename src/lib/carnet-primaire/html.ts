@@ -1,4 +1,4 @@
-import { CARNETS, MODULES, baremeTotal, type NiveauCarnet } from "./referentiel";
+import { MODULES, baremeTotal, type CarnetDef, type NiveauCarnet } from "./referentiel";
 import {
   cleCompetence,
   degreMaitrise,
@@ -11,6 +11,8 @@ export interface DonneesCarnetImpression {
   ecole: string;
   annee: string;
   niveau: NiveauCarnet;
+  /** Définition du carnet de ce niveau, personnalisée par la direction le cas échéant. */
+  definition: CarnetDef;
   eleve: { nom: string; prenom: string; matricule: string };
   saisie: SaisieCarnet;
   appreciations?: string | null;
@@ -37,11 +39,11 @@ function cellulesEvaluation(valeur: string | undefined): string {
 }
 
 function blocCompetences(donnees: DonneesCarnetImpression): string {
-  const { niveau, saisie } = donnees;
+  const { definition, saisie } = donnees;
   const enTetes = MODULES.map((m) => `<th colspan="3">Module ${m}</th>`).join("");
   const sousEnTetes = MODULES.map(() => "<th>A</th><th>EVA</th><th>NA</th>").join("");
 
-  const lignes = CARNETS[niveau].domaines
+  const lignes = definition.domaines
     .map((domaine) =>
       domaine.lignes
         .map((ligne, index) => {
@@ -60,9 +62,9 @@ function blocCompetences(donnees: DonneesCarnetImpression): string {
 }
 
 function blocPoints(donnees: DonneesCarnetImpression): string {
-  const { niveau, saisie } = donnees;
+  const { definition, saisie } = donnees;
   const enTetes = MODULES.map((m) => `<th>Module ${m}</th>`).join("");
-  const lignes = CARNETS[niveau].domaines
+  const lignes = definition.domaines
     .map((domaine) => {
       const cellules = MODULES.map((m) => {
         const points = saisie[`${m}`]?.domaines?.[domaine.code];
@@ -74,18 +76,18 @@ function blocPoints(donnees: DonneesCarnetImpression): string {
     })
     .join("");
   return `<table class="grille"><thead><tr><th>Domaine</th><th>Barème</th>${enTetes}</tr></thead><tbody>${lignes}</tbody></table>
-<p class="total">Total des barèmes : /${baremeTotal(niveau)}</p>`;
+<p class="total">Total des barèmes : /${baremeTotal(definition)}</p>`;
 }
 
 function blocNotesModules(donnees: DonneesCarnetImpression): string {
-  const { niveau, saisie } = donnees;
+  const { definition, saisie } = donnees;
   const cellules = MODULES.map((m) => {
-    const note = noteModule(niveau, saisie[`${m}`]);
+    const note = noteModule(definition, saisie[`${m}`]);
     const degre = note === null ? "" : degreMaitrise(note);
     return `<td class="num">${formaterNote(note)}</td><td class="degre">${degre}</td>`;
   }).join("");
   const entetes = MODULES.map((m) => `<th colspan="2">Module ${m}</th>`).join("");
-  const moyenne = moyenneAnnuelle(niveau, saisie);
+  const moyenne = moyenneAnnuelle(definition, saisie);
   return `<table class="grille notes"><thead><tr><th>Moyenne générale par module</th>${entetes}<th>Moyenne annuelle</th></tr></thead>
 <tbody><tr><td>Note sur 10</td>${cellules}<td class="num strong">${formaterNote(moyenne)}</td></tr></tbody></table>
 <p class="legende">Degré de maîtrise : Acquis 7 à 10 · En voie d'acquisition 4 à 6 · Non acquis 0 à 3</p>`;
@@ -94,7 +96,7 @@ function blocNotesModules(donnees: DonneesCarnetImpression): string {
 /** HTML imprimable d'un carnet de 1ère à 5ème année, prêt pour openPrintWindow. */
 export function genererCarnetHtml(donnees: DonneesCarnetImpression): string {
   const { eleve, niveau, annee, ecole } = donnees;
-  const bloc = CARNETS[niveau].format === "competences" ? blocCompetences(donnees) : blocPoints(donnees);
+  const bloc = donnees.definition.format === "competences" ? blocCompetences(donnees) : blocPoints(donnees);
 
   return `<!doctype html>
 <html lang="fr">

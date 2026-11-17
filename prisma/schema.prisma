@@ -42,6 +42,7 @@ enum TenantStatus {
 model Tenant {
   id          String       @id @default(cuid())
   carnetsPrimaires CarnetPrimaire[]
+  carnetConfigurations CarnetConfiguration[]
   name        String // "Lycée Omar Bongo"
   slug        String       @unique // "lycee-omar-bongo" → sous-domaine
   domain      String?      @unique // domaine personnalisé optionnel
@@ -1273,6 +1274,23 @@ model CarnetPrimaire {
   @@unique([eleveId, annee])
   @@index([tenantId])
   @@map("carnets_primaires")
+}
+
+// Personnalisation, par la direction, des domaines / compétences / barèmes d'un
+// niveau du carnet. Absente = modèle par défaut de src/lib/carnet-primaire.
+model CarnetConfiguration {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  niveau   String // "1ère" … "5ème"
+  domaines Json // Domaine[], validé par configuration.ts
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, niveau])
+  @@map("carnet_configurations")
 }
 
 // ============================================================
