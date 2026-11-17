@@ -434,6 +434,8 @@ export const SITE_PATHS: Record<string, SitePath> = {
   emailLog: "tenant",
   // Modèle de carnet par niveau : paramétré par la direction pour tout le tenant.
   carnetConfiguration: "tenant",
+  // Référentiel des compétences du carnet : commun à tout l'établissement.
+  competence: "tenant",
 };
 
 /**
