@@ -10,6 +10,12 @@ import { cn } from "@/lib/utils";
 import { MAX_DOMAINES, MAX_LIGNES } from "@/lib/carnet-primaire/configuration";
 import type { Domaine, FormatCarnet, NiveauCarnet } from "@/lib/carnet-primaire/referentiel";
 
+interface MatiereOption {
+  id: string;
+  nom: string;
+  niveau: string | null;
+}
+
 interface NiveauConfig {
   niveau: NiveauCarnet;
   format: FormatCarnet;
@@ -22,6 +28,7 @@ const champ = "h-9 w-full rounded-md border border-input bg-background px-3 text
 
 export function CarnetsConfigTab({ canManage }: { canManage: boolean }) {
   const [niveaux, setNiveaux] = useState<NiveauConfig[]>([]);
+  const [matieres, setMatieres] = useState<MatiereOption[]>([]);
   const [niveau, setNiveau] = useState<NiveauCarnet>("1ère");
   const [domaines, setDomaines] = useState<Domaine[]>([]);
   const [modifie, setModifie] = useState(false);
@@ -36,6 +43,7 @@ export function CarnetsConfigTab({ canManage }: { canManage: boolean }) {
       if (!res.ok) throw new Error(data.error ?? "Erreur de chargement");
       const liste = data.niveaux as NiveauConfig[];
       setNiveaux(liste);
+      setMatieres((data.matieres ?? []) as MatiereOption[]);
       const cible = liste.find((n) => n.niveau === (niveauCible ?? "1ère")) ?? liste[0];
       if (cible) {
         setNiveau(cible.niveau);
@@ -55,6 +63,9 @@ export function CarnetsConfigTab({ canManage }: { canManage: boolean }) {
 
   const courant = niveaux.find((n) => n.niveau === niveau);
   const pointsFormat = courant?.format === "points";
+  // « 1ère » → "1" : Matiere.niveau porte le numéro du niveau ; sans niveau, la matière vaut pour tous.
+  const numeroNiveau = niveau.match(/^\d+/)?.[0];
+  const matieresDuNiveau = matieres.filter((m) => !m.niveau || m.niveau === numeroNiveau);
   const totalBareme = domaines.reduce((somme, d) => somme + (d.bareme ?? 0), 0);
 
   function changerNiveau(cible: NiveauCarnet) {
@@ -83,6 +94,12 @@ export function CarnetsConfigTab({ canManage }: { canManage: boolean }) {
       [copie[index], copie[cible]] = [copie[cible], copie[index]];
       return copie;
     });
+  }
+
+  function basculerMatiere(index: number, matiereId: string) {
+    const actuelles = domaines[index].matieres ?? [];
+    const suivantes = actuelles.includes(matiereId) ? actuelles.filter((id) => id !== matiereId) : [...actuelles, matiereId];
+    majDomaine(index, { matieres: suivantes.length > 0 ? suivantes : undefined });
   }
 
   function ajouterDomaine() {
@@ -273,6 +290,36 @@ export function CarnetsConfigTab({ canManage }: { canManage: boolean }) {
                       aria-label={`Compétence ${i + 1}`}
                     />
                   ))}
+
+                  <div className="space-y-1 pt-1">
+                    <p className="text-xs font-medium">
+                      Matières dont les notes alimentent ce domaine
+                      <span className="ml-1 font-normal text-muted-foreground">
+                        {domaine.matieres?.length
+                          ? "(choix manuel)"
+                          : "(automatique d'après le nom de la matière — cochez pour choisir)"}
+                      </span>
+                    </p>
+                    {matieresDuNiveau.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Aucune matière pour ce niveau. Créez-les dans Paramètres › Pédagogie › Matières.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-x-4 gap-y-1">
+                        {matieresDuNiveau.map((m) => (
+                          <label key={m.id} className="flex items-center gap-1.5 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={domaine.matieres?.includes(m.id) ?? false}
+                              onChange={() => basculerMatiere(index, m.id)}
+                              disabled={!canManage}
+                            />
+                            {m.nom}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
                   {canManage && (
                     <div className="flex gap-2">
