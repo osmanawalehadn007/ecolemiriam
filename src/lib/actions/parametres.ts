@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import prisma, { rlsBatch } from "@/lib/prisma";
 import prismaBase from "@/lib/prisma-base";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
@@ -598,7 +598,8 @@ export async function deleteClasse(
   }
 
   const eleveWhere = { classeId, tenantId: session.user.tenantId, ...ELEVE_NON_ARCHIVE.where };
-  const ops: Prisma.PrismaPromise<unknown>[] = [];
+  // Nouvelle affectation des élèves actifs (aucune si la classe est vide).
+  let eleveData: { classeId: string | null } | null = null;
 
   // S'il y a des élèves actifs, exiger une stratégie explicite.
   if (classe._count.eleves > 0) {
@@ -624,22 +625,22 @@ export async function deleteClasse(
       if (!target) throw new Error("Classe cible non trouvée (même année scolaire requise)");
       if (options.targetClasseId === classeId) throw new Error("La classe cible doit être différente");
 
-      ops.push(prisma.eleve.updateMany({
-        where: eleveWhere,
-        data: { classeId: options.targetClasseId },
-      }));
+      eleveData = { classeId: options.targetClasseId };
     } else if (strategy === "unassign") {
-      ops.push(prisma.eleve.updateMany({
-        where: eleveWhere,
-        data: { classeId: null },
-      }));
+      eleveData = { classeId: null };
     }
   }
 
   // Déplacement et suppression dans la même transaction : si la suppression
   // échoue, les élèves ne restent pas déplacés à moitié.
-  ops.push(prisma.classe.delete({ where: { id: classeId } }));
-  await prisma.$transaction(ops);
+  // `rlsBatch` et non `prisma.$transaction([...])` : le client RLS enveloppe
+  // chaque requête dans SA PROPRE transaction, ce qui rendrait le couple
+  // non atomique (prouvé par tests/e2e/suppression-classe.spec.ts).
+  const data = eleveData;
+  await rlsBatch((db) => [
+    ...(data ? [db.eleve.updateMany({ where: eleveWhere, data })] : []),
+    db.classe.delete({ where: { id: classeId } }),
+  ]);
 
   revalidatePath("/parametres");
   revalidatePath("/eleves");

@@ -305,7 +305,18 @@ test.describe("Atomicité de la suppression avec réaffectation", () => {
     // qui décide si le dialogue propose les options de réaffectation. Sans ce
     // rechargement, l'écran croit encore la classe vide et n'affiche pas les
     // options (le serveur refuserait alors la suppression, fail-safe).
-    await ouvrirOngletClasses(page);
+    //
+    // L'écriture ci-dessus passe par la base, pas par une action serveur : elle
+    // n'invalide donc pas le cache de `/parametres` (`unstable_cache`,
+    // revalidate 30 s). Un seul rechargement renvoie l'ancien effectif (0) et le
+    // dialogue n'offre alors pas « Réaffecter les élèves » (constaté en CI). On
+    // recharge jusqu'à ce que l'effectif rendu par le serveur soit à jour.
+    await expect(async () => {
+      await ouvrirOngletClasses(page);
+      await expect(ligneClasse(page, SRC).locator("td").nth(4)).toHaveText("3", {
+        timeout: 3_000,
+      });
+    }).toPass({ timeout: 90_000, intervals: [2_000] });
 
     // Blocage de test piloté par un DRAPEAU, et non par un DDL : après l'échec
     // de la suppression, une session de l'application peut encore tenir un
