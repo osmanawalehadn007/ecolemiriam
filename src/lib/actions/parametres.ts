@@ -639,6 +639,7 @@ export async function deleteClasse(
   const data = eleveData;
   await rlsBatch((db) => [
     ...(data ? [db.eleve.updateMany({ where: eleveWhere, data })] : []),
+    // eslint-disable-next-line ecolemiriam/require-tenant-id -- appartenance vérifiée plus haut (classe.findFirst { id, tenantId }) ; la règle ne voit pas hors du callback
     db.classe.delete({ where: { id: classeId } }),
   ]);
 
