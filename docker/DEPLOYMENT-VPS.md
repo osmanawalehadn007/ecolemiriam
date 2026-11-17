@@ -57,7 +57,7 @@ apt update && apt upgrade -y
 # Installer Docker
 curl -fsSL https://get.docker.com | sh
 # Cloner le projet
-git clone https://github.com/wilsan007/ecolemiriam.git /opt/ecolemiriam
+git clone https://github.com/osmanawalehadn007/ecolemiriam.git /opt/ecolemiriam
 cd /opt/ecolemiriam
 # Durcir l'OS
 sudo bash docker/scripts/harden-os.sh

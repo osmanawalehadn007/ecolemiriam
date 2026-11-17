@@ -54,7 +54,7 @@ UPSTREAM_FILE="${DOCKER_DIR}/caddy/upstream.conf"
 STATE_FILE="${DOCKER_DIR}/.active-color"
 SMOKE_TEST="${SCRIPT_DIR}/smoke-test.sh"
 
-GHCR_IMAGE="ghcr.io/wilsan007/ecolemiriam-app:latest"
+GHCR_IMAGE="ghcr.io/osmanawalehadn007/ecolemiriam-app:latest"
 
 cd "$DOCKER_DIR"
 
@@ -338,7 +338,7 @@ ghcr_login() {
     return 0
   fi
   if token_file=$(ghcr_token_file); then
-    docker login ghcr.io -u wilsan007 --password-stdin < "$token_file" 2>/dev/null
+    docker login ghcr.io -u osmanawalehadn007 --password-stdin < "$token_file" 2>/dev/null
   else
     err "Token GHCR introuvable (/etc/ecolemiriam/ghcr-token ou ~/.config/ghcr-token). Lancer : docker/scripts/setup-vps-ghcr.sh"
   fi

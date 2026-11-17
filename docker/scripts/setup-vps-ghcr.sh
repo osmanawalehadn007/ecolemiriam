@@ -15,7 +15,7 @@ set -euo pipefail
 # Prérequis :
 #   - Un Personal Access Token (PAT) GitHub avec scope read:packages
 #   - (Créer sur : https://github.com/settings/tokens?type=beta)
-#   - Le token doit avoir accès au package ghcr.io/wilsan007/ecolemiriam-app
+#   - Le token doit avoir accès au package ghcr.io/osmanawalehadn007/ecolemiriam-app
 #
 # Après ce script, configurer les GitHub Secrets (voir DEPLOYMENT-CI.md)
 # ============================================================
@@ -49,7 +49,7 @@ if [ -f ~/.config/ghcr-token ]; then
 else
   echo "Créez un PAT sur : https://github.com/settings/tokens?type=beta"
   echo "  - Scope : read:packages"
-  echo "  - Accès au package : ghcr.io/wilsan007/ecolemiriam-app"
+  echo "  - Accès au package : ghcr.io/osmanawalehadn007/ecolemiriam-app"
   echo ""
   read -s -p "Collez le PAT GitHub : " GHCR_TOKEN
   echo
@@ -61,7 +61,7 @@ fi
 
 # Tester le login
 log "Test du login GHCR..."
-if cat ~/.config/ghcr-token | docker login ghcr.io -u wilsan007 --password-stdin 2>/dev/null; then
+if cat ~/.config/ghcr-token | docker login ghcr.io -u osmanawalehadn007 --password-stdin 2>/dev/null; then
   log "  → Login GHCR OK ✓"
 else
   err "Login GHCR échoué. Vérifiez le token et les scopes."

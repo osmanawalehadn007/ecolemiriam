@@ -44,7 +44,7 @@ gh run watch $(gh run list --workflow=deploy-gcp.yml --limit 1 --json databaseId
 Décision humaine, jamais automatique.
 
 ```bash
-gh workflow run deploy-gcp.yml -R wilsan007/EcolPro -f promote=true
+gh workflow run deploy-gcp.yml -R osmanawalehadn007/ecolemiriam -f promote=true
 ```
 
 Ou dans l'interface : *Actions* → *Build & Deploy (GCP)* → *Run workflow* →
@@ -116,8 +116,8 @@ La même règle vaut pour **GHCR** : le `docker login` de la CI utilise le
 n'est écrit sur la VM. Le PAT classique de `/etc/ecolemiriam/ghcr-token`
 (échéance 30 jours, expiré le 30/09/2026 comme celui de git, ce qui a produit
 `Get "https://ghcr.io/v2/": denied: denied`) n'est plus lu que si le script est
-lancé à la main. Corollaire : le paquet `ghcr.io/wilsan007/ecolemiriam-app` doit
-rester **rattaché au dépôt** `wilsan007/EcolPro`, sinon le `GITHUB_TOKEN` du job
+lancé à la main. Corollaire : le paquet `ghcr.io/osmanawalehadn007/ecolemiriam-app` doit
+rester **rattaché au dépôt** `osmanawalehadn007/ecolemiriam`, sinon le `GITHUB_TOKEN` du job
 n'y a plus accès.
 
 **Ne pas remettre de `git pull` dans `ci-deploy-gcp.sh`** pour le chemin CI. Ce
@@ -166,9 +166,11 @@ production est cassée à 2 h du matin. Pour reprendre le push direct :
 sur **Disabled**. Ou en ligne de commande :
 
 ```bash
-gh api -X PUT repos/wilsan007/EcolPro/rulesets/21158529 -f enforcement=disabled
+gh api -X PUT repos/osmanawalehadn007/ecolemiriam/rulesets/<id> -f enforcement=disabled
 ```
 
+Remplacer `<id>` par celui de la règle
+(`gh api repos/osmanawalehadn007/ecolemiriam/rulesets --jq '.[] | "\(.id) \(.name)"'`).
 Réactiver ensuite avec `-f enforcement=active`. Le ruleset n'a **aucun**
 bypass_actor : c'est délibéré, la désactivation est un geste visible et
 tracé, là où un contournement silencieux ne laisserait rien.
@@ -183,7 +185,7 @@ tracé, là où un contournement silencieux ne laisserait rien.
 | Service account | `github-actions-deploy@ecole-miriam.iam.gserviceaccount.com` |
 | Utilisateur OS Login du SA | `sa_110635482925741543279` (groupes `docker`, `ecolpro`) |
 | Authentification CI | Workload Identity Federation, aucune clé stockée |
-| Image | `ghcr.io/wilsan007/ecolemiriam-app` |
+| Image | `ghcr.io/osmanawalehadn007/ecolemiriam-app` |
 | Code sur la VM | `/opt/ecolemiriam`, `2775 zdouce_zz_gmail_com:ecolpro` |
 
 Secrets, en `640 root:ecolpro` dans `/etc/ecolemiriam/` :

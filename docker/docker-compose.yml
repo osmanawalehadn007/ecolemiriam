@@ -211,7 +211,7 @@ services:
 
   # Ancre YAML : config commune aux deux slots (évite la duplication)
   x-app-base: &app-base
-    image: ghcr.io/wilsan007/ecolemiriam-app:latest
+    image: ghcr.io/osmanawalehadn007/ecolemiriam-app:latest
     restart: unless-stopped
 
     # Sécurité conteneur

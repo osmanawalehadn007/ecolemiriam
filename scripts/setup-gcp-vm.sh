@@ -184,7 +184,7 @@ log "  → Fichiers transférés ✓"
 log "=== Étape 4/5 : Clonage du repo et configuration ==="
 
 info "  Clonage du repo..."
-$GCP_SSH --command="cd /opt/ecolemiriam && git clone https://github.com/wilsan007/EcolPro.git . 2>/dev/null || (cd /opt/ecolemiriam && git pull origin main)"
+$GCP_SSH --command="cd /opt/ecolemiriam && git clone https://github.com/osmanawalehadn007/ecolemiriam.git . 2>/dev/null || (cd /opt/ecolemiriam && git pull origin main)"
 
 info "  Installation du .env.production..."
 $GCP_SSH --command="cp /tmp/.env.production /opt/ecolemiriam/.env.production"
@@ -196,7 +196,7 @@ info "  Création des fichiers upstream Caddy (bug Docker mount)..."
 $GCP_SSH --command="cd /opt/ecolemiriam/docker/caddy && cp upstream.conf.example upstream.conf && cp upstream.conf.example upstream-simple.conf"
 
 info "  Login GHCR..."
-$GCP_SSH --command="cat ~/.config/ghcr-token | docker login ghcr.io -u wilsan007 --password-stdin"
+$GCP_SSH --command="cat ~/.config/ghcr-token | docker login ghcr.io -u osmanawalehadn007 --password-stdin"
 
 log "  → Repo cloné et configuré ✓"
 

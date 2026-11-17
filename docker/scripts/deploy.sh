@@ -38,7 +38,7 @@ PROJECT_DIR="$(cd "$DOCKER_DIR/.." && pwd)"
 COMPOSE_FILE="${DOCKER_DIR}/docker-compose.yml"
 
 # Image GHCR (construite par GitHub Actions)
-GHCR_IMAGE="ghcr.io/wilsan007/ecolemiriam-app:latest"
+GHCR_IMAGE="ghcr.io/osmanawalehadn007/ecolemiriam-app:latest"
 
 cd "$DOCKER_DIR"
 
@@ -105,7 +105,7 @@ docker exec ecolemiriam-pgbackrest pgbackrest --stanza=ecolemiriam --type=incr b
 # 2. Login GHCR
 log "2/7 — login GHCR..."
 if [ -f ~/.config/ghcr-token ]; then
-  cat ~/.config/ghcr-token | docker login ghcr.io -u wilsan007 --password-stdin
+  cat ~/.config/ghcr-token | docker login ghcr.io -u osmanawalehadn007 --password-stdin
 else
   err "Token GHCR manquant (~/.config/ghcr-token). Lancer : docker/scripts/setup-vps-ghcr.sh"
 fi

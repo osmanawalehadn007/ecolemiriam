@@ -66,7 +66,7 @@ secrets-rotate:
 # --- Build & Deploy (Blue-Green) ---
 
 build:
-	DOCKER_BUILDKIT=1 docker build -t ghcr.io/wilsan007/ecolemiriam-app:latest $(PROJECT_DIR) -f $(DOCKER_DIR)/app/Dockerfile
+	DOCKER_BUILDKIT=1 docker build -t ghcr.io/osmanawalehadn007/ecolemiriam-app:latest $(PROJECT_DIR) -f $(DOCKER_DIR)/app/Dockerfile
 
 up:
 	$(COMPOSE) up -d

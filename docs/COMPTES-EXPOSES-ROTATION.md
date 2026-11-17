@@ -45,8 +45,12 @@ détectés. **Les deux trous sont bouchés** (commit `413bc88` puis durcissement
 
 ## Évaluation du risque (pourquoi « pas d'urgence » aujourd'hui)
 
-- Le dépôt est **privé** (`gh repo view wilsan007/EcolPro` → `isPrivate: true`) :
-  les valeurs ne sont pas indexées publiquement.
+- Le dépôt d'origine (`wilsan007/EcolPro`) est **privé** : les valeurs n'y sont pas
+  indexées publiquement.
+- ⚠️ **Depuis le 18/11/2026, l'historique est aussi publié dans `osmanawalehadn007/ecolemiriam`,
+  qui est PUBLIC.** Traiter ces valeurs comme publiques : le changement de mot de passe
+  de chaque compte exposé est **urgent**, et ce dépôt doit repasser en privé tant que
+  ce n'est pas fait.
 - Elles sont en revanche lisibles par **tout ce qui a un accès en lecture au
   dépôt** : collaborateurs, sessions d'agents IA, journaux de CI, clones et
   sauvegardes locales, et tout jeton de lecture ayant existé.

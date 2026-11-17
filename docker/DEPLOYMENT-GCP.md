@@ -189,7 +189,7 @@ fois **inutile et dangereux** :
 Donc, sur la VM :
 
 ```bash
-git clone https://github.com/wilsan007/ecolemiriam.git /opt/ecolemiriam && cd /opt/ecolemiriam && sudo SSH_PORT=22 bash docker/scripts/harden-os.sh
+git clone https://github.com/osmanawalehadn007/ecolemiriam.git /opt/ecolemiriam && cd /opt/ecolemiriam && sudo SSH_PORT=22 bash docker/scripts/harden-os.sh
 ```
 
 Le script installe aussi Docker — pas besoin de `get.docker.com` séparément.
@@ -248,7 +248,7 @@ Activer aussi l'offsite pgBackRest vers Cloudflare R2 : décommenter le bloc
 
 ⚠️ **Ne jamais builder l'image sur la VM.** `next build` consomme 2 à 4 Go et
 saturerait les 8 Go pendant que Postgres tourne. Les images viennent de
-`ghcr.io/wilsan007/ecolemiriam-app` via GitHub Actions — c'est déjà le
+`ghcr.io/osmanawalehadn007/ecolemiriam-app` via GitHub Actions — c'est déjà le
 fonctionnement de `ci-deploy.sh`. Le `make build` local n'est qu'un fallback
 de secours.
 
