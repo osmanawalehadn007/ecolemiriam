@@ -8,7 +8,7 @@ fait autorité sur `docker/DEPLOYMENT-GCP.md`, `docker/DEPLOYMENT-CI.md` et
 
 Le point à retenir si tu ne lis rien d'autre : **un push sur `main` ne déploie
 pas en production.** Il s'arrête au slot staging. La promotion est une action
-manuelle (`gh workflow run deploy-gcp.yml -R wilsan007/EcolPro -f promote=true`).
+manuelle (`gh workflow run deploy-gcp.yml -R osmanawalehadn007/ecolemiriam -f promote=true`).
 
 `main` est protégée par un ruleset : **le push direct est refusé**, tout passe
 par une pull request qui doit voir passer le contrôle `Porte de promotion

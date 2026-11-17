@@ -88,7 +88,7 @@ fi
 # --- 2. Login GHCR ---
 echo "=== 2/3 — Login GHCR ==="
 if [ -f ~/.config/ghcr-token ]; then
-  cat ~/.config/ghcr-token | docker login ghcr.io -u wilsan007 --password-stdin
+  cat ~/.config/ghcr-token | docker login ghcr.io -u osmanawalehadn007 --password-stdin
 else
   echo "ERREUR: Token GHCR manquant (~/.config/ghcr-token)"
   exit 1

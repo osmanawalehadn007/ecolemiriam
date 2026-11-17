@@ -63,6 +63,6 @@ le déploiement ne va pas échouer en CI/CD.
 
 ## Après le push
 
-- Monitorer https://github.com/wilsan007/EcolPro/actions
+- Monitorer https://github.com/osmanawalehadn007/ecolemiriam/actions
 - Attendre l'approbation manuelle (JOB 4)
 - Vérifier le healthcheck post-promotion (JOB 5)

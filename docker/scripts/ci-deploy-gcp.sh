@@ -108,7 +108,7 @@ else
     fi
   done
   if [ -n "$GHCR_TOKEN_PATH" ]; then
-    docker login ghcr.io -u wilsan007 --password-stdin < "$GHCR_TOKEN_PATH" >/dev/null
+    docker login ghcr.io -u osmanawalehadn007 --password-stdin < "$GHCR_TOKEN_PATH" >/dev/null
     echo "  Connecté avec $GHCR_TOKEN_PATH."
   else
     echo "ERREUR: Token GHCR introuvable (/etc/ecolemiriam/ghcr-token ou ~/.config/ghcr-token)"

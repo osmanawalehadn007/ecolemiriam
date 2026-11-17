@@ -49,7 +49,7 @@ UPSTREAM_FILE="${DOCKER_DIR}/caddy/upstream.conf"
 STATE_FILE="${DOCKER_DIR}/.active-color"
 SMOKE_TEST="${SCRIPT_DIR}/smoke-test.sh"
 
-GHCR_IMAGE="ghcr.io/wilsan007/ecolemiriam-app:latest"
+GHCR_IMAGE="ghcr.io/osmanawalehadn007/ecolemiriam-app:latest"
 
 cd "$DOCKER_DIR"
 
@@ -309,7 +309,7 @@ healthcheck_container() {
 # Login GHCR
 ghcr_login() {
   if [ -f ~/.config/ghcr-token ]; then
-    cat ~/.config/ghcr-token | docker login ghcr.io -u wilsan007 --password-stdin 2>/dev/null
+    cat ~/.config/ghcr-token | docker login ghcr.io -u osmanawalehadn007 --password-stdin 2>/dev/null
   else
     err "Token GHCR manquant (~/.config/ghcr-token). Lancer : docker/scripts/setup-vps-ghcr.sh"
   fi

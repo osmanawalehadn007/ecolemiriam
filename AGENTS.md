@@ -171,7 +171,7 @@ bash -n docker/scripts/smoke-test.sh
 #     Si non configuré → le gate d'approbation est inefficace
 
 # 12. Secrets GitHub présents
-#     gh secret list -R wilsan007/EcolPro
+#     gh secret list -R osmanawalehadn007/ecolemiriam
 #     Requis: VPS_HOST, VPS_USER, VPS_SSH_PRIVATE_KEY, VPS_SSH_PORT,
 #             DATABASE_URL, DIRECT_URL, AUTH_SECRET, AUTH_URL, NEXT_PUBLIC_APP_URL
 ```
@@ -202,7 +202,7 @@ git add -A && git commit -m "fix/feat: description claire"
 git push origin main
 
 # 18. Monitorer le workflow
-#     https://github.com/wilsan007/EcolPro/actions
+#     https://github.com/osmanawalehadn007/ecolemiriam/actions
 #     - JOB 1 (CI Gate) → doit passer
 #     - JOB 2 (Build Docker) → doit passer
 #     - JOB 3 (Staging) → doit passer (smoke tests)

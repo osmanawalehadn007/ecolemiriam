@@ -222,4 +222,4 @@ bash docker/scripts/blue-green-deploy.sh --build
 - **Statut blue-green** : `make status` sur le VPS
 - **Logs VPS** : `make logs` (slot actif) ou `make logs-staging` (slot staging)
 - **Santé** : `make health` sur le VPS
-- **Images GHCR** : https://github.com/wilsan007/EcolPro/pkgs/container/ecolemiriam-app
+- **Images GHCR** : https://github.com/osmanawalehadn007/ecolemiriam/pkgs/container/ecolemiriam-app
