@@ -11,12 +11,13 @@
 import { spawnSync } from "node:child_process";
 
 const EXCEPTIONS = {
-  // braces ≤ 3.0.3 (dernière version publiée) : déni de service par motif
-  // très imbriqué. Tiré par tailwindcss 3 (chokidar, micromatch, fast-glob),
-  // utilisé à la construction sur notre propre configuration, jamais sur une
-  // saisie utilisateur. Seule issue proposée : tailwindcss 4 (migration
-  // cassante). Ajoutée le 2026-10-03 — à retirer dès qu'un braces corrigé sort.
-  "GHSA-vfj7-8cjw-p6xm": "braces — aucun correctif publié, usage limité au build",
+  // picomatch ≤ 4.0.7 (toutes branches, dont 2.x) : ReDoS par extglobs répétés.
+  // Tiré par vite, vitest, tinyglobby, @parcel/watcher et tailwindcss 3 — tous
+  // outils de développement et de build, jamais exposés à une saisie utilisateur.
+  // npm ne propose aucune version corrigée (la seule piste est un retour à
+  // vitest 3.1.4). Ajoutée le 2026-11-17 — à retirer dès qu'un picomatch
+  // corrigé est publié et adopté par vite/vitest/tailwindcss.
+  "GHSA-fc5q-39xc-vjpf": "picomatch — aucun correctif publié, outils de build/dev uniquement",
 };
 
 const BLOQUANTS = new Set(["high", "critical"]);
