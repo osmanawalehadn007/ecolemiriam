@@ -28,6 +28,7 @@ const nextConfig: NextConfig = {
     },
   }),
   experimental: {
+    agentUpgrade: "security",
     serverActions: {
       // VPS uniquement : plus de netlify.app / vercel.app / pages.dev.
       // Une origine autorisée en trop est une surface CSRF ouverte.
